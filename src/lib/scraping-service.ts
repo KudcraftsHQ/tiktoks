@@ -1,0 +1,145 @@
+import { z } from 'zod'
+
+const ImageSchema = z.object({
+  display_image: z.object({
+    height: z.number(),
+    width: z.number(),
+    url_list: z.array(z.string())
+  })
+})
+
+const AuthorSchema = z.object({
+  nickname: z.string(),
+  unique_id: z.string(),
+  avatar_medium: z.object({
+    url_list: z.array(z.string())
+  })
+})
+
+const StatisticsSchema = z.object({
+  collect_count: z.number(),
+  comment_count: z.number(),
+  digg_count: z.number(),
+  play_count: z.number(),
+  share_count: z.number()
+})
+
+const ApiResponseSchema = z.object({
+  aweme_detail: z.object({
+    desc: z.string(),
+    author: AuthorSchema,
+    statistics: StatisticsSchema,
+    image_post_info: z.object({
+      images: z.array(ImageSchema)
+    })
+  })
+})
+
+interface HashtagWithUrl {
+  text: string
+  url: string
+}
+
+function extractHashtags(description: string): HashtagWithUrl[] {
+  const hashtagRegex = /#[\w\u00c0-\u017f]+/gi
+  const hashtags = description.match(hashtagRegex) || []
+  
+  return hashtags.map(tag => ({
+    text: tag,
+    url: `https://www.tiktok.com/tag/${tag.slice(1)}`
+  }))
+}
+
+function generateTitle(description: string): string {
+  // Remove hashtags and clean up description for title
+  const withoutHashtags = description.replace(/#[\w\u00c0-\u017f]+/gi, '').trim()
+  const cleaned = withoutHashtags.replace(/\s+/g, ' ').trim()
+  
+  if (cleaned.length === 0) {
+    return 'TikTok Carousel'
+  }
+  
+  // Take first 50 characters for title
+  return cleaned.length > 50 ? cleaned.substring(0, 50) + '...' : cleaned
+}
+
+interface ScrapedData {
+  title: string
+  description: string
+  author: string
+  authorHandle: string
+  authorAvatar: string
+  tags: HashtagWithUrl[]
+  viewCount: number
+  likeCount: number
+  shareCount: number
+  saveCount: number
+  commentCount: number
+  images: Array<{
+    imageUrl: string
+    width: number
+    height: number
+  }>
+}
+
+export async function scrapeCarousel(url: string): Promise<ScrapedData> {
+  const apiKey = process.env.SCRAPECREATORS_API_KEY
+  if (!apiKey) {
+    throw new Error('SCRAPECREATORS_API_KEY is not configured')
+  }
+
+  try {
+    const response = await fetch(`https://api.scrapecreators.com/v2/tiktok/video?url=${encodeURIComponent(url)}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'x-api-key': apiKey
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error(`API request failed with status ${response.status}`)
+    }
+
+    const rawData = await response.json()
+    
+    // Validate the response structure
+    const data = ApiResponseSchema.parse(rawData)
+    
+    const awemeDetail = data.aweme_detail
+    
+    if (!awemeDetail.image_post_info?.images || awemeDetail.image_post_info.images.length === 0) {
+      throw new Error('No images found in the carousel')
+    }
+
+    const description = awemeDetail.desc || ''
+    const tags = extractHashtags(description)
+    const title = generateTitle(description)
+
+    return {
+      title,
+      description,
+      author: awemeDetail.author.nickname || 'Unknown Author',
+      authorHandle: awemeDetail.author.unique_id || '',
+      authorAvatar: awemeDetail.author.avatar_medium?.url_list[0] || '',
+      tags,
+      viewCount: awemeDetail.statistics.play_count || 0,
+      likeCount: awemeDetail.statistics.digg_count || 0,
+      shareCount: awemeDetail.statistics.share_count || 0,
+      saveCount: awemeDetail.statistics.collect_count || 0,
+      commentCount: awemeDetail.statistics.comment_count || 0,
+      images: awemeDetail.image_post_info.images.map(image => ({
+        imageUrl: image.display_image.url_list[0] || '',
+        width: image.display_image.width,
+        height: image.display_image.height
+      }))
+    }
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      console.error('API response validation failed:', error.issues)
+      throw new Error('Invalid API response structure')
+    }
+    console.error('Error scraping carousel:', error)
+    throw error instanceof Error ? error : new Error('Failed to scrape carousel')
+  }
+}

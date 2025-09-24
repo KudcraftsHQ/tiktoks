@@ -1,0 +1,222 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Carousel {
+  id          String   @id @default(cuid())
+  tiktokUrl   String   @unique
+  title       String?
+  description String?  // Caption/desc from TikTok
+  author      String?  // Display name (nickname)
+  authorHandle String? // Username (unique_id)
+  authorAvatar String? // Profile picture URL
+  tags        Json     @default("[]") // Array of hashtags with URLs
+  
+  // Engagement metrics
+  viewCount    Int?     @default(0)
+  likeCount    Int?     @default(0)
+  shareCount   Int?     @default(0)
+  saveCount    Int?     @default(0)
+  commentCount Int?     @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  images      CarouselImage[]
+  variations  CarouselVariation[]
+  
+  @@map("carousels")
+}
+
+model CarouselVariation {
+  id          String   @id @default(cuid())
+  carouselId  String
+  name        String
+  description String?
+  isOriginal  Boolean  @default(false)
+  generationType String? // 'manual', 'ai_rephrase', 'duplicate'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  carousel    Carousel @relation(fields: [carouselId], references: [id], onDelete: Cascade)
+  slides      CarouselSlide[]
+  
+  @@map("carousel_variations")
+  @@index([carouselId])
+}
+
+model CarouselSlide {
+  id          String   @id @default(cuid())
+  variationId String
+  backgroundImageUrl String?
+  backgroundImagePositionX Float @default(0.5) // 0-1 for positioning
+  backgroundImagePositionY Float @default(0.5) // 0-1 for positioning  
+  backgroundImageZoom Float @default(1.0) // zoom level
+  displayOrder Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  variation   CarouselVariation @relation(fields: [variationId], references: [id], onDelete: Cascade)
+  textBoxes   CarouselTextBox[]
+  
+  @@map("carousel_slides")
+  @@index([variationId])
+}
+
+model CarouselTextBox {
+  id          String   @id @default(cuid())
+  slideId     String
+  text        String
+  x           Float    // position x (0-1)
+  y           Float    // position y (0-1)
+  width       Float    // width (0-1)
+  height      Float    // height (0-1)
+  fontSize    Int      @default(24)
+  fontFamily  String   @default("Poppins")
+  fontWeight  String   @default("normal") // 'normal', 'bold'
+  fontStyle   String   @default("normal") // 'normal', 'italic'
+  textDecoration String @default("none") // 'none', 'underline'
+  color       String   @default("#000000")
+  textAlign   String   @default("center") // 'left', 'center', 'right'
+  zIndex      Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  slide       CarouselSlide @relation(fields: [slideId], references: [id], onDelete: Cascade)
+  
+  @@map("carousel_text_boxes")
+  @@index([slideId])
+}
+
+model CarouselImage {
+  id          String   @id @default(cuid())
+  carouselId  String
+  imageUrl    String
+  width       Int?
+  height      Int?
+  displayOrder Int
+  text        String?  // OCR text content
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  carousel    Carousel @relation(fields: [carouselId], references: [id], onDelete: Cascade)
+
+  @@map("carousel_images")
+  @@index([carouselId])
+  @@index([text])
+}
+
+// New models for TikTok Profile Explorer
+
+model TiktokProfile {
+  id          String   @id @default(cuid())
+  handle      String   @unique // TikTok username (unique_id)
+  nickname    String?  // Display name
+  avatar      String?  // Profile picture URL
+  bio         String?  // Profile bio/description
+  verified    Boolean  @default(false)
+  followerCount Int?   @default(0)
+  followingCount Int?  @default(0)
+  videoCount  Int?     @default(0)
+  likeCount   Int?     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  posts       TiktokPost[]
+
+  @@map("tiktok_profiles")
+  @@index([handle])
+}
+
+model TiktokPost {
+  id          String   @id @default(cuid())
+  tiktokId    String   @unique // TikTok's aweme_id
+  profileId   String
+  tiktokUrl   String   @unique
+  contentType String   // 'video' or 'photo'
+  title       String?  // Generated or extracted title
+  description String?  // Caption/desc from TikTok
+
+  // Media URLs
+  videoUrl    String?  // For video posts
+  coverUrl    String?  // Thumbnail/cover image
+  musicUrl    String?  // Audio track URL
+
+  // Image carousel data (for photo posts)
+  images      Json     @default("[]") // Array of image objects
+
+  // Author info (denormalized for performance)
+  authorNickname String?
+  authorHandle   String?
+  authorAvatar   String?
+
+  // Hashtags and mentions
+  hashtags    Json     @default("[]") // Array of hashtag objects
+  mentions    Json     @default("[]") // Array of mentioned users
+
+  // Engagement metrics
+  viewCount    BigInt?  @default(0)
+  likeCount    Int?     @default(0)
+  shareCount   Int?     @default(0)
+  commentCount Int?     @default(0)
+  saveCount    Int?     @default(0)
+
+  // Video specific metrics
+  duration     Float?   // Video duration in seconds
+
+  // Timestamps
+  publishedAt  DateTime? // When the post was published on TikTok
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  profile      TiktokProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  collections  CollectionPost[]
+
+  @@map("tiktok_posts")
+  @@index([profileId])
+  @@index([contentType])
+  @@index([publishedAt])
+  @@index([authorHandle])
+}
+
+model Collection {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  color       String?  // Hex color for UI theming
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  posts       CollectionPost[]
+
+  @@map("collections")
+}
+
+model CollectionPost {
+  id           String     @id @default(cuid())
+  collectionId String
+  postId       String
+  addedAt      DateTime   @default(now())
+
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  post         TiktokPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, postId])
+  @@map("collection_posts")
+  @@index([collectionId])
+  @@index([postId])
+}
+

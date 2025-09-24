@@ -1,103 +1,215 @@
-import Image from "next/image";
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import SearchBar from '@/components/SearchBar'
+import CarouselCard from '@/components/CarouselCard'
+import InfiniteScroll from '@/components/InfiniteScroll'
+import FilterPanel, { FilterState } from '@/components/FilterPanel'
+import { SidebarLayout } from '@/components/SidebarLayout'
+import { Carousel as CarouselType } from '@/generated/prisma'
+
+interface CarouselResponse {
+  carousels: (CarouselType & {
+    images: Array<{
+      id: string
+      imageUrl: string
+      text?: string | null
+    }>
+  })[]
+  hasMore: boolean
+  total: number
+}
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const router = useRouter()
+  const [carousels, setCarousels] = useState<CarouselResponse['carousels']>([])
+  const [hasMore, setHasMore] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [page, setPage] = useState(1)
+  const [isAddingCarousel, setIsAddingCarousel] = useState(false)
+  const [availableAuthors, setAvailableAuthors] = useState<string[]>([])
+  const [isLoadingAuthors, setIsLoadingAuthors] = useState(false)
+  const [filters, setFilters] = useState<FilterState>({
+    authors: [],
+    dateRange: 'all',
+    imageCount: {},
+    sortBy: 'newest'
+  })
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+  const fetchCarousels = async (pageNum: number, query: string = '', currentFilters: FilterState = filters) => {
+    setIsLoading(true)
+    try {
+      const params = new URLSearchParams({
+        page: pageNum.toString(),
+        limit: '5',
+        ...(query && { search: query }),
+        ...(currentFilters.authors.length > 0 && { authors: currentFilters.authors.join(',') }),
+        ...(currentFilters.dateRange !== 'all' && { dateRange: currentFilters.dateRange }),
+        ...(currentFilters.customDateStart && { customDateStart: currentFilters.customDateStart.toISOString().split('T')[0] }),
+        ...(currentFilters.customDateEnd && { customDateEnd: currentFilters.customDateEnd.toISOString().split('T')[0] }),
+        ...(currentFilters.imageCount.min && { imageCountMin: currentFilters.imageCount.min.toString() }),
+        ...(currentFilters.imageCount.max && { imageCountMax: currentFilters.imageCount.max.toString() }),
+        ...(currentFilters.sortBy !== 'newest' && { sortBy: currentFilters.sortBy })
+      })
+      
+      const response = await fetch(`/api/carousels?${params}`)
+      const data: CarouselResponse = await response.json()
+      
+      if (pageNum === 1) {
+        setCarousels(data.carousels)
+      } else {
+        setCarousels(prev => [...prev, ...data.carousels])
+      }
+      
+      setHasMore(data.hasMore)
+    } catch (error) {
+      console.error('Failed to fetch carousels:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const fetchAuthors = async () => {
+    setIsLoadingAuthors(true)
+    try {
+      const response = await fetch('/api/authors')
+      const authors = await response.json()
+      setAvailableAuthors(authors.map((author: any) => author.name))
+    } catch (error) {
+      console.error('Failed to fetch authors:', error)
+    } finally {
+      setIsLoadingAuthors(false)
+    }
+  }
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query)
+    setPage(1)
+    fetchCarousels(1, query, filters)
+  }
+
+  const handleFiltersChange = (newFilters: FilterState) => {
+    setFilters(newFilters)
+    setPage(1)
+    fetchCarousels(1, searchQuery, newFilters)
+  }
+
+  const handleLoadMore = () => {
+    if (!isLoading && hasMore) {
+      const nextPage = page + 1
+      setPage(nextPage)
+      fetchCarousels(nextPage, searchQuery, filters)
+    }
+  }
+
+  const handleAddCarousel = async (url: string) => {
+    setIsAddingCarousel(true)
+    try {
+      const response = await fetch('/api/carousels', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url }),
+      })
+
+      if (response.ok) {
+        setPage(1)
+        fetchCarousels(1, searchQuery, filters)
+        fetchAuthors() // Refresh authors list
+      } else {
+        const error = await response.json()
+        alert(error.message || 'Failed to add carousel')
+      }
+    } catch (error) {
+      console.error('Failed to add carousel:', error)
+      alert('Failed to add carousel')
+    } finally {
+      setIsAddingCarousel(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchCarousels(1)
+    fetchAuthors()
+  }, [])
+
+  return (
+    <SidebarLayout 
+      onAddCarousel={handleAddCarousel}
+      isAddingCarousel={isAddingCarousel}
+    >
+      <div className="flex min-h-screen bg-background">
+        {/* Secondary Sidebar - Search and Filter */}
+        <div className="w-80 border-r bg-card/50 p-4 flex flex-col h-screen">
+          <div className="space-y-6">
+            <SearchBar 
+              onSearch={handleSearch}
+              placeholder="Search carousels..."
+              className="w-full"
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            
+            <FilterPanel
+              filters={filters}
+              onFiltersChange={handleFiltersChange}
+              availableAuthors={availableAuthors}
+              isLoading={isLoadingAuthors}
+            />
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+
+        {/* Main Content Area */}
+        <div className="flex-1 h-screen overflow-auto">
+
+          {/* Main Content */}
+          <main className="container mx-auto px-4 py-8">
+          <InfiniteScroll
+            hasMore={hasMore}
+            isLoading={isLoading}
+            onLoadMore={handleLoadMore}
+          >
+            {carousels.length > 0 ? (
+              <div className="space-y-3">
+                {carousels.map((carousel) => (
+                  <div key={carousel.id} className="block md:hidden">
+                    <CarouselCard
+                      carousel={carousel}
+                      isMobile={true}
+                      onClick={() => {
+                        router.push(`/carousel/${carousel.id}`)
+                      }}
+                    />
+                  </div>
+                ))}
+                {carousels.map((carousel) => (
+                  <div key={`desktop-${carousel.id}`} className="hidden md:block">
+                    <CarouselCard
+                      carousel={carousel}
+                      isMobile={false}
+                      onClick={() => {
+                        router.push(`/carousel/${carousel.id}`)
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className="text-muted-foreground">
+                  {searchQuery ? (
+                    <p>No carousels found matching your search.</p>
+                  ) : (
+                    <p>No carousels yet. Add your first TikTok carousel to get started!</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </InfiniteScroll>
+          </main>
+        </div>
+      </div>
+    </SidebarLayout>
+  )
 }
