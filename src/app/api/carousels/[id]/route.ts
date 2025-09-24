@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PrismaClient } from '@/generated/prisma'
+import { cacheAssetService } from '@/lib/cache-asset-service'
 
 const prisma = new PrismaClient()
 
@@ -27,7 +28,43 @@ export async function GET(
       )
     }
 
-    return NextResponse.json(carousel)
+    // Generate presigned URLs for images
+    console.log(`🔗 [API] Generating presigned URLs for carousel ${carousel.id}`)
+    console.log(`🖼️ [API] Carousel has ${carousel.images.length} images`)
+
+    const imageIds = carousel.images.map(img => img.imageId)
+
+    console.log(`🖼️ [API] Image IDs:`, imageIds)
+
+    const presignedImageUrls = await cacheAssetService.getUrls(imageIds)
+
+    const imagesWithPresignedUrls = carousel.images.map((img, index) => ({
+      ...img,
+      imageUrl: presignedImageUrls[index]
+    }))
+
+    console.log(`✅ [API] Images processed:`, {
+      originalCount: carousel.images.length,
+      processedCount: imagesWithPresignedUrls.length,
+      firstImageUrl: imagesWithPresignedUrls[0]?.imageUrl
+    })
+
+    // Generate presigned URL for author avatar
+    console.log(`👤 [API] Author avatar ID:`, carousel.authorAvatarId)
+
+    const authorAvatarUrl = await cacheAssetService.getUrl(carousel.authorAvatarId)
+
+    console.log(`✅ [API] Author avatar processed:`, {
+      finalAvatarUrl: authorAvatarUrl
+    })
+
+    const carouselWithPresignedUrls = {
+      ...carousel,
+      authorAvatar: authorAvatarUrl,
+      images: imagesWithPresignedUrls
+    }
+
+    return NextResponse.json(carouselWithPresignedUrls)
   } catch (error) {
     console.error('Failed to fetch carousel:', error)
     return NextResponse.json(

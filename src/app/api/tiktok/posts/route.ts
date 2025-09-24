@@ -1,8 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PrismaClient } from '@/generated/prisma'
 import { z } from 'zod'
+import { mediaCacheServiceV2 } from '@/lib/media-cache-service-v2'
+import { cacheAssetService } from '@/lib/cache-asset-service'
 
 const prisma = new PrismaClient()
+
+// Helper function to cache TikTok post media
+async function cacheTikTokPostMedia(validatedData: any) {
+  const {
+    videoUrl,
+    coverUrl,
+    musicUrl,
+    images,
+    authorAvatar
+  } = validatedData
+
+  try {
+    const cacheResult = await mediaCacheServiceV2.cacheTikTokPostMedia(
+      videoUrl,
+      coverUrl,
+      musicUrl,
+      images,
+      authorAvatar
+    )
+
+    // Log any caching errors
+    if (cacheResult.errors.length > 0) {
+      console.warn('TikTok post media caching warnings:', cacheResult.errors)
+    }
+
+    return {
+      cachedVideo: cacheResult.cachedVideoId,
+      cachedCover: cacheResult.cachedCoverId,
+      cachedMusic: cacheResult.cachedMusicId,
+      cachedImages: cacheResult.cachedImages,
+      cachedAuthorAvatar: cacheResult.cachedAuthorAvatarId
+    }
+  } catch (error) {
+    console.error('Failed to cache TikTok post media:', error)
+    // Return null values to fall back to original URLs
+    return {
+      cachedVideo: null,
+      cachedCover: null,
+      cachedMusic: null,
+      cachedImages: [],
+      cachedAuthorAvatar: null
+    }
+  }
+}
 
 const SavePostSchema = z.object({
   tiktokId: z.string(),
@@ -49,7 +95,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(existingPost)
     }
 
-    // Find or create the profile
+    // Cache media to R2
+    const cachedMedia = await cacheTikTokPostMedia(validatedData)
+
+    // Find or create the profile (with cached avatar if available)
     let profile = await prisma.tiktokProfile.findUnique({
       where: { handle: validatedData.authorHandle }
     })
@@ -59,12 +108,20 @@ export async function POST(request: NextRequest) {
         data: {
           handle: validatedData.authorHandle,
           nickname: validatedData.authorNickname,
-          avatar: validatedData.authorAvatar
+          avatarId: cachedMedia.cachedAuthorAvatar
+        }
+      })
+    } else if (cachedMedia.cachedAuthorAvatar && !profile.avatarId) {
+      // Update existing profile with cached avatar
+      profile = await prisma.tiktokProfile.update({
+        where: { id: profile.id },
+        data: {
+          avatarId: cachedMedia.cachedAuthorAvatar
         }
       })
     }
 
-    // Create the post
+    // Create the post with cached media asset IDs
     const post = await prisma.tiktokPost.create({
       data: {
         tiktokId: validatedData.tiktokId,
@@ -75,7 +132,7 @@ export async function POST(request: NextRequest) {
         description: validatedData.description,
         authorNickname: validatedData.authorNickname,
         authorHandle: validatedData.authorHandle,
-        authorAvatar: validatedData.authorAvatar,
+        authorAvatarId: cachedMedia.cachedAuthorAvatar,
         hashtags: JSON.stringify(validatedData.hashtags),
         mentions: JSON.stringify(validatedData.mentions),
         viewCount: BigInt(validatedData.viewCount),
@@ -84,10 +141,10 @@ export async function POST(request: NextRequest) {
         commentCount: validatedData.commentCount,
         saveCount: validatedData.saveCount,
         duration: validatedData.duration,
-        videoUrl: validatedData.videoUrl,
-        coverUrl: validatedData.coverUrl,
-        musicUrl: validatedData.musicUrl,
-        images: JSON.stringify(validatedData.images),
+        videoId: cachedMedia.cachedVideo,
+        coverId: cachedMedia.cachedCover,
+        musicId: cachedMedia.cachedMusic,
+        images: JSON.stringify(cachedMedia.cachedImages.length > 0 ? cachedMedia.cachedImages : validatedData.images),
         publishedAt: validatedData.publishedAt ? new Date(validatedData.publishedAt) : null
       }
     })
@@ -180,11 +237,55 @@ export async function GET(request: NextRequest) {
 
     const hasMore = skip + limit < total
 
-    // Convert BigInt to string for JSON serialization
-    const responsePosts = posts.map(post => ({
-      ...post,
-      viewCount: post.viewCount?.toString() || '0'
-    }))
+    // Generate presigned URLs for media
+    console.log(`🔗 [API] Generating presigned URLs for ${posts.length} posts`)
+
+    const videoIds = posts.map(post => post.videoId)
+    const coverIds = posts.map(post => post.coverId)
+    const musicIds = posts.map(post => post.musicId)
+    const avatarIds = posts.map(post => post.authorAvatarId)
+
+    const [presignedVideoUrls, presignedCoverUrls, presignedMusicUrls, presignedAvatarUrls] = await Promise.all([
+      cacheAssetService.getUrls(videoIds),
+      cacheAssetService.getUrls(coverIds),
+      cacheAssetService.getUrls(musicIds),
+      cacheAssetService.getUrls(avatarIds)
+    ])
+
+    // Convert BigInt to string for JSON serialization and add presigned URLs
+    const responsePosts = await Promise.all(
+      posts.map(async (post, index) => {
+        // Parse images JSON and generate presigned URLs for each image
+        let images = []
+        try {
+          const parsedImages = JSON.parse(post.images || '[]')
+          if (parsedImages.length > 0) {
+            const imageIds = parsedImages.map((img: any) => img.cacheAssetId)
+            const presignedImageUrls = await cacheAssetService.getUrls(imageIds)
+
+            images = parsedImages.map((img: any, imgIndex: number) => ({
+              ...img,
+              url: presignedImageUrls[imgIndex]
+            }))
+          } else {
+            images = parsedImages
+          }
+        } catch (error) {
+          console.warn('Failed to parse images for post:', post.id, error)
+          images = JSON.parse(post.images || '[]')
+        }
+
+        return {
+          ...post,
+          viewCount: post.viewCount?.toString() || '0',
+          videoUrl: presignedVideoUrls[index],
+          coverUrl: presignedCoverUrls[index],
+          musicUrl: presignedMusicUrls[index],
+          authorAvatar: presignedAvatarUrls[index],
+          images: images
+        }
+      })
+    )
 
     return NextResponse.json({
       posts: responsePosts,

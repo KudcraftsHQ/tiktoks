@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PrismaClient } from '@/generated/prisma'
+import { cacheAssetService } from '@/lib/cache-asset-service'
 
 const prisma = new PrismaClient()
 
@@ -198,10 +199,58 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // Generate presigned URLs for all media
+    console.log(`🔗 [API] Generating presigned URLs for ${filteredCarousels.length} carousels`)
+
+    const carouselsWithPresignedUrls = await Promise.all(
+      filteredCarousels.map(async (carousel, index) => {
+        console.log(`🔄 [API] Processing carousel ${index + 1}/${filteredCarousels.length}:`, {
+          carouselId: carousel.id,
+          imageCount: carousel.images.length,
+          hasAuthorAvatar: !!carousel.authorAvatar,
+          hasAuthorAvatarId: !!carousel.authorAvatarId
+        })
+
+        // Generate presigned URLs for images
+        const imageIds = carousel.images.map(img => img.imageId)
+
+        console.log(`🖼️ [API] Image IDs for carousel ${carousel.id}:`, imageIds)
+
+        const presignedImageUrls = await cacheAssetService.getUrls(imageIds)
+
+        const imagesWithPresignedUrls = carousel.images.map((img, index) => ({
+          ...img,
+          imageUrl: presignedImageUrls[index]
+        }))
+
+        console.log(`✅ [API] Images processed for carousel ${carousel.id}:`, {
+          originalCount: carousel.images.length,
+          processedCount: imagesWithPresignedUrls.length,
+          firstImageUrl: imagesWithPresignedUrls[0]?.imageUrl
+        })
+
+        // Generate presigned URL for author avatar
+        const authorAvatarUrl = await cacheAssetService.getUrl(carousel.authorAvatarId)
+
+        console.log(`👤 [API] Author avatar processed for carousel ${carousel.id}:`, {
+          authorAvatarId: carousel.authorAvatarId,
+          finalAvatarUrl: authorAvatarUrl
+        })
+
+        return {
+          ...carousel,
+          authorAvatar: authorAvatarUrl,
+          images: imagesWithPresignedUrls
+        }
+      })
+    )
+
+    console.log(`✅ [API] All carousels processed with presigned URLs`)
+
     const hasMore = skip + limit < total
 
     return NextResponse.json({
-      carousels: filteredCarousels,
+      carousels: carouselsWithPresignedUrls,
       hasMore,
       total,
       page,
@@ -254,7 +303,7 @@ export async function POST(request: NextRequest) {
           description: scrapedData.description,
           author: scrapedData.author,
           authorHandle: scrapedData.authorHandle,
-          authorAvatar: scrapedData.authorAvatar,
+          authorAvatarId: scrapedData.authorAvatarId,
           tags: JSON.stringify(scrapedData.tags),
           viewCount: scrapedData.viewCount,
           likeCount: scrapedData.likeCount,
@@ -268,6 +317,7 @@ export async function POST(request: NextRequest) {
         data: scrapedData.images.map((image: any, index: number) => ({
           carouselId: carousel.id,
           imageUrl: image.imageUrl,
+          imageKey: image.imageKey,
           width: image.width,
           height: image.height,
           displayOrder: index

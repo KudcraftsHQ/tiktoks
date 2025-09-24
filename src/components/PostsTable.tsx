@@ -13,6 +13,7 @@ import { DataTable } from '@/components/ui/data-table'
 import { createPostsTableColumns, TikTokPost } from '@/components/posts-table-columns'
 import { CollectionSelector } from '@/components/CollectionSelector'
 import { ImageGallery } from '@/components/ImageGallery'
+import { getProxiedImageUrl } from '@/lib/image-proxy'
 
 interface PostsTableProps {
   posts: TikTokPost[]
@@ -106,7 +107,7 @@ export function PostsTable({ posts }: PostsTableProps) {
               {selectedPost.coverUrl && (
                 <div className="flex justify-center">
                   <img
-                    src={selectedPost.coverUrl}
+                    src={getProxiedImageUrl(selectedPost.coverUrl)}
                     alt="Post cover"
                     className="max-w-full h-auto rounded-lg"
                   />

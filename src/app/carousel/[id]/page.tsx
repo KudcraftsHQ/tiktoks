@@ -7,7 +7,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { ArrowLeft, Clock, User, Images, Plus, RotateCcw, Save, Scan, Copy } from 'lucide-react'
 import { Carousel as CarouselType } from '@/generated/prisma'
 import { CarouselVariationCard } from '@/components/CarouselVariationCard'
-import { SidebarLayout } from '@/components/SidebarLayout'
 
 interface CarouselDetailProps {
   params: { id: string }
@@ -439,36 +438,31 @@ export default function CarouselDetail({ params }: CarouselDetailProps) {
 
   if (isLoading) {
     return (
-      <SidebarLayout>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-            <span>Loading carousel...</span>
-          </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+          <span>Loading carousel...</span>
         </div>
-      </SidebarLayout>
+      </div>
     )
   }
 
   if (error || !carousel) {
     return (
-      <SidebarLayout>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center space-y-4">
-            <p className="text-destructive">{error || 'Carousel not found'}</p>
-            <Button onClick={() => router.push('/')} variant="outline">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Home
-            </Button>
-          </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center space-y-4">
+          <p className="text-destructive">{error || 'Carousel not found'}</p>
+          <Button onClick={() => router.push('/')} variant="outline">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Home
+          </Button>
         </div>
-      </SidebarLayout>
+      </div>
     )
   }
 
   return (
-    <SidebarLayout>
-      <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background">
         {/* Header */}
         <header className="border-b sticky top-0 bg-background z-50">
           <div className="container mx-auto px-4 py-6">
@@ -666,6 +660,6 @@ export default function CarouselDetail({ params }: CarouselDetailProps) {
         </div>
       </main>
     </div>
-    </SidebarLayout>
+    </div>
   )
 }

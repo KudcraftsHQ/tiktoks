@@ -20,7 +20,8 @@ export interface TikTokProfile {
   id: string
   handle: string
   nickname?: string
-  avatar?: string
+  avatar?: string // Resolved avatar URL from avatarId via API
+  avatarId?: string // Cache asset ID (for reference, usually not used directly in UI)
   bio?: string
   verified: boolean
   followerCount?: number
@@ -60,48 +61,39 @@ export const createProfilesTableColumns = ({
   onPreviewProfile
 }: ProfilesTableColumnsProps): ColumnDef<TikTokProfile>[] => [
   {
-    accessorKey: 'avatar',
-    header: '',
-    cell: ({ row }) => {
-      const profile = row.original
-      return (
-        <div className="flex items-center justify-center">
-          {profile.avatar ? (
-            <img
-              src={profile.avatar}
-              alt={`${profile.handle} avatar`}
-              className="w-10 h-10 rounded-full object-cover"
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-              <User className="w-5 h-5 text-muted-foreground" />
-            </div>
-          )}
-        </div>
-      )
-    }
-  },
-  {
     accessorKey: 'handle',
     header: createSortableHeader('Handle'),
     cell: ({ row }) => {
       const profile = row.original
       return (
-        <div className="flex items-center space-x-2">
-          <div>
-            <div className="flex items-center space-x-1">
-              <span className="font-medium">@{profile.handle}</span>
-              {profile.verified && (
-                <CheckCircle className="w-4 h-4 text-blue-500" />
-              )}
-            </div>
-            {profile.nickname && (
-              <div className="text-sm text-muted-foreground">
-                {profile.nickname}
+        <Link href={`/profiles/${profile.id}`} className="block hover:opacity-75 transition-opacity">
+          <div className="flex items-center space-x-3">
+            {profile.avatar ? (
+              <img
+                src={profile.avatar}
+                alt={`${profile.handle} avatar`}
+                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                <User className="w-4 h-4 text-muted-foreground" />
               </div>
             )}
+            <div>
+              <div className="flex items-center space-x-1">
+                <span className="font-medium">@{profile.handle}</span>
+                {profile.verified && (
+                  <CheckCircle className="w-4 h-4 text-blue-500" />
+                )}
+              </div>
+              {profile.nickname && (
+                <div className="text-sm text-muted-foreground">
+                  {profile.nickname}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </Link>
       )
     }
   },

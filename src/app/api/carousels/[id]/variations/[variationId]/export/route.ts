@@ -47,7 +47,7 @@ export async function POST(
     
     const filename = `${variation.name.replace(/[^a-zA-Z0-9]/g, '_')}-slide-${slideIndex + 1}.${format}`
     
-    return new NextResponse(imageBuffer, {
+    return new NextResponse(imageBuffer as any, {
       headers: {
         'Content-Type': format === 'png' ? 'image/png' : 'image/jpeg',
         'Content-Disposition': `attachment; filename="${filename}"`,

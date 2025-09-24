@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { mediaCacheServiceV2 } from './media-cache-service-v2'
 
 const ImageSchema = z.object({
   display_image: z.object({
@@ -69,6 +70,7 @@ interface ScrapedData {
   author: string
   authorHandle: string
   authorAvatar: string
+  authorAvatarKey?: string
   tags: HashtagWithUrl[]
   viewCount: number
   likeCount: number
@@ -77,6 +79,7 @@ interface ScrapedData {
   commentCount: number
   images: Array<{
     imageUrl: string
+    imageKey?: string // Now stores cache asset ID
     width: number
     height: number
   }>
@@ -116,23 +119,66 @@ export async function scrapeCarousel(url: string): Promise<ScrapedData> {
     const tags = extractHashtags(description)
     const title = generateTitle(description)
 
+    // Extract original URLs before caching
+    const originalImages = awemeDetail.image_post_info.images.map(image => ({
+      imageUrl: image.display_image.url_list[0] || '',
+      width: image.display_image.width,
+      height: image.display_image.height
+    }))
+
+    const originalAuthorAvatar = awemeDetail.author.avatar_medium?.url_list[0] || ''
+
+    // Queue media for background caching and get cache asset IDs
+    let cachedImages: Array<{ imageUrl: string; imageKey?: string; width: number; height: number }> = []
+    let cachedAuthorAvatar = originalAuthorAvatar
+    let authorAvatarKey: string | undefined
+
+    if (originalImages.length > 0 || originalAuthorAvatar) {
+      try {
+        const cacheResult = await mediaCacheServiceV2.cacheCarouselMedia(
+          originalImages,
+          originalAuthorAvatar || undefined
+        )
+
+        cachedImages = cacheResult.cachedImages.map((img, index) => ({
+          imageUrl: originalImages[index]?.imageUrl || '', // Keep original URL
+          imageKey: img.cacheAssetId || undefined, // Store cache asset ID
+          width: img.width || 0,
+          height: img.height || 0
+        }))
+
+        if (cacheResult.cachedAuthorAvatarId) {
+          authorAvatarKey = cacheResult.cachedAuthorAvatarId // Store cache asset ID
+        }
+
+        // Log any caching errors
+        if (cacheResult.errors.length > 0) {
+          console.warn('Media caching warnings:', cacheResult.errors)
+        }
+      } catch (error) {
+        console.error('Failed to queue media for caching, using original URLs:', error)
+        // Fall back to original data
+        cachedImages = originalImages
+        cachedAuthorAvatar = originalAuthorAvatar
+      }
+    } else {
+      cachedImages = originalImages
+    }
+
     return {
       title,
       description,
       author: awemeDetail.author.nickname || 'Unknown Author',
       authorHandle: awemeDetail.author.unique_id || '',
-      authorAvatar: awemeDetail.author.avatar_medium?.url_list[0] || '',
+      authorAvatar: cachedAuthorAvatar,
+      authorAvatarKey,
       tags,
       viewCount: awemeDetail.statistics.play_count || 0,
       likeCount: awemeDetail.statistics.digg_count || 0,
       shareCount: awemeDetail.statistics.share_count || 0,
       saveCount: awemeDetail.statistics.collect_count || 0,
       commentCount: awemeDetail.statistics.comment_count || 0,
-      images: awemeDetail.image_post_info.images.map(image => ({
-        imageUrl: image.display_image.url_list[0] || '',
-        width: image.display_image.width,
-        height: image.display_image.height
-      }))
+      images: cachedImages
     }
   } catch (error) {
     if (error instanceof z.ZodError) {

@@ -12,27 +12,10 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarHeader,
-  SidebarSeparator,
 } from '@/components/ui/sidebar'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { ThemeToggle } from '@/components/theme-toggle'
 
-interface AppSidebarProps {
-  onAddCarousel?: (url: string) => Promise<void>
-  isAddingCarousel?: boolean
-}
-
-export function AppSidebar({ onAddCarousel, isAddingCarousel = false }: AppSidebarProps) {
-  const [newCarouselUrl, setNewCarouselUrl] = useState('')
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newCarouselUrl.trim() || !onAddCarousel) return
-    
-    await onAddCarousel(newCarouselUrl.trim())
-    setNewCarouselUrl('')
-  }
-
+export function AppSidebar() {
   const navigationItems = [
     {
       title: 'Dashboard',
@@ -69,9 +52,12 @@ export function AppSidebar({ onAddCarousel, isAddingCarousel = false }: AppSideb
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
-        <div className="flex flex-col space-y-2">
-          <h2 className="text-lg font-semibold">TikTok Carousel</h2>
-          <p className="text-sm text-muted-foreground">Organize your collection</p>
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col space-y-2">
+            <h2 className="text-lg font-semibold">TikTok Carousel</h2>
+            <p className="text-sm text-muted-foreground">Organize your collection</p>
+          </div>
+          <ThemeToggle />
         </div>
       </SidebarHeader>
 
@@ -91,44 +77,6 @@ export function AppSidebar({ onAddCarousel, isAddingCarousel = false }: AppSideb
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarSeparator />
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Quick Actions</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <div className="p-3">
-              <form onSubmit={handleSubmit} className="space-y-3">
-                <Input
-                  type="url"
-                  placeholder="Paste TikTok URL..."
-                  value={newCarouselUrl}
-                  onChange={(e) => setNewCarouselUrl(e.target.value)}
-                  className="w-full"
-                  required
-                />
-                <Button 
-                  type="submit" 
-                  disabled={isAddingCarousel || !newCarouselUrl.trim()}
-                  className="w-full"
-                  size="sm"
-                >
-                  {isAddingCarousel ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Adding...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Carousel
-                    </>
-                  )}
-                </Button>
-              </form>
-            </div>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

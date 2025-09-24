@@ -16,26 +16,24 @@ export function PostTypeFilter({ value, onChange }: PostTypeFilterProps) {
   ]
 
   return (
-    <div className="flex space-x-1 bg-muted rounded-lg p-1">
+    <div className="inline-flex items-center rounded-lg bg-muted p-1">
       {options.map((option) => {
         const Icon = option.icon
         const isActive = value === option.value
 
         return (
-          <Button
+          <button
             key={option.value}
-            variant={isActive ? 'default' : 'ghost'}
-            size="sm"
             onClick={() => onChange(option.value)}
-            className={`flex items-center space-x-2 ${
+            className={`inline-flex items-center space-x-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
               isActive
-                ? 'bg-background shadow-sm'
-                : 'hover:bg-background/50'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-background/50 hover:text-foreground'
             }`}
           >
             <Icon className="w-4 h-4" />
             <span>{option.label}</span>
-          </Button>
+          </button>
         )
       })}
     </div>

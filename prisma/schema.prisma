@@ -21,22 +21,22 @@ model Carousel {
   description String?  // Caption/desc from TikTok
   author      String?  // Display name (nickname)
   authorHandle String? // Username (unique_id)
-  authorAvatar String? // Profile picture URL
+  authorAvatarId String? @db.Uuid // Cache asset ID reference
   tags        Json     @default("[]") // Array of hashtags with URLs
-  
+
   // Engagement metrics
   viewCount    Int?     @default(0)
   likeCount    Int?     @default(0)
   shareCount   Int?     @default(0)
   saveCount    Int?     @default(0)
   commentCount Int?     @default(0)
-  
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  
+
   images      CarouselImage[]
   variations  CarouselVariation[]
-  
+
   @@map("carousels")
 }
 
@@ -60,17 +60,17 @@ model CarouselVariation {
 model CarouselSlide {
   id          String   @id @default(cuid())
   variationId String
-  backgroundImageUrl String?
+  backgroundImageId String? @db.Uuid // Cache asset ID reference
   backgroundImagePositionX Float @default(0.5) // 0-1 for positioning
-  backgroundImagePositionY Float @default(0.5) // 0-1 for positioning  
+  backgroundImagePositionY Float @default(0.5) // 0-1 for positioning
   backgroundImageZoom Float @default(1.0) // zoom level
   displayOrder Int
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  
+
   variation   CarouselVariation @relation(fields: [variationId], references: [id], onDelete: Cascade)
   textBoxes   CarouselTextBox[]
-  
+
   @@map("carousel_slides")
   @@index([variationId])
 }
@@ -103,7 +103,7 @@ model CarouselTextBox {
 model CarouselImage {
   id          String   @id @default(cuid())
   carouselId  String
-  imageUrl    String
+  imageId     String   @db.Uuid // Cache asset ID reference
   width       Int?
   height      Int?
   displayOrder Int
@@ -118,13 +118,38 @@ model CarouselImage {
   @@index([text])
 }
 
+// Cache Assets for media caching with background processing
+
+model CacheAsset {
+  id          String   @id @default(uuid()) @db.Uuid
+  originalUrl String   @unique
+  cacheKey    String?  // R2 storage key
+  status      CacheStatus @default(PENDING)
+  fileSize    Int?
+  contentType String?
+  cachedAt    DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("cache_assets")
+  @@index([status])
+  @@index([originalUrl])
+}
+
+enum CacheStatus {
+  PENDING
+  DOWNLOADING
+  CACHED
+  FAILED
+}
+
 // New models for TikTok Profile Explorer
 
 model TiktokProfile {
   id          String   @id @default(cuid())
   handle      String   @unique // TikTok username (unique_id)
   nickname    String?  // Display name
-  avatar      String?  // Profile picture URL
+  avatarId    String?  @db.Uuid // Cache asset ID reference
   bio         String?  // Profile bio/description
   verified    Boolean  @default(false)
   followerCount Int?   @default(0)
@@ -149,18 +174,19 @@ model TiktokPost {
   title       String?  // Generated or extracted title
   description String?  // Caption/desc from TikTok
 
-  // Media URLs
-  videoUrl    String?  // For video posts
-  coverUrl    String?  // Thumbnail/cover image
-  musicUrl    String?  // Audio track URL
+  // Media cache asset ID references
+  videoId     String?  @db.Uuid // Video cache asset ID reference
+  coverId     String?  @db.Uuid // Cover cache asset ID reference
+  musicId     String?  @db.Uuid // Music cache asset ID reference
 
   // Image carousel data (for photo posts)
-  images      Json     @default("[]") // Array of image objects
+  // Array of objects: [{"cacheAssetId": "uuid", "width": 100, "height": 200}]
+  images      Json     @default("[]")
 
   // Author info (denormalized for performance)
   authorNickname String?
   authorHandle   String?
-  authorAvatar   String?
+  authorAvatarId String?  @db.Uuid // Author avatar cache asset ID reference
 
   // Hashtags and mentions
   hashtags    Json     @default("[]") // Array of hashtag objects

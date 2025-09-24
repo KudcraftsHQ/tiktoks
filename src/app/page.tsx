@@ -6,7 +6,6 @@ import SearchBar from '@/components/SearchBar'
 import CarouselCard from '@/components/CarouselCard'
 import InfiniteScroll from '@/components/InfiniteScroll'
 import FilterPanel, { FilterState } from '@/components/FilterPanel'
-import { SidebarLayout } from '@/components/SidebarLayout'
 import { Carousel as CarouselType } from '@/generated/prisma'
 
 interface CarouselResponse {
@@ -137,11 +136,7 @@ export default function Home() {
   }, [])
 
   return (
-    <SidebarLayout 
-      onAddCarousel={handleAddCarousel}
-      isAddingCarousel={isAddingCarousel}
-    >
-      <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-background">
         {/* Secondary Sidebar - Search and Filter */}
         <div className="w-80 border-r bg-card/50 p-4 flex flex-col h-screen">
           <div className="space-y-6">
@@ -210,6 +205,5 @@ export default function Home() {
           </main>
         </div>
       </div>
-    </SidebarLayout>
   )
 }

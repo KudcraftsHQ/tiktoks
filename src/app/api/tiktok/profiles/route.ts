@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PrismaClient } from '@/generated/prisma'
+import { cacheAssetService } from '@/lib/cache-asset-service'
 
 const prisma = new PrismaClient()
 
@@ -80,8 +81,21 @@ export async function GET(request: NextRequest) {
 
     const hasMore = skip + limit < total
 
+    // Resolve avatar URLs for all profiles
+    console.log(`🔗 [API] Resolving avatar URLs for ${profiles.length} profiles`)
+    const profilesWithAvatars = await Promise.all(
+      profiles.map(async (profile) => {
+        const avatarUrl = await cacheAssetService.getUrl(profile.avatarId)
+        return {
+          ...profile,
+          avatar: avatarUrl
+        }
+      })
+    )
+    console.log(`✅ [API] Resolved avatar URLs for all profiles`)
+
     return NextResponse.json({
-      profiles,
+      profiles: profilesWithAvatars,
       hasMore,
       total,
       page,

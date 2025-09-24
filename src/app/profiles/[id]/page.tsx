@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PostsTable } from '@/components/PostsTable'
 import { PostTypeFilter } from '@/components/PostTypeFilter'
-import { SidebarLayout } from '@/components/SidebarLayout'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -39,36 +38,10 @@ export default function ProfileDetailPage() {
   const [loading, setLoading] = useState(false)
   const [profileLoading, setProfileLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isAddingCarousel, setIsAddingCarousel] = useState(false)
   const [contentTypeFilter, setContentTypeFilter] = useState<'all' | 'video' | 'photo'>('all')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPosts, setTotalPosts] = useState(0)
 
-  // Dummy handler for sidebar carousel functionality
-  const handleAddCarousel = async (url: string) => {
-    setIsAddingCarousel(true)
-    try {
-      const response = await fetch('/api/carousels', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ url }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        alert(error.message || 'Failed to add carousel')
-      } else {
-        alert('Carousel added successfully!')
-      }
-    } catch (error) {
-      console.error('Failed to add carousel:', error)
-      alert('Failed to add carousel')
-    } finally {
-      setIsAddingCarousel(false)
-    }
-  }
 
   const fetchProfile = useCallback(async () => {
     if (!profileId) return
@@ -155,60 +128,48 @@ export default function ProfileDetailPage() {
     )
   }
 
-  const filteredPosts = posts.filter(post => {
-    if (contentTypeFilter === 'all') return true
-    return post.contentType === contentTypeFilter
-  })
+  const filteredPosts = useMemo(() =>
+    posts.filter(post => {
+      if (contentTypeFilter === 'all') return true
+      return post.contentType === contentTypeFilter
+    }), [posts, contentTypeFilter]
+  )
 
   if (profileLoading) {
     return (
-      <SidebarLayout
-        onAddCarousel={handleAddCarousel}
-        isAddingCarousel={isAddingCarousel}
-      >
-        <div className="container mx-auto py-8">
-          <Card>
-            <CardContent className="flex items-center justify-center py-12">
-              <div className="flex items-center space-x-2">
-                <RefreshCw className="w-5 h-5 animate-spin" />
-                <span>Loading profile...</span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </SidebarLayout>
+      <div className="container mx-auto py-8">
+        <Card>
+          <CardContent className="flex items-center justify-center py-12">
+            <div className="flex items-center space-x-2">
+              <RefreshCw className="w-5 h-5 animate-spin" />
+              <span>Loading profile...</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
   if (!profile) {
     return (
-      <SidebarLayout
-        onAddCarousel={handleAddCarousel}
-        isAddingCarousel={isAddingCarousel}
-      >
-        <div className="container mx-auto py-8">
-          <Card className="border-red-200 bg-red-50">
-            <CardContent className="pt-6">
-              <p className="text-red-600">{error || 'Profile not found'}</p>
-              <Link href="/profiles">
-                <Button className="mt-4" variant="outline">
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Back to Profiles
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        </div>
-      </SidebarLayout>
+      <div className="container mx-auto py-8">
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="pt-6">
+            <p className="text-red-600">{error || 'Profile not found'}</p>
+            <Link href="/profiles">
+              <Button className="mt-4" variant="outline">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Profiles
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
   return (
-    <SidebarLayout
-      onAddCarousel={handleAddCarousel}
-      isAddingCarousel={isAddingCarousel}
-    >
-      <div className="container mx-auto py-8 space-y-6">
+      <div className="container mx-auto py-8 space-y-8">
         {/* Header with back button */}
         <div className="flex items-center space-x-4">
           <Link href="/profiles">
@@ -234,75 +195,73 @@ export default function ProfileDetailPage() {
           </Button>
         </div>
 
-        {/* Profile Info Card */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-start space-x-6">
-              {/* Avatar */}
-              {profile.avatar ? (
-                <img
-                  src={profile.avatar}
-                  alt={`${profile.handle} avatar`}
-                  className="w-24 h-24 rounded-full object-cover"
-                />
-              ) : (
-                <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center">
-                  <User className="w-12 h-12 text-muted-foreground" />
+        {/* Profile Info */}
+        <div className="bg-background border rounded-lg p-6">
+          <div className="flex items-start space-x-6">
+          {/* Avatar */}
+          {profile.avatar ? (
+            <img
+              src={profile.avatar}
+              alt={`${profile.handle} avatar`}
+              className="w-24 h-24 rounded-full object-cover"
+            />
+          ) : (
+            <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center">
+              <User className="w-12 h-12 text-muted-foreground" />
+            </div>
+          )}
+
+          {/* Profile details and metrics */}
+          <div className="flex-1">
+            {profile.bio && (
+              <p className="text-muted-foreground mb-4">{profile.bio}</p>
+            )}
+
+            {/* Metrics Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="text-center p-3 bg-muted/30 rounded-lg">
+                <Users className="w-5 h-5 mx-auto mb-1 text-blue-500" />
+                <div className="text-lg font-bold">
+                  {formatNumber(profile.followerCount)}
                 </div>
-              )}
+                <div className="text-xs text-muted-foreground">Followers</div>
+              </div>
 
-              {/* Profile details and metrics */}
-              <div className="flex-1">
-                {profile.bio && (
-                  <p className="text-muted-foreground mb-4">{profile.bio}</p>
-                )}
-
-                {/* Metrics Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                  <div className="text-center p-3 bg-muted/30 rounded-lg">
-                    <Users className="w-5 h-5 mx-auto mb-1 text-blue-500" />
-                    <div className="text-lg font-bold">
-                      {formatNumber(profile.followerCount)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">Followers</div>
-                  </div>
-
-                  <div className="text-center p-3 bg-muted/30 rounded-lg">
-                    <Users className="w-5 h-5 mx-auto mb-1 text-green-500" />
-                    <div className="text-lg font-bold">
-                      {formatNumber(profile.followingCount)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">Following</div>
-                  </div>
-
-                  <div className="text-center p-3 bg-muted/30 rounded-lg">
-                    <Video className="w-5 h-5 mx-auto mb-1 text-purple-500" />
-                    <div className="text-lg font-bold">
-                      {formatNumber(profile.videoCount)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">Videos</div>
-                  </div>
-
-                  <div className="text-center p-3 bg-muted/30 rounded-lg">
-                    <Heart className="w-5 h-5 mx-auto mb-1 text-red-500" />
-                    <div className="text-lg font-bold">
-                      {formatNumber(profile.likeCount)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">Likes</div>
-                  </div>
+              <div className="text-center p-3 bg-muted/30 rounded-lg">
+                <Users className="w-5 h-5 mx-auto mb-1 text-green-500" />
+                <div className="text-lg font-bold">
+                  {formatNumber(profile.followingCount)}
                 </div>
+                <div className="text-xs text-muted-foreground">Following</div>
+              </div>
 
-                <Button
-                  variant="outline"
-                  onClick={() => window.open(`https://www.tiktok.com/@${profile.handle}`, '_blank')}
-                >
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  View on TikTok
-                </Button>
+              <div className="text-center p-3 bg-muted/30 rounded-lg">
+                <Video className="w-5 h-5 mx-auto mb-1 text-purple-500" />
+                <div className="text-lg font-bold">
+                  {formatNumber(profile.videoCount)}
+                </div>
+                <div className="text-xs text-muted-foreground">Videos</div>
+              </div>
+
+              <div className="text-center p-3 bg-muted/30 rounded-lg">
+                <Heart className="w-5 h-5 mx-auto mb-1 text-red-500" />
+                <div className="text-lg font-bold">
+                  {formatNumber(profile.likeCount)}
+                </div>
+                <div className="text-xs text-muted-foreground">Likes</div>
               </div>
             </div>
-          </CardContent>
-        </Card>
+
+            <Button
+              variant="outline"
+              onClick={() => window.open(`https://www.tiktok.com/@${profile.handle}`, '_blank')}
+            >
+              <ExternalLink className="w-4 h-4 mr-2" />
+              View on TikTok
+            </Button>
+          </div>
+          </div>
+        </div>
 
         {error && (
           <Card className="border-red-200 bg-red-50">
@@ -313,21 +272,19 @@ export default function ProfileDetailPage() {
         )}
 
         {/* Posts section */}
-        <Card>
-          <CardHeader>
+        <div className="bg-background border rounded-lg">
+          <div className="p-6 border-b">
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <CardTitle>
-                  Posts ({formatNumber(totalPosts)} total, {formatNumber(filteredPosts.length)} shown)
-                </CardTitle>
-                <PostTypeFilter
-                  value={contentTypeFilter}
-                  onChange={setContentTypeFilter}
-                />
-              </div>
+              <h2 className="text-2xl font-bold">
+                Posts ({formatNumber(totalPosts)} total, {formatNumber(filteredPosts.length)} shown)
+              </h2>
+              <PostTypeFilter
+                value={contentTypeFilter}
+                onChange={setContentTypeFilter}
+              />
             </div>
-          </CardHeader>
-          <CardContent>
+          </div>
+          <div className="p-6">
             {posts.length > 0 ? (
               <PostsTable posts={filteredPosts} />
             ) : loading ? (
@@ -346,9 +303,8 @@ export default function ProfileDetailPage() {
                 </p>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
-    </SidebarLayout>
   )
 }

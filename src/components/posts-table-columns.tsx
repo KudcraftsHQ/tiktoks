@@ -18,6 +18,7 @@ import {
   Images
 } from 'lucide-react'
 import { createSortableHeader } from '@/components/ui/data-table'
+import { getProxiedImageUrl } from '@/lib/image-proxy'
 
 export interface TikTokPost {
   id: string
@@ -28,7 +29,8 @@ export interface TikTokPost {
   description?: string
   authorNickname?: string
   authorHandle?: string
-  authorAvatar?: string
+  authorAvatar?: string // Resolved avatar URL from authorAvatarId via API
+  authorAvatarId?: string // Cache asset ID (for reference, usually not used directly in UI)
   hashtags: Array<{ text: string; url: string }>
   mentions: string[]
   viewCount: number
@@ -37,13 +39,17 @@ export interface TikTokPost {
   commentCount: number
   saveCount: number
   duration?: number
-  videoUrl?: string
-  coverUrl?: string
-  musicUrl?: string
+  videoUrl?: string // Resolved video URL from videoId via API
+  videoId?: string // Cache asset ID (for reference, usually not used directly in UI)
+  coverUrl?: string // Resolved cover URL from coverId via API
+  coverId?: string // Cache asset ID (for reference, usually not used directly in UI)
+  musicUrl?: string // Resolved music URL from musicId via API
+  musicId?: string // Cache asset ID (for reference, usually not used directly in UI)
   images: Array<{
-    url: string
+    url: string // Resolved image URL from cacheAssetId via API
     width: number
     height: number
+    cacheAssetId?: string // Cache asset ID (for reference, usually not used directly in UI)
   }>
   publishedAt: string
 }
@@ -148,7 +154,7 @@ export const createPostsTableColumns = ({
                 {parseImages(post.images).map((image, index) => (
                   <img
                     key={index}
-                    src={image.url}
+                    src={getProxiedImageUrl(image.url)}
                     alt={`Photo ${index + 1}`}
                     className="w-10 aspect-[9/16] rounded object-cover cursor-pointer hover:opacity-80 border"
                     onClick={() => onOpenImageGallery?.(parseImages(post.images), index)}
@@ -157,7 +163,7 @@ export const createPostsTableColumns = ({
               </div>
             ) : post.coverUrl ? (
               <img
-                src={post.coverUrl}
+                src={getProxiedImageUrl(post.coverUrl)}
                 alt="Cover"
                 className="w-10 h-10 rounded object-cover cursor-pointer hover:opacity-80"
                 onClick={() => onPreviewPost(post)}

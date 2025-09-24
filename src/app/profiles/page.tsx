@@ -3,7 +3,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ProfilesTable } from '@/components/ProfilesTable'
-import { SidebarLayout } from '@/components/SidebarLayout'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -36,7 +35,6 @@ export default function ProfilesPage() {
   const [profiles, setProfiles] = useState<TikTokProfile[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isAddingCarousel, setIsAddingCarousel] = useState(false)
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState('')
@@ -45,31 +43,6 @@ export default function ProfilesPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalProfiles, setTotalProfiles] = useState(0)
 
-  // Dummy handler for sidebar carousel functionality
-  const handleAddCarousel = async (url: string) => {
-    setIsAddingCarousel(true)
-    try {
-      const response = await fetch('/api/carousels', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ url }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        alert(error.message || 'Failed to add carousel')
-      } else {
-        alert('Carousel added successfully!')
-      }
-    } catch (error) {
-      console.error('Failed to add carousel:', error)
-      alert('Failed to add carousel')
-    } finally {
-      setIsAddingCarousel(false)
-    }
-  }
 
   const fetchProfiles = useCallback(async () => {
     setLoading(true)
@@ -154,11 +127,7 @@ export default function ProfilesPage() {
   ].filter(Boolean).length
 
   return (
-    <SidebarLayout
-      onAddCarousel={handleAddCarousel}
-      isAddingCarousel={isAddingCarousel}
-    >
-      <div className="container mx-auto py-8 space-y-6">
+    <div className="container mx-auto py-8 space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">TikTok Profiles</h1>
@@ -270,12 +239,6 @@ export default function ProfilesPage() {
 
         {profiles.length > 0 && (
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Users className="w-5 h-5" />
-                <span>Profiles ({profiles.length})</span>
-              </CardTitle>
-            </CardHeader>
             <CardContent>
               <ProfilesTable profiles={profiles} />
             </CardContent>
@@ -311,7 +274,6 @@ export default function ProfilesPage() {
             </CardContent>
           </Card>
         )}
-      </div>
-    </SidebarLayout>
+    </div>
   )
 }

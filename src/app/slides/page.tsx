@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import InfiniteScroll from '@/components/InfiniteScroll'
-import { SidebarLayout } from '@/components/SidebarLayout'
 
 interface CarouselTextBox {
   id: string
@@ -115,8 +114,7 @@ export default function AllSlidesPage() {
   }, [])
 
   return (
-    <SidebarLayout>
-      <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-background">
         {/* Main Content Area */}
         <div className="flex-1">
           {/* Header */}
@@ -262,6 +260,5 @@ export default function AllSlidesPage() {
           </div>
         </div>
       </div>
-    </SidebarLayout>
   )
 }

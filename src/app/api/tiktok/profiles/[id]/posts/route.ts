@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PrismaClient } from '@/generated/prisma'
+import { cacheAssetService } from '@/lib/cache-asset-service'
 
 const prisma = new PrismaClient()
 
@@ -55,11 +56,59 @@ export async function GET(
 
     const hasMore = skip + limit < total
 
-    // Convert BigInt to string for JSON serialization
-    const responsePosts = posts.map(post => ({
-      ...post,
-      viewCount: post.viewCount?.toString() || '0'
-    }))
+    // Generate presigned URLs for cover images and author avatars
+    console.log(`🔗 [API] Generating presigned URLs for ${posts.length} posts`)
+
+    const coverIds = posts.map(post => post.coverId)
+    const avatarIds = posts.map(post => post.authorAvatarId)
+
+    console.log(`🖼️ [API] Cover IDs:`, coverIds.filter(Boolean))
+    console.log(`👤 [API] Avatar IDs:`, avatarIds.filter(Boolean))
+
+    const [presignedCoverUrls, presignedAvatarUrls] = await Promise.all([
+      cacheAssetService.getUrls(coverIds),
+      cacheAssetService.getUrls(avatarIds)
+    ])
+
+    // Convert BigInt to string for JSON serialization and add presigned URLs
+    const responsePosts = await Promise.all(
+      posts.map(async (post, index) => {
+        // Parse images JSON and generate presigned URLs for each image
+        let images = []
+        try {
+          const parsedImages = JSON.parse(post.images || '[]')
+          if (parsedImages.length > 0) {
+            const imageIds = parsedImages.map((img: any) => img.cacheAssetId)
+            const presignedImageUrls = await cacheAssetService.getUrls(imageIds)
+
+            images = parsedImages.map((img: any, imgIndex: number) => ({
+              ...img,
+              url: presignedImageUrls[imgIndex]
+            }))
+          } else {
+            images = parsedImages
+          }
+        } catch (error) {
+          console.warn('Failed to parse images for post:', post.id, error)
+          images = JSON.parse(post.images || '[]')
+        }
+
+        return {
+          ...post,
+          viewCount: post.viewCount?.toString() || '0',
+          coverUrl: presignedCoverUrls[index],
+          authorAvatar: presignedAvatarUrls[index],
+          images: images
+        }
+      })
+    )
+
+    console.log(`✅ [API] Posts processed with presigned URLs:`, {
+      originalCount: posts.length,
+      processedCount: responsePosts.length,
+      coverUrlsGenerated: presignedCoverUrls.filter(Boolean).length,
+      avatarUrlsGenerated: presignedAvatarUrls.filter(Boolean).length
+    })
 
     return NextResponse.json({
       posts: responsePosts,

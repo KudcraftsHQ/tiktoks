@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PrismaClient } from '@/generated/prisma'
+import { cacheAssetService } from '@/lib/cache-asset-service'
 
 const prisma = new PrismaClient()
 
@@ -25,7 +26,20 @@ export async function GET(
       )
     }
 
-    return NextResponse.json(profile)
+    // Generate presigned URL for avatar
+    console.log(`🔗 [API] Generating presigned URL for profile ${profile.id} avatar`)
+    const avatarUrl = await cacheAssetService.getUrl(profile.avatarId)
+    console.log(`✅ [API] Avatar URL resolved:`, {
+      avatarId: profile.avatarId,
+      resolvedUrl: avatarUrl
+    })
+
+    const profileWithPresignedAvatar = {
+      ...profile,
+      avatar: avatarUrl
+    }
+
+    return NextResponse.json(profileWithPresignedAvatar)
   } catch (error) {
     console.error('Failed to fetch profile:', error)
     return NextResponse.json(

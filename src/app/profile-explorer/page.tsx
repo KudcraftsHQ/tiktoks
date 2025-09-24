@@ -6,7 +6,6 @@ import { ProfileInput } from '@/components/ProfileInput'
 import { PostsTable } from '@/components/PostsTable'
 import { PostTypeFilter } from '@/components/PostTypeFilter'
 import { LoadMoreButton } from '@/components/LoadMoreButton'
-import { SidebarLayout } from '@/components/SidebarLayout'
 import { Button } from '@/components/ui/button'
 import { RefreshCw, Database } from 'lucide-react'
 
@@ -54,38 +53,12 @@ export default function ProfileExplorerPage() {
   const [maxCursor, setMaxCursor] = useState<string | undefined>()
   const [hasMore, setHasMore] = useState(false)
   const [contentTypeFilter, setContentTypeFilter] = useState<'all' | 'video' | 'photo'>('all')
-  const [isAddingCarousel, setIsAddingCarousel] = useState(false)
   const [upsertStats, setUpsertStats] = useState<{
     postsCreated: number
     postsUpdated: number
     totalPosts: number
   } | null>(null)
 
-  // Dummy handler for sidebar carousel functionality
-  const handleAddCarousel = async (url: string) => {
-    setIsAddingCarousel(true)
-    try {
-      const response = await fetch('/api/carousels', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ url }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        alert(error.message || 'Failed to add carousel')
-      } else {
-        alert('Carousel added successfully!')
-      }
-    } catch (error) {
-      console.error('Failed to add carousel:', error)
-      alert('Failed to add carousel')
-    } finally {
-      setIsAddingCarousel(false)
-    }
-  }
 
   const fetchProfileVideos = useCallback(async (
     handle: string,
@@ -157,11 +130,7 @@ export default function ProfileExplorerPage() {
   })
 
   return (
-    <SidebarLayout
-      onAddCarousel={handleAddCarousel}
-      isAddingCarousel={isAddingCarousel}
-    >
-      <div className="container mx-auto py-8 space-y-6">
+    <div className="container mx-auto py-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">TikTok Profile Explorer</h1>
@@ -251,7 +220,6 @@ export default function ProfileExplorerPage() {
           </CardContent>
         </Card>
       )}
-      </div>
-    </SidebarLayout>
+    </div>
   )
 }
