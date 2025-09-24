@@ -183,6 +183,11 @@ model TiktokPost {
   // Array of objects: [{"cacheAssetId": "uuid", "width": 100, "height": 200}]
   images      Json     @default("[]")
 
+  // OCR and text extraction
+  ocrTexts     Json     @default("[]") // Array of objects: [{"imageIndex": 0, "text": "extracted text"}]
+  ocrStatus    String   @default("pending") // 'pending', 'processing', 'completed', 'failed'
+  ocrProcessedAt DateTime?
+
   // Author info (denormalized for performance)
   authorNickname String?
   authorHandle   String?
@@ -209,12 +214,14 @@ model TiktokPost {
 
   profile      TiktokProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   collections  CollectionPost[]
+  remixes      RemixPost[]
 
   @@map("tiktok_posts")
   @@index([profileId])
   @@index([contentType])
   @@index([publishedAt])
   @@index([authorHandle])
+  @@index([ocrStatus])
 }
 
 model Collection {
@@ -244,5 +251,74 @@ model CollectionPost {
   @@map("collection_posts")
   @@index([collectionId])
   @@index([postId])
+}
+
+// Remix system for TikTok posts
+
+model RemixPost {
+  id              String   @id @default(cuid())
+  originalPostId  String   // Reference to TikTokPost
+  name            String
+  description     String?
+  generationType  String   @default("manual") // 'manual', 'ai_paraphrase'
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  originalPost    TiktokPost @relation(fields: [originalPostId], references: [id], onDelete: Cascade)
+  slides          RemixSlide[]
+
+  @@map("remix_posts")
+  @@index([originalPostId])
+}
+
+model RemixSlide {
+  id                        String @id @default(cuid())
+  remixPostId               String
+  originalImageId           String? @db.Uuid // Original image cache asset ID from TikTokPost
+  backgroundImageId         String? @db.Uuid // Custom background cache asset ID
+  displayOrder              Int
+
+  // Image positioning (same as carousel)
+  backgroundImagePositionX  Float @default(0.5) // 0-1 for positioning
+  backgroundImagePositionY  Float @default(0.5) // 0-1 for positioning
+  backgroundImageZoom       Float @default(1.0) // zoom level
+
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  remixPost                 RemixPost @relation(fields: [remixPostId], references: [id], onDelete: Cascade)
+  textBoxes                 RemixTextBox[]
+
+  @@map("remix_slides")
+  @@index([remixPostId])
+}
+
+model RemixTextBox {
+  id              String   @id @default(cuid())
+  slideId         String
+  text            String
+  x               Float    // position x (0-1)
+  y               Float    // position y (0-1)
+  width           Float    // width (0-1)
+  height          Float    // height (0-1)
+  fontSize        Int      @default(24)
+  fontFamily      String   @default("Poppins")
+  fontWeight      String   @default("normal") // 'normal', 'bold'
+  fontStyle       String   @default("normal") // 'normal', 'italic'
+  textDecoration  String   @default("none") // 'none', 'underline'
+  color           String   @default("#000000")
+  textAlign       String   @default("center") // 'left', 'center', 'right'
+  zIndex          Int      @default(1)
+  textStroke      String?  // CSS text-stroke value
+  textShadow      String?  // CSS text-shadow value
+  borderWidth     Float?   // Border width in pixels
+  borderColor     String?  // Border color
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  slide           RemixSlide @relation(fields: [slideId], references: [id], onDelete: Cascade)
+
+  @@map("remix_text_boxes")
+  @@index([slideId])
 }
 
