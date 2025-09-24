@@ -14,12 +14,14 @@ import { createPostsTableColumns, TikTokPost } from '@/components/posts-table-co
 import { CollectionSelector } from '@/components/CollectionSelector'
 import { ImageGallery } from '@/components/ImageGallery'
 import { getProxiedImageUrl } from '@/lib/image-proxy'
+import { useRouter } from 'next/navigation'
 
 interface PostsTableProps {
   posts: TikTokPost[]
 }
 
 export function PostsTable({ posts }: PostsTableProps) {
+  const router = useRouter()
   const [selectedPost, setSelectedPost] = useState<TikTokPost | null>(null)
   const [showCollectionDialog, setShowCollectionDialog] = useState(false)
   const [collectionPost, setCollectionPost] = useState<TikTokPost | null>(null)
@@ -75,11 +77,16 @@ export function PostsTable({ posts }: PostsTableProps) {
     setShowGallery(true)
   }
 
+  const handleRemixPost = (post: TikTokPost) => {
+    router.push(`/posts/${post.id}/remix`)
+  }
+
   // Create columns with handlers
   const columns = useMemo(() => createPostsTableColumns({
     onPreviewPost: handlePreviewPost,
     onAddToCollection: handleAddToCollection,
-    onOpenImageGallery: handleOpenImageGallery
+    onOpenImageGallery: handleOpenImageGallery,
+    onRemixPost: handleRemixPost
   }), [])
 
   return (

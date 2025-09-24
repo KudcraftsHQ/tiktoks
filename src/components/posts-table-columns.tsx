@@ -15,7 +15,8 @@ import {
   Eye,
   Clock,
   ArrowUpDown,
-  Images
+  Images,
+  Sparkles
 } from 'lucide-react'
 import { createSortableHeader } from '@/components/ui/data-table'
 import { getProxiedImageUrl } from '@/lib/image-proxy'
@@ -58,6 +59,7 @@ interface PostsTableColumnsProps {
   onPreviewPost: (post: TikTokPost) => void
   onAddToCollection: (post: TikTokPost) => void
   onOpenImageGallery?: (images: Array<{ url: string; width: number; height: number }>, initialIndex: number) => void
+  onRemixPost?: (post: TikTokPost) => void
 }
 
 const formatNumber = (num: number): string => {
@@ -107,7 +109,8 @@ const parseImages = (images: any): Array<{ url: string; width: number; height: n
 export const createPostsTableColumns = ({
   onPreviewPost,
   onAddToCollection,
-  onOpenImageGallery
+  onOpenImageGallery,
+  onRemixPost
 }: PostsTableColumnsProps): ColumnDef<TikTokPost>[] => [
   {
     accessorKey: 'contentType',
@@ -332,6 +335,18 @@ export const createPostsTableColumns = ({
           >
             <ExternalLink className="w-3 h-3" />
           </Button>
+
+          {post.contentType === 'photo' && onRemixPost && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onRemixPost(post)}
+              title="Create Remix"
+              className="text-purple-600 border-purple-200 hover:bg-purple-50"
+            >
+              <Sparkles className="w-3 h-3" />
+            </Button>
+          )}
 
           <Button
             variant="default"
