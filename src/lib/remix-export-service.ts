@@ -4,12 +4,20 @@
  * Service for exporting remix slides as images and ZIP archives
  */
 
-import { createCanvas, loadImage, Canvas } from '@napi-rs/canvas'
 import { PrismaClient } from '@/generated/prisma'
 import { cacheAssetService } from './cache-asset-service'
 import JSZip from 'jszip'
 
 const prisma = new PrismaClient()
+
+// Dynamic imports for canvas functionality
+let canvasModule: any = null
+async function getCanvasModule() {
+  if (!canvasModule) {
+    canvasModule = await import('@napi-rs/canvas')
+  }
+  return canvasModule
+}
 
 interface BackgroundLayer {
   id: string
@@ -89,18 +97,24 @@ const DEFAULT_CANVAS_WIDTH = 1080
 const DEFAULT_CANVAS_HEIGHT = 1920
 
 export class RemixExportService {
-  private canvas: Canvas
-  private ctx: any
+  private canvas: any = null
+  private ctx: any = null
 
-  constructor() {
-    this.canvas = createCanvas(DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT)
-    this.ctx = this.canvas.getContext('2d')
+  async initCanvas() {
+    if (!this.canvas) {
+      const { createCanvas } = await getCanvasModule()
+      this.canvas = createCanvas(DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT)
+      this.ctx = this.canvas.getContext('2d')
+    }
   }
 
   async exportSlide(
     slide: RemixSlide,
     options: ExportOptions = {}
   ): Promise<Buffer> {
+    // Initialize canvas if not already done
+    await this.initCanvas()
+
     const {
       format = 'png',
       quality = 0.95,
@@ -209,6 +223,7 @@ export class RemixExportService {
             }
 
             // Load and draw the image
+            const { loadImage } = await getCanvasModule()
             const image = await loadImage(imageUrl)
 
             // Draw the image with layer positioning and scaling

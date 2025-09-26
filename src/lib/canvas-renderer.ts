@@ -1,4 +1,7 @@
-import { createCanvas, loadImage } from '@napi-rs/canvas'
+// Dynamic import for canvas functionality
+async function getCanvasModule() {
+  return await import('@napi-rs/canvas')
+}
 
 interface TextBox {
   id: string
@@ -39,6 +42,9 @@ export async function renderSlideToCanvas(slide: Slide, options: RenderOptions =
   const { format = 'png', quality = 0.95 } = options
   const canvasWidth = 540
   const canvasHeight = 960
+
+  // Get canvas module dynamically
+  const { createCanvas, loadImage } = await getCanvasModule()
 
   // Create canvas
   const canvas = createCanvas(canvasWidth, canvasHeight)
