@@ -35,6 +35,9 @@ import { DraggableTextBox } from '@/components/DraggableTextBox'
 import { DraggableBackgroundImage } from '@/components/DraggableBackgroundImage'
 import { ImageSelectionDialog } from '@/components/ImageSelectionDialog'
 import { SortableThumbnail } from '@/components/SortableThumbnail'
+import { FloatingSettingsPanel } from '@/components/FloatingSettingsPanel'
+import { CanvasSidebar, TextElementsSection, BackgroundSection, CanvasSettingsSection } from '@/components/CanvasSidebar'
+import { TextStylePanel } from '@/components/TextStylePanel'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   ContextMenu,
@@ -60,47 +63,19 @@ import {
   sortableKeyboardCoordinates,
   horizontalListSortingStrategy,
 } from '@dnd-kit/sortable'
-import { cacheAssetService } from '@/lib/cache-asset-service'
 
-// Adapt interfaces for remix structure
-interface RemixTextBox {
-  id: string
-  text: string
-  x: number
-  y: number
-  width: number
-  height: number
-  fontSize: number
-  fontFamily: string
-  fontWeight: string
-  fontStyle: string
-  textDecoration: string
-  color: string
-  textAlign: string
-  zIndex: number
-  textStroke?: string
-  textShadow?: string
-  borderWidth?: number
-  borderColor?: string
-}
+// Import the new types from validation schema
+import type {
+  RemixPostType,
+  RemixSlideType,
+  RemixTextBoxType,
+  CanvasSizeType,
+  BackgroundLayerType
+} from '@/lib/validations/remix-schema'
+import { CANVAS_SIZES, createDefaultBackgroundLayers, createImageBackgroundLayer, RemixSlideSchema } from '@/lib/validations/remix-schema'
 
-interface RemixSlide {
-  id: string
-  originalImageId?: string | null
-  backgroundImageId?: string | null
-  backgroundImagePositionX: number
-  backgroundImagePositionY: number
-  backgroundImageZoom: number
-  displayOrder: number
-  textBoxes: RemixTextBox[]
-}
-
-interface RemixPost {
-  id: string
-  name: string
-  description?: string | null
-  generationType: string
-  slides: RemixSlide[]
+// Use the imported types directly
+interface RemixPost extends RemixPostType {
   originalPost: {
     id: string
     tiktokUrl: string
@@ -112,15 +87,56 @@ interface RemixPost {
 }
 
 interface EditorProps {
-  params: { id: string }
+  params: Promise<{ id: string }>
+}
+
+// Frontend utility to ensure slides are properly bootstrapped
+function ensureSlidesValid(slides: any[]): RemixSlideType[] {
+  if (!Array.isArray(slides) || slides.length === 0) {
+    return []
+  }
+
+  return slides.map((slide: any, index: number) => {
+    try {
+      // Create a base slide with fallback values
+      const baseSlide = {
+        id: slide?.id || `slide_${Date.now()}_${index}`,
+        displayOrder: slide?.displayOrder ?? index,
+        canvas: slide?.canvas || CANVAS_SIZES.INSTAGRAM_STORY,
+        backgroundLayers: slide?.backgroundLayers || createDefaultBackgroundLayers(),
+        originalImageIndex: slide?.originalImageIndex ?? index,
+        paraphrasedText: slide?.paraphrasedText || '',
+        originalText: slide?.originalText || '',
+        textBoxes: slide?.textBoxes || [],
+        ...slide
+      }
+
+      // Validate using schema (applies schema defaults)
+      return RemixSlideSchema.parse(baseSlide)
+    } catch (error) {
+      console.warn(`Failed to normalize slide ${index}, using default:`, error)
+      // Return a safe fallback slide
+      return RemixSlideSchema.parse({
+        id: `slide_${Date.now()}_${index}`,
+        displayOrder: index,
+        canvas: CANVAS_SIZES.INSTAGRAM_STORY,
+        backgroundLayers: createDefaultBackgroundLayers(),
+        originalImageIndex: index,
+        paraphrasedText: 'Default slide content',
+        textBoxes: []
+      })
+    }
+  })
 }
 
 export default function RemixEditor({ params }: EditorProps) {
+  console.log('🎬 [RemixEditor] Component initializing...')
+
   const router = useRouter()
   const [remix, setRemix] = useState<RemixPost | null>(null)
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0)
   const [selectedTextBoxId, setSelectedTextBoxId] = useState<string | null>(null)
-  const [selectedBackgroundImage, setSelectedBackgroundImage] = useState<boolean>(false)
+  const [selectedBackgroundLayerId, setSelectedBackgroundLayerId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -130,6 +146,7 @@ export default function RemixEditor({ params }: EditorProps) {
   const [canvasZoom, setCanvasZoom] = useState(1)
   const [autoFitZoom, setAutoFitZoom] = useState(1)
   const [canvasPosition, setCanvasPosition] = useState({ x: 0, y: 0 })
+  const [backgroundImageUrls, setBackgroundImageUrls] = useState<Record<string, string>>({})
   const canvasContainerRef = useRef<HTMLDivElement>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [isAutoSaving, setIsAutoSaving] = useState(false)
@@ -138,6 +155,10 @@ export default function RemixEditor({ params }: EditorProps) {
 
   // Original images for reference
   const [originalImageUrls, setOriginalImageUrls] = useState<string[]>([])
+
+  // Floating panel state
+  const [floatingPanelPosition, setFloatingPanelPosition] = useState({ x: 0, y: 0 })
+  const [showFloatingPanel, setShowFloatingPanel] = useState(true)
 
   const sensors = useSensors(
     useSensor(MouseSensor, {
@@ -203,29 +224,77 @@ export default function RemixEditor({ params }: EditorProps) {
     }
   }, [isDragging])
 
-  const fetchRemix = async () => {
+  const fetchRemix = useCallback(async () => {
+    console.log('🚀 [RemixEditor] Starting fetchRemix...')
     setIsLoading(true)
-    try {
-      const response = await fetch(`/api/remixes/${params.id}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch remix')
-      }
-      const data = await response.json()
-      setRemix(data)
+    setError(null)
 
-      // Load original images for reference
-      if (data.originalPost?.images?.length > 0) {
-        const cacheAssetIds = data.originalPost.images.map((img: any) => img.cacheAssetId)
-        const urls = await cacheAssetService.getUrls(cacheAssetIds)
-        setOriginalImageUrls(urls)
+    try {
+      console.log('🔍 [RemixEditor] Resolving params...')
+      const resolvedParams = await params
+      console.log('✅ [RemixEditor] Resolved params:', resolvedParams)
+
+      const apiUrl = `/api/remixes/${resolvedParams.id}`
+      console.log('🌐 [RemixEditor] Fetching from:', apiUrl)
+
+      const response = await fetch(apiUrl)
+      console.log('📡 [RemixEditor] Response status:', response.status, response.statusText)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ [RemixEditor] Response not OK:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorText
+        })
+        throw new Error(`Failed to fetch remix: ${response.status} ${response.statusText}`)
       }
+
+      console.log('📝 [RemixEditor] Parsing JSON response...')
+      const data = await response.json()
+      console.log('✅ [RemixEditor] Received data:', {
+        id: data.id,
+        name: data.name,
+        slidesCount: Array.isArray(data.slides) ? data.slides.length : 'not array',
+        hasOriginalPost: !!data.originalPost,
+        originalPostId: data.originalPost?.id
+      })
+
+      // Normalize slides before setting the state
+      const normalizedData = {
+        ...data,
+        slides: ensureSlidesValid(data.slides || [])
+      }
+
+      setRemix(normalizedData)
+      console.log('✅ [RemixEditor] Set normalized remix data successfully', {
+        originalSlidesCount: Array.isArray(data.slides) ? data.slides.length : 'not array',
+        normalizedSlidesCount: normalizedData.slides.length
+      })
+
+      // Load original images for reference - URLs are already resolved by the API
+      if (data.originalPost?.images?.length > 0) {
+        console.log('🖼️ [RemixEditor] Using resolved image URLs from API...', data.originalPost.images.length)
+        const urls = data.originalPost.images.map((img: any) => img.url)
+        setOriginalImageUrls(urls)
+        console.log('✅ [RemixEditor] Set original image URLs:', urls.length)
+      } else {
+        console.log('ℹ️ [RemixEditor] No original images to load')
+      }
+
+      console.log('🎉 [RemixEditor] fetchRemix completed successfully')
     } catch (error) {
-      console.error('Failed to fetch remix:', error)
-      setError('Failed to load remix')
+      console.error('💥 [RemixEditor] Error in fetchRemix:', {
+        error,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      })
+      setError(`Failed to load remix: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setIsLoading(false)
+      console.log('🏁 [RemixEditor] fetchRemix finally block - isLoading set to false')
     }
-  }
+  }, [params])
 
   const saveRemix = async (isAutoSave = false) => {
     if (!remix) return
@@ -237,7 +306,8 @@ export default function RemixEditor({ params }: EditorProps) {
     }
 
     try {
-      const response = await fetch(`/api/remixes/${params.id}`, {
+      const resolvedParams = await params
+      const response = await fetch(`/api/remixes/${resolvedParams.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -245,35 +315,7 @@ export default function RemixEditor({ params }: EditorProps) {
         body: JSON.stringify({
           name: remix.name,
           description: remix.description,
-          slides: remix.slides.map(slide => ({
-            id: slide.id,
-            displayOrder: slide.displayOrder,
-            originalImageId: slide.originalImageId,
-            backgroundImageId: slide.backgroundImageId,
-            backgroundImagePositionX: slide.backgroundImagePositionX,
-            backgroundImagePositionY: slide.backgroundImagePositionY,
-            backgroundImageZoom: slide.backgroundImageZoom,
-            textBoxes: slide.textBoxes.map(textBox => ({
-              id: textBox.id,
-              text: textBox.text,
-              x: textBox.x,
-              y: textBox.y,
-              width: textBox.width,
-              height: textBox.height,
-              fontSize: textBox.fontSize,
-              fontFamily: textBox.fontFamily,
-              fontWeight: textBox.fontWeight,
-              fontStyle: textBox.fontStyle,
-              textDecoration: textBox.textDecoration,
-              color: textBox.color,
-              textAlign: textBox.textAlign,
-              zIndex: textBox.zIndex,
-              textStroke: textBox.textStroke,
-              textShadow: textBox.textShadow,
-              borderWidth: textBox.borderWidth,
-              borderColor: textBox.borderColor
-            }))
-          }))
+          slides: remix.slides // Send the entire slides array with new structure
         }),
       })
 
@@ -319,14 +361,26 @@ export default function RemixEditor({ params }: EditorProps) {
   const addSlide = () => {
     if (!remix) return
 
-    const newSlide: RemixSlide = {
+    const newSlide: RemixSlideType = {
       id: `temp-${Date.now()}`,
-      originalImageId: null,
-      backgroundImageId: null,
-      backgroundImagePositionX: 0.5,
-      backgroundImagePositionY: 0.5,
-      backgroundImageZoom: 1.0,
       displayOrder: remix.slides.length,
+      canvas: {
+        width: 1080,
+        height: 1920,
+        unit: 'px'
+      },
+      backgroundLayers: [
+        {
+          id: `bg_${Date.now()}_1`,
+          type: 'color',
+          color: '#ffffff',
+          opacity: 1,
+          blendMode: 'normal',
+          zIndex: 1
+        }
+      ],
+      originalImageIndex: Math.min(remix.slides.length, (remix.originalPost.images.length || 1) - 1),
+      paraphrasedText: 'New slide content',
       textBoxes: []
     }
 
@@ -407,7 +461,7 @@ export default function RemixEditor({ params }: EditorProps) {
     if (!remix || currentSlideIndex >= remix.slides.length) return
 
     const currentSlide = remix.slides[currentSlideIndex]
-    const newTextBox: RemixTextBox = {
+    const newTextBox: RemixTextBoxType = {
       id: `temp-${Date.now()}`,
       text: 'New text box',
       x: 0.25,
@@ -422,10 +476,41 @@ export default function RemixEditor({ params }: EditorProps) {
       color: '#ffffff',
       textAlign: 'center',
       zIndex: 1,
+
+      // Text wrapping
+      textWrap: 'none',
+
+      // Text shadow effects
+      enableShadow: false,
+      shadowColor: '#000000',
+      shadowBlur: 4,
+      shadowOffsetX: 2,
+      shadowOffsetY: 2,
+
+      // Text outline effects
+      outlineWidth: 0,
+      outlineColor: '#000000',
+
+      // Legacy text styling
       textStroke: undefined,
       textShadow: '2px 2px 4px rgba(0,0,0,0.5)',
       borderWidth: 0,
-      borderColor: '#000000'
+      borderColor: '#000000',
+
+      // Text background styling
+      backgroundColor: undefined,
+      backgroundOpacity: 1,
+      borderRadius: 0,
+
+      // Padding and spacing
+      paddingTop: 8,
+      paddingRight: 12,
+      paddingBottom: 8,
+      paddingLeft: 12,
+
+      // Line height and letter spacing
+      lineHeight: 1.2,
+      letterSpacing: 0
     }
 
     const updatedSlides = [...remix.slides]
@@ -443,7 +528,7 @@ export default function RemixEditor({ params }: EditorProps) {
     markAsChanged()
   }
 
-  const updateTextBox = (textBoxId: string, updates: Partial<RemixTextBox>) => {
+  const updateTextBox = (textBoxId: string, updates: Partial<RemixTextBoxType>) => {
     if (!remix || currentSlideIndex >= remix.slides.length) return
 
     const updatedSlides = [...remix.slides]
@@ -465,13 +550,61 @@ export default function RemixEditor({ params }: EditorProps) {
     markAsChanged()
   }
 
-  const updateBackgroundImage = (updates: Partial<RemixSlide>) => {
+  const updateBackgroundLayer = (layerId: string, updates: any) => {
     if (!remix || currentSlideIndex >= remix.slides.length) return
 
     const updatedSlides = [...remix.slides]
+    const currentSlide = updatedSlides[currentSlideIndex]
+
     updatedSlides[currentSlideIndex] = {
-      ...updatedSlides[currentSlideIndex],
-      ...updates
+      ...currentSlide,
+      backgroundLayers: currentSlide.backgroundLayers?.map((layer: any) =>
+        layer.id === layerId ? { ...layer, ...updates } : layer
+      ) || []
+    }
+
+    setRemix({
+      ...remix,
+      slides: updatedSlides
+    })
+
+    setThumbnailUpdateTrigger(prev => prev + 1)
+    markAsChanged()
+  }
+
+  // Update floating panel position when text box is selected
+  const updateFloatingPanelPosition = useCallback((textBoxId: string) => {
+    const slide = remix?.slides?.[currentSlideIndex]
+    if (!slide || !canvasContainerRef.current) return
+
+    const textBox = slide.textBoxes.find(tb => tb.id === textBoxId)
+    if (!textBox) return
+
+    const canvasContainer = canvasContainerRef.current
+    const canvasRect = canvasContainer.getBoundingClientRect()
+
+    // Calculate text box position on screen
+    const canvasWidth = slide?.canvas?.width || CANVAS_SIZES.INSTAGRAM_STORY.width
+    const canvasHeight = slide?.canvas?.height || CANVAS_SIZES.INSTAGRAM_STORY.height
+
+    const textBoxX = canvasRect.left + (textBox.x * canvasWidth * canvasZoom)
+    const textBoxY = canvasRect.top + (textBox.y * canvasHeight * canvasZoom)
+
+    setFloatingPanelPosition({
+      x: textBoxX,
+      y: textBoxY
+    })
+  }, [remix?.slides, currentSlideIndex, canvasZoom])
+
+  const updateCanvas = (updates: Partial<CanvasSizeType>) => {
+    if (!remix || currentSlideIndex >= remix.slides.length) return
+
+    const updatedSlides = [...remix.slides]
+    const currentSlide = updatedSlides[currentSlideIndex]
+
+    updatedSlides[currentSlideIndex] = {
+      ...currentSlide,
+      canvas: { ...currentSlide.canvas, ...updates }
     }
 
     setRemix({
@@ -554,20 +687,78 @@ export default function RemixEditor({ params }: EditorProps) {
     markAsChanged()
   }
 
-  const handleImageSelect = (imageUrl: string) => {
+  const handleImageSelect = async (imageUrl: string) => {
     if (!remix || currentSlideIndex >= remix.slides.length) return
 
-    const updatedSlides = [...remix.slides]
-    updatedSlides[currentSlideIndex] = {
-      ...updatedSlides[currentSlideIndex],
-      backgroundImageId: imageUrl // This would need to be a cache asset ID in practice
-    }
+    try {
+      console.log('🖼️ [RemixEditor] Processing background image selection:', imageUrl)
 
-    setRemix({
-      ...remix,
-      slides: updatedSlides
-    })
-    markAsChanged()
+      let cacheAssetId = imageUrl
+
+      // If the imageUrl is a full URL (not already a cache asset ID), create a cache asset
+      if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+        console.log('🔄 [RemixEditor] Creating cache asset for URL:', imageUrl)
+        // In production, this would call the cache asset API endpoint
+        // For now, we'll simulate this by making an API call
+        const response = await fetch('/api/cache-assets', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            originalUrl: imageUrl,
+            folder: 'remix-backgrounds'
+          }),
+        })
+
+        if (response.ok) {
+          const { cacheAssetId: newCacheAssetId } = await response.json()
+          cacheAssetId = newCacheAssetId
+          console.log('✅ [RemixEditor] Created cache asset:', cacheAssetId)
+        } else {
+          console.warn('⚠️ [RemixEditor] Failed to create cache asset, using original URL')
+          cacheAssetId = imageUrl
+        }
+      }
+
+      const updatedSlides = [...remix.slides]
+      const currentSlide = updatedSlides[currentSlideIndex]
+
+      // Create a new image background layer or update existing one
+      const existingImageLayerIndex = currentSlide.backgroundLayers.findIndex(layer => layer.type === 'image')
+
+      if (existingImageLayerIndex >= 0) {
+        // Update existing image layer
+        updatedSlides[currentSlideIndex] = {
+          ...currentSlide,
+          backgroundLayers: currentSlide.backgroundLayers.map((layer, index) =>
+            index === existingImageLayerIndex
+              ? { ...layer, imageId: cacheAssetId }
+              : layer
+          )
+        }
+      } else {
+        // Add new image background layer
+        const imageLayer = createImageBackgroundLayer(cacheAssetId, {
+          zIndex: currentSlide.backgroundLayers.length + 1
+        })
+
+        updatedSlides[currentSlideIndex] = {
+          ...currentSlide,
+          backgroundLayers: [...currentSlide.backgroundLayers, imageLayer]
+        }
+      }
+
+      setRemix({
+        ...remix,
+        slides: updatedSlides
+      })
+      markAsChanged()
+      console.log('✅ [RemixEditor] Background image updated successfully')
+    } catch (error) {
+      console.error('💥 [RemixEditor] Failed to set background image:', error)
+      setError('Failed to set background image. Please try again.')
+    }
   }
 
   const exportRemix = async () => {
@@ -628,22 +819,28 @@ export default function RemixEditor({ params }: EditorProps) {
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
+      // Prevent default behavior and stop event bubbling
       e.preventDefault()
+      e.stopPropagation()
       const delta = e.deltaY > 0 ? 0.9 : 1.1
       const newZoom = Math.min(Math.max(canvasZoom * delta, 0.25), 3)
       setCanvasZoom(newZoom)
+    } else {
+      // For non-zoom wheel events, also prevent bubbling to parent
+      e.stopPropagation()
     }
   }, [canvasZoom])
 
-  const calculateAutoFitZoom = useCallback(() => {
+  const calculateAutoFitZoom = useCallback((slide?: any) => {
     if (!canvasContainerRef.current) return 1
 
     const container = canvasContainerRef.current
     const containerWidth = container.clientWidth
     const containerHeight = container.clientHeight
 
-    const canvasWidth = 540
-    const canvasHeight = 960
+    // Use actual canvas dimensions from provided slide or default
+    const canvasWidth = slide?.canvas?.width || CANVAS_SIZES.INSTAGRAM_STORY.width
+    const canvasHeight = slide?.canvas?.height || CANVAS_SIZES.INSTAGRAM_STORY.height
     const padding = 40
 
     const availableWidth = containerWidth - (padding * 2)
@@ -658,14 +855,18 @@ export default function RemixEditor({ params }: EditorProps) {
   }, [])
 
   const resetZoom = useCallback(() => {
-    setCanvasZoom(autoFitZoom)
+    const slide = remix?.slides?.[currentSlideIndex]
+    const newAutoFitZoom = calculateAutoFitZoom(slide)
+    setAutoFitZoom(newAutoFitZoom)
+    setCanvasZoom(newAutoFitZoom)
     setCanvasPosition({ x: 0, y: 0 })
-  }, [autoFitZoom])
+  }, [calculateAutoFitZoom, remix?.slides, currentSlideIndex])
 
   // Auto-fit zoom on mount and resize
   useEffect(() => {
     const updateAutoFit = () => {
-      const newAutoFitZoom = calculateAutoFitZoom()
+      const slide = remix?.slides?.[currentSlideIndex]
+      const newAutoFitZoom = calculateAutoFitZoom(slide)
       setAutoFitZoom(newAutoFitZoom)
       setCanvasZoom(newAutoFitZoom)
     }
@@ -673,21 +874,69 @@ export default function RemixEditor({ params }: EditorProps) {
     setTimeout(updateAutoFit, 100)
     window.addEventListener('resize', updateAutoFit)
     return () => window.removeEventListener('resize', updateAutoFit)
-  }, [calculateAutoFitZoom])
+  }, [calculateAutoFitZoom, remix?.slides, currentSlideIndex])
 
   useEffect(() => {
+    console.log('🔄 [RemixEditor] useEffect triggered - calling fetchRemix')
     fetchRemix()
-  }, [params.id])
+  }, [fetchRemix])
 
   useEffect(() => {
-    if (remix && canvasContainerRef.current) {
+    const slide = remix?.slides?.[currentSlideIndex]
+    if (remix && canvasContainerRef.current && slide) {
       setTimeout(() => {
-        const newAutoFitZoom = calculateAutoFitZoom()
+        const newAutoFitZoom = calculateAutoFitZoom(slide)
         setAutoFitZoom(newAutoFitZoom)
         setCanvasZoom(newAutoFitZoom)
       }, 200)
     }
-  }, [remix, calculateAutoFitZoom])
+  }, [remix, calculateAutoFitZoom, currentSlideIndex])
+
+  // Resolve background image URLs using CacheAssetService
+  useEffect(() => {
+    const resolveBackgroundImageUrls = async () => {
+      if (!remix?.slides) return
+
+      const imageIds: string[] = []
+      const imageIdToLayerMap: Record<string, string> = {}
+
+      // Collect all background image IDs from all slides
+      remix.slides.forEach((slide: any) => {
+        slide.backgroundLayers?.forEach((layer: any) => {
+          if (layer.type === 'image' && layer.imageId) {
+            imageIds.push(layer.imageId)
+            imageIdToLayerMap[layer.imageId] = layer.id
+          }
+        })
+      })
+
+      if (imageIds.length === 0) return
+
+      try {
+        // Use the cache asset client to resolve URLs
+        const urlPromises = imageIds.map(async (imageId) => {
+          const response = await fetch(`/api/cache-assets?id=${imageId}`)
+          if (response.ok) {
+            const data = await response.json()
+            return { imageId, url: data.url }
+          }
+          return { imageId, url: `/api/assets/${imageId}` } // fallback
+        })
+
+        const resolvedUrls = await Promise.all(urlPromises)
+        const urlMap: Record<string, string> = {}
+        resolvedUrls.forEach(({ imageId, url }) => {
+          urlMap[imageId] = url
+        })
+
+        setBackgroundImageUrls(urlMap)
+      } catch (error) {
+        console.error('Failed to resolve background image URLs:', error)
+      }
+    }
+
+    resolveBackgroundImageUrls()
+  }, [remix?.slides])
 
   // Handle unsaved changes warning
   useEffect(() => {
@@ -712,6 +961,7 @@ export default function RemixEditor({ params }: EditorProps) {
   }, [])
 
   if (isLoading) {
+    console.log('⏳ [RemixEditor] Rendering loading state')
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex items-center gap-2 text-muted-foreground">
@@ -723,6 +973,7 @@ export default function RemixEditor({ params }: EditorProps) {
   }
 
   if (error || !remix) {
+    console.log('❌ [RemixEditor] Rendering error state:', { error, hasRemix: !!remix })
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-4">
@@ -736,9 +987,18 @@ export default function RemixEditor({ params }: EditorProps) {
     )
   }
 
-  const currentSlide = remix.slides[currentSlideIndex]
-  const selectedTextBox = selectedTextBoxId
-    ? currentSlide?.textBoxes.find(tb => tb.id === selectedTextBoxId)
+  // Get current slide with defensive defaults
+  const currentSlide = remix?.slides?.[currentSlideIndex] || null
+
+  // Defensive canvas dimensions with fallbacks
+  const canvasWidth = currentSlide?.canvas?.width || CANVAS_SIZES.INSTAGRAM_STORY.width
+  const canvasHeight = currentSlide?.canvas?.height || CANVAS_SIZES.INSTAGRAM_STORY.height
+
+  const selectedTextBox = selectedTextBoxId && currentSlide?.textBoxes
+    ? currentSlide.textBoxes.find(tb => tb.id === selectedTextBoxId)
+    : null
+  const selectedBackgroundLayer = selectedBackgroundLayerId && currentSlide?.backgroundLayers
+    ? currentSlide.backgroundLayers.find(bl => bl.id === selectedBackgroundLayerId)
     : null
 
   return (
@@ -816,20 +1076,18 @@ export default function RemixEditor({ params }: EditorProps) {
         </div>
       </header>
 
-      {/* Main Editor - Same structure as carousel editor but adapted for remix */}
+      {/* Main Editor - Redesigned with new sidebar */}
       <div className="flex h-[calc(100vh-80px)] overflow-hidden">
-        {/* Left Sidebar - Controls */}
-        <div className="w-80 border-r bg-background p-4 space-y-4 overflow-y-auto">
-          {/* Original Reference Images */}
-          {originalImageUrls.length > 0 && (
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                  <Eye className="h-4 w-4 text-primary" />
-                  Original Reference
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+        {/* New Canva-style Sidebar */}
+        <CanvasSidebar
+          sections={[
+            // Original Reference Images (always shown)
+            ...(originalImageUrls.length > 0 ? [{
+              id: 'reference',
+              title: 'Original Reference',
+              icon: Eye,
+              isExpanded: true,
+              content: (
                 <div className="flex gap-2 overflow-x-auto pb-2">
                   {originalImageUrls.map((url, index) => (
                     <div key={index} className="flex-shrink-0">
@@ -852,135 +1110,67 @@ export default function RemixEditor({ params }: EditorProps) {
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              )
+            }] : []),
 
-          {/* Rest of the sidebar content - same as carousel editor */}
-          {/* Background Image Controls */}
-          <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                <Settings className="h-4 w-4 text-primary" />
-                Background Settings
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Button
-                onClick={() => setShowImageDialog(true)}
-                variant="outline"
-                size="sm"
-                className="w-full justify-start"
-              >
-                <ImageIcon className="h-4 w-4 mr-2" />
-                Change Background
-              </Button>
+            // Canvas Settings (when no text box selected)
+            ...(!selectedTextBox ? [{
+              id: 'canvas',
+              title: 'Canvas Settings',
+              icon: Settings,
+              isExpanded: true,
+              content: (
+                <CanvasSettingsSection
+                  canvas={currentSlide?.canvas || CANVAS_SIZES.INSTAGRAM_STORY}
+                  onUpdateCanvas={updateCanvas}
+                  presets={[
+                    { name: 'Instagram Story', width: 1080, height: 1920 },
+                    { name: 'Instagram Post', width: 1080, height: 1080 },
+                    { name: 'TikTok', width: 1080, height: 1920 },
+                    { name: 'Facebook Post', width: 1200, height: 630 },
+                    { name: 'Custom', width: 1080, height: 1920 }
+                  ]}
+                />
+              )
+            }] : []),
 
-              {/* Background positioning controls would go here - same as carousel editor */}
-            </CardContent>
-          </Card>
+            // Background Settings
+            {
+              id: 'background',
+              title: 'Background',
+              icon: Palette,
+              isExpanded: true,
+              content: (
+                <BackgroundSection
+                  onChangeBackground={() => setShowImageDialog(true)}
+                  hasBackgroundImage={currentSlide?.backgroundLayers.some(layer => layer.type === 'image')}
+                />
+              )
+            },
 
-          {/* Text Box Controls - same structure as carousel editor */}
-          <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                  <Type className="h-4 w-4 text-primary" />
-                  Text Elements
-                </CardTitle>
-                {!selectedTextBox && (
-                  <Button
-                    onClick={addTextBox}
-                    variant="outline"
-                    size="sm"
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {selectedTextBox ? (
-                <div className="space-y-4">
-                  {/* Text editing controls - same as carousel editor */}
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-muted-foreground">Text Content</label>
-                    <Textarea
-                      value={selectedTextBox.text}
-                      onChange={(e) => updateTextBox(selectedTextBox.id, { text: e.target.value })}
-                      rows={3}
-                      className="resize-none"
-                      placeholder="Enter your text..."
-                    />
-                  </div>
-
-                  {/* Font size and color controls */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted-foreground">Font Size</label>
-                      <Input
-                        type="number"
-                        min="12"
-                        max="72"
-                        value={selectedTextBox.fontSize}
-                        onChange={(e) => updateTextBox(selectedTextBox.id, { fontSize: parseInt(e.target.value) })}
-                        className="text-sm"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted-foreground">Text Color</label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="color"
-                          value={selectedTextBox.color}
-                          onChange={(e) => updateTextBox(selectedTextBox.id, { color: e.target.value })}
-                          className="w-12 h-9 rounded-md border border-input cursor-pointer"
-                        />
-                        <Input
-                          type="text"
-                          value={selectedTextBox.color}
-                          onChange={(e) => updateTextBox(selectedTextBox.id, { color: e.target.value })}
-                          className="flex-1 text-xs font-mono"
-                          placeholder="#ffffff"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Delete button */}
-                  <Separator />
-                  <Button
-                    onClick={() => deleteTextBox(selectedTextBox.id)}
-                    variant="destructive"
-                    size="sm"
-                    className="w-full"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete Text Box
-                  </Button>
-                </div>
+            // Text Elements Section
+            {
+              id: 'text',
+              title: 'Text Elements',
+              icon: Type,
+              isExpanded: true,
+              content: selectedTextBox ? (
+                <TextStylePanel
+                  selectedTextBox={selectedTextBox}
+                  onUpdate={(updates) => updateTextBox(selectedTextBox.id, updates)}
+                  onDelete={() => deleteTextBox(selectedTextBox.id)}
+                />
               ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <div className="rounded-full bg-muted/50 w-16 h-16 flex items-center justify-center mx-auto mb-3">
-                    <Type className="h-8 w-8 opacity-50" />
-                  </div>
-                  {currentSlide?.textBoxes.length === 0 ? (
-                    <div>
-                      <p className="text-sm font-medium mb-1">No text boxes yet</p>
-                      <p className="text-xs text-muted-foreground">Click "Add" to create your first text element</p>
-                    </div>
-                  ) : (
-                    <div>
-                      <p className="text-sm font-medium mb-1">Select a text box</p>
-                      <p className="text-xs text-muted-foreground">Click on a text box in the canvas to edit it</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                <TextElementsSection
+                  selectedTextBox={selectedTextBox}
+                  onAddTextBox={addTextBox}
+                  onDeleteTextBox={deleteTextBox}
+                  textBoxes={currentSlide?.textBoxes || []}
+                />
+              )
+            }
+          ]}
+        />
 
         {/* Canvas Area - Same as carousel editor but adapted for remix */}
         <DndContext
@@ -994,8 +1184,8 @@ export default function RemixEditor({ params }: EditorProps) {
             {/* Canvas */}
             <div
               ref={canvasContainerRef}
-              className="flex-1 flex items-center justify-center bg-muted/20 overflow-hidden"
-              style={{ touchAction: 'none', paddingBottom: '160px' }}
+              className="flex-1 flex items-center justify-center bg-muted/20 overflow-hidden canvas-editor-area"
+              style={{ paddingBottom: '160px' }}
               onWheel={handleWheel}
               onClick={(e) => {
                 if (e.target === e.currentTarget) {
@@ -1011,29 +1201,64 @@ export default function RemixEditor({ params }: EditorProps) {
               >
                 <div
                   className="bg-white rounded-lg shadow-lg overflow-hidden relative"
-                  style={{ width: 540, height: 960 }}
+                  style={{
+                    width: canvasWidth,
+                    height: canvasHeight
+                  }}
                   onClick={(e) => {
                     const target = e.target as HTMLElement
                     if (target === e.currentTarget) {
                       setSelectedTextBoxId(null)
-                      setSelectedBackgroundImage(false)
+                      setSelectedBackgroundLayerId(null)
                     }
                   }}
                 >
-                  {/* Background Image */}
-                  {currentSlide?.backgroundImageId || currentSlide?.originalImageId ? (
-                    <DraggableBackgroundImage
-                      slide={currentSlide}
-                      isSelected={selectedBackgroundImage}
-                      onSelect={() => {
-                        setSelectedBackgroundImage(true)
-                        setSelectedTextBoxId(null)
-                      }}
-                      onUpdate={updateBackgroundImage}
-                      containerWidth={540}
-                      containerHeight={960}
-                    />
-                  ) : (
+                  {/* Background Layers */}
+                  {currentSlide?.backgroundLayers && currentSlide.backgroundLayers.map((layer) => {
+                    if (layer.type === 'image' && layer.imageId) {
+                      // Use DraggableBackgroundImage for image layers
+                      return (
+                        <DraggableBackgroundImage
+                          key={layer.id}
+                          layer={layer}
+                          imageUrl={backgroundImageUrls[layer.imageId] || `/api/assets/${layer.imageId}`}
+                          isSelected={selectedBackgroundLayerId === layer.id}
+                          onSelect={() => {
+                            setSelectedBackgroundLayerId(layer.id)
+                            setSelectedTextBoxId(null)
+                          }}
+                          onUpdate={(updates) => updateBackgroundLayer(layer.id, updates)}
+                          containerWidth={currentSlide?.canvas.width || 540}
+                          containerHeight={currentSlide?.canvas.height || 960}
+                        />
+                      )
+                    } else {
+                      // Render other layer types (color, gradient)
+                      return (
+                        <div
+                          key={layer.id}
+                          className="absolute inset-0"
+                          style={{
+                            backgroundColor: layer.type === 'color' ? layer.color : undefined,
+                            backgroundImage: layer.type === 'gradient' ?
+                              `linear-gradient(${layer.gradient?.angle || 0}deg, ${layer.gradient?.colors.join(', ')})` :
+                              undefined,
+                            opacity: layer.opacity,
+                            mixBlendMode: layer.blendMode as any,
+                            zIndex: Math.max((layer.zIndex || 1), 1)
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedBackgroundLayerId(layer.id)
+                            setSelectedTextBoxId(null)
+                          }}
+                        />
+                      )
+                    }
+                  })}
+
+                  {/* Default background if no layers */}
+                  {!currentSlide?.backgroundLayers?.length && (
                     <div
                       className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center cursor-pointer hover:bg-gradient-to-br hover:from-gray-200 hover:to-gray-300 transition-colors"
                       onClick={() => setShowImageDialog(true)}
@@ -1046,22 +1271,33 @@ export default function RemixEditor({ params }: EditorProps) {
                   )}
 
                   {/* Text Boxes */}
-                  {currentSlide?.textBoxes.map((textBox) => (
+                  {currentSlide?.textBoxes && currentSlide.textBoxes.map((textBox) => (
                     <DraggableTextBox
                       key={textBox.id}
                       textBox={textBox}
                       isSelected={selectedTextBoxId === textBox.id}
                       onSelect={() => {
                         setSelectedTextBoxId(textBox.id)
-                        setSelectedBackgroundImage(false)
+                        setSelectedBackgroundLayerId(null)
+                        updateFloatingPanelPosition(textBox.id)
                       }}
                       onUpdate={(updates) => updateTextBox(textBox.id, updates)}
-                      containerWidth={540}
-                      containerHeight={960}
+                      containerWidth={currentSlide?.canvas.width || 540}
+                      containerHeight={currentSlide?.canvas.height || 960}
                     />
                   ))}
                 </div>
               </div>
+
+              {/* Floating Settings Panel - positioned within canvas container but not affected by zoom */}
+              {selectedTextBoxId && currentSlide && (
+                <FloatingSettingsPanel
+                  selectedTextBox={currentSlide.textBoxes.find(tb => tb.id === selectedTextBoxId) || null}
+                  onUpdateTextBox={(updates) => updateTextBox(selectedTextBoxId, updates)}
+                  position={{ x: 0, y: 0 }}
+                  canvasZoom={1}
+                />
+              )}
             </div>
 
             {/* Thumbnail Bar */}
@@ -1072,17 +1308,30 @@ export default function RemixEditor({ params }: EditorProps) {
                   strategy={horizontalListSortingStrategy}
                 >
                   <div className={`thumbnail-scroll-container flex gap-3 overflow-x-auto scrollbar-hide ${isDragging ? 'dragging' : ''}`}>
-                    {remix.slides.map((slide, index) => (
-                      <SortableThumbnail
-                        key={`${slide.id}-${thumbnailUpdateTrigger}`}
-                        slide={slide}
-                        index={index}
-                        isActive={index === currentSlideIndex}
-                        onClick={() => setCurrentSlideIndex(index)}
-                        onDelete={() => deleteSlide(index)}
-                        canDelete={remix.slides.length > 1}
-                      />
-                    ))}
+                    {remix.slides.map((slide, index) => {
+                      // Find background image from backgroundLayers and resolve URL
+                      const backgroundImageLayer = slide.backgroundLayers?.find((layer: any) => layer.type === 'image')
+                      const backgroundImageUrl = backgroundImageLayer?.imageId
+                        ? backgroundImageUrls[backgroundImageLayer.imageId] || `/api/assets/${backgroundImageLayer.imageId}`
+                        : null
+
+                      const slideWithResolvedUrl = {
+                        ...slide,
+                        backgroundImageUrl
+                      }
+
+                      return (
+                        <SortableThumbnail
+                          key={`${slide.id}-${thumbnailUpdateTrigger}`}
+                          slide={slideWithResolvedUrl}
+                          index={index}
+                          isActive={index === currentSlideIndex}
+                          onClick={() => setCurrentSlideIndex(index)}
+                          onDelete={() => deleteSlide(index)}
+                          canDelete={remix.slides.length > 1}
+                        />
+                      )
+                    })}
 
                     <button
                       onClick={addSlide}

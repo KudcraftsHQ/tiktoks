@@ -226,6 +226,20 @@ export async function GET(request: NextRequest) {
     const [posts, total] = await Promise.all([
       prisma.tiktokPost.findMany({
         where,
+        include: {
+          profile: {
+            select: {
+              handle: true,
+              nickname: true,
+              avatarId: true
+            }
+          },
+          _count: {
+            select: {
+              remixes: true
+            }
+          }
+        },
         orderBy: {
           publishedAt: 'desc'
         },

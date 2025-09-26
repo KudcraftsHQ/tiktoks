@@ -2,26 +2,31 @@
 
 import React, { useState, useRef, useCallback } from 'react'
 
-interface CarouselSlide {
+interface BackgroundLayer {
   id: string
-  backgroundImageUrl?: string | null
-  backgroundImagePositionX: number
-  backgroundImagePositionY: number
-  backgroundImageZoom: number
-  displayOrder: number
+  type: string
+  imageId?: string
+  x: number
+  y: number
+  width: number
+  height: number
+  zIndex: number
+  opacity: number
 }
 
 interface DraggableBackgroundImageProps {
-  slide: CarouselSlide
+  layer: BackgroundLayer
+  imageUrl?: string
   isSelected: boolean
   onSelect: () => void
-  onUpdate: (updates: Partial<CarouselSlide>) => void
+  onUpdate: (updates: Partial<BackgroundLayer>) => void
   containerWidth: number
   containerHeight: number
 }
 
 export function DraggableBackgroundImage({
-  slide,
+  layer,
+  imageUrl,
   isSelected,
   onSelect,
   onUpdate,
@@ -32,7 +37,7 @@ export function DraggableBackgroundImage({
   const [isResizing, setIsResizing] = useState(false)
   const [isRotating, setIsRotating] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0, posX: 0, posY: 0 })
-  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, zoom: 0 })
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 })
   const [rotationStart, setRotationStart] = useState({ x: 0, y: 0, rotation: 0 })
   const elementRef = useRef<HTMLDivElement>(null)
 
@@ -49,7 +54,8 @@ export function DraggableBackgroundImage({
       setResizeStart({
         x: e.clientX,
         y: e.clientY,
-        zoom: slide.backgroundImageZoom
+        width: layer.width,
+        height: layer.height
       })
     } else if (target.classList.contains('rotate-handle')) {
       // Start rotating
@@ -65,11 +71,11 @@ export function DraggableBackgroundImage({
       setDragStart({
         x: e.clientX,
         y: e.clientY,
-        posX: slide.backgroundImagePositionX,
-        posY: slide.backgroundImagePositionY
+        posX: layer.x,
+        posY: layer.y
       })
     }
-  }, [slide, onSelect])
+  }, [layer, onSelect])
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (isDragging) {
@@ -79,16 +85,17 @@ export function DraggableBackgroundImage({
       const newX = Math.max(0, Math.min(1, dragStart.posX + deltaX))
       const newY = Math.max(0, Math.min(1, dragStart.posY + deltaY))
       
-      onUpdate({ 
-        backgroundImagePositionX: newX,
-        backgroundImagePositionY: newY
+      onUpdate({
+        x: newX,
+        y: newY
       })
     } else if (isResizing) {
       const deltaY = dragStart.y - e.clientY // Inverted for intuitive zoom
-      const zoomDelta = deltaY / 100 // Adjust sensitivity
-      const newZoom = Math.max(0.5, Math.min(3, resizeStart.zoom + zoomDelta))
-      
-      onUpdate({ backgroundImageZoom: newZoom })
+      const scaleDelta = deltaY / 100 // Adjust sensitivity
+      const newWidth = Math.max(0.5, Math.min(3, resizeStart.width + scaleDelta))
+      const newHeight = Math.max(0.5, Math.min(3, resizeStart.height + scaleDelta))
+
+      onUpdate({ width: newWidth, height: newHeight })
     }
   }, [isDragging, isResizing, dragStart, resizeStart, onUpdate, containerWidth, containerHeight])
 
@@ -111,7 +118,7 @@ export function DraggableBackgroundImage({
     }
   }, [isDragging, isResizing, isRotating, handleMouseMove, handleMouseUp])
 
-  if (!slide.backgroundImageUrl) {
+  if (!imageUrl || layer.type !== 'image') {
     return null // No image to manipulate
   }
 
@@ -131,12 +138,12 @@ export function DraggableBackgroundImage({
         }}
       >
         <img
-          src={slide.backgroundImageUrl}
+          src={imageUrl}
           alt="Background"
           className="w-full h-full object-cover pointer-events-none"
           style={{
-            objectPosition: `${slide.backgroundImagePositionX * 100}% ${slide.backgroundImagePositionY * 100}%`,
-            transform: `scale(${slide.backgroundImageZoom})`
+            objectPosition: `${layer.x * 100}% ${layer.y * 100}%`,
+            transform: `scale(${layer.width}, ${layer.height})`
           }}
         />
         
@@ -175,15 +182,15 @@ export function DraggableBackgroundImage({
           <div
             className="absolute w-3 h-3 bg-white border-2 border-primary rounded-full shadow-lg -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20"
             style={{
-              left: `${slide.backgroundImagePositionX * 100}%`,
-              top: `${slide.backgroundImagePositionY * 100}%`,
+              left: `${layer.x * 100}%`,
+              top: `${layer.y * 100}%`,
             }}
             title="Image Center"
           />
           
           {/* Info badge */}
           <div className="absolute top-2 left-2 bg-primary text-white text-xs px-2 py-1 rounded shadow-lg pointer-events-none z-20">
-            Background Image ({Math.round(slide.backgroundImageZoom * 100)}%)
+            Background Image ({Math.round(layer.width * 100)}%)
           </div>
         </>
       )}

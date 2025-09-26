@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { createSortableHeader } from '@/components/ui/data-table'
 import { getProxiedImageUrl } from '@/lib/image-proxy'
+import { BookmarkToggle } from '@/components/BookmarkToggle'
 
 export interface TikTokPost {
   id: string
@@ -57,7 +58,7 @@ export interface TikTokPost {
 
 interface PostsTableColumnsProps {
   onPreviewPost: (post: TikTokPost) => void
-  onAddToCollection: (post: TikTokPost) => void
+  onAddToCollection?: (post: TikTokPost) => void
   onOpenImageGallery?: (images: Array<{ url: string; width: number; height: number }>, initialIndex: number) => void
   onRemixPost?: (post: TikTokPost) => void
 }
@@ -348,14 +349,7 @@ export const createPostsTableColumns = ({
             </Button>
           )}
 
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => onAddToCollection(post)}
-            title="Add to Collection"
-          >
-            <Bookmark className="w-3 h-3" />
-          </Button>
+          <BookmarkToggle postId={post.id} />
         </div>
       )
     }

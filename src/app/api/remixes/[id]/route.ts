@@ -1,49 +1,68 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { PrismaClient } from '@/generated/prisma'
+import { UpdateRemixSchema, RemixPostType, RemixSlideSchema, CANVAS_SIZES, createDefaultBackgroundLayers } from '@/lib/validations/remix-schema'
+import { cacheAssetService } from '@/lib/cache-asset-service'
 
 const prisma = new PrismaClient()
 
-const UpdateRemixSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  description: z.string().optional(),
-  slides: z.array(z.object({
-    id: z.string().optional(),
-    displayOrder: z.number(),
-    originalImageId: z.string().optional(),
-    backgroundImageId: z.string().optional(),
-    backgroundImagePositionX: z.number().min(0).max(1).optional(),
-    backgroundImagePositionY: z.number().min(0).max(1).optional(),
-    backgroundImageZoom: z.number().min(0.1).max(5).optional(),
-    textBoxes: z.array(z.object({
-      id: z.string().optional(),
-      text: z.string(),
-      x: z.number().min(0).max(1),
-      y: z.number().min(0).max(1),
-      width: z.number().min(0.01).max(1),
-      height: z.number().min(0.01).max(1),
-      fontSize: z.number().min(8).max(200),
-      fontFamily: z.string(),
-      fontWeight: z.string(),
-      fontStyle: z.string(),
-      textDecoration: z.string(),
-      color: z.string(),
-      textAlign: z.string(),
-      zIndex: z.number(),
-      textStroke: z.string().optional(),
-      textShadow: z.string().optional(),
-      borderWidth: z.number().optional(),
-      borderColor: z.string().optional()
-    }))
-  })).optional()
-})
+// Utility function to normalize and bootstrap slide data
+function normalizeSlides(rawSlides: any): RemixPostType['slides'] {
+  try {
+    // Parse slides if they come as JSON string
+    const slidesArray = typeof rawSlides === 'string' ? JSON.parse(rawSlides) : rawSlides
+
+    // If slides array is empty, return empty array (handled by frontend)
+    if (!Array.isArray(slidesArray) || slidesArray.length === 0) {
+      return []
+    }
+
+    // Normalize each slide using the schema defaults
+    return slidesArray.map((slide: any, index: number) => {
+      try {
+        // Create a base slide with required defaults
+        const baseSlide = {
+          id: slide.id || `slide_${Date.now()}_${index}`,
+          displayOrder: slide.displayOrder ?? index,
+          canvas: slide.canvas || CANVAS_SIZES.INSTAGRAM_STORY,
+          backgroundLayers: slide.backgroundLayers || createDefaultBackgroundLayers(),
+          originalImageIndex: slide.originalImageIndex ?? index,
+          paraphrasedText: slide.paraphrasedText || '',
+          originalText: slide.originalText || '',
+          textBoxes: slide.textBoxes || [],
+          // Include any additional fields that might exist
+          ...slide
+        }
+
+        // Validate and normalize using Zod schema (this applies all schema defaults)
+        return RemixSlideSchema.parse(baseSlide)
+      } catch (validationError) {
+        console.warn(`Failed to validate slide ${index}, using default:`, validationError)
+        // Return a minimal valid slide as fallback
+        return RemixSlideSchema.parse({
+          id: `slide_${Date.now()}_${index}`,
+          displayOrder: index,
+          canvas: CANVAS_SIZES.INSTAGRAM_STORY,
+          backgroundLayers: createDefaultBackgroundLayers(),
+          originalImageIndex: index,
+          paraphrasedText: 'Default slide content',
+          textBoxes: []
+        })
+      }
+    })
+  } catch (parseError) {
+    console.warn('Failed to parse slides JSON, returning empty array:', parseError)
+    return []
+  }
+}
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const remixId = params.id
+    const resolvedParams = await params
+    const remixId = resolvedParams.id
 
     if (!remixId) {
       return NextResponse.json(
@@ -55,12 +74,6 @@ export async function GET(
     const remix = await prisma.remixPost.findUnique({
       where: { id: remixId },
       include: {
-        slides: {
-          include: {
-            textBoxes: true
-          },
-          orderBy: { displayOrder: 'asc' }
-        },
         originalPost: {
           include: {
             profile: true
@@ -76,10 +89,71 @@ export async function GET(
       )
     }
 
-    return NextResponse.json(remix)
+    // Parse images JSON and generate presigned URLs for each image
+    let images = []
+    try {
+      const imageString = typeof remix.originalPost.images === 'string'
+        ? remix.originalPost.images
+        : JSON.stringify(remix.originalPost.images || '[]')
+      const parsedImages = JSON.parse(imageString)
+      if (parsedImages.length > 0) {
+        const imageIds = parsedImages.map((img: any) => img.cacheAssetId)
+        const presignedImageUrls = await cacheAssetService.getUrls(imageIds)
+
+        images = parsedImages.map((img: any, imgIndex: number) => ({
+          ...img,
+          url: presignedImageUrls[imgIndex]
+        }))
+      } else {
+        images = parsedImages
+      }
+    } catch (error) {
+      console.warn('Failed to parse images for remix post:', remix.id, error)
+      const fallbackImageString = typeof remix.originalPost.images === 'string'
+        ? remix.originalPost.images
+        : JSON.stringify(remix.originalPost.images || '[]')
+      try {
+        images = JSON.parse(fallbackImageString)
+      } catch (fallbackError) {
+        console.warn('Failed to parse fallback images, using empty array:', fallbackError)
+        images = []
+      }
+    }
+
+    // Generate presigned URLs for other media assets
+    const [coverUrl, authorAvatarUrl] = await Promise.all([
+      cacheAssetService.getUrl(remix.originalPost.coverId),
+      cacheAssetService.getUrl(remix.originalPost.authorAvatarId)
+    ])
+
+    // Normalize slides data with proper bootstrapping and defaults
+    const normalizedSlides = normalizeSlides(remix.slides)
+
+    // Convert BigInt to string for JSON serialization and add presigned URLs
+    const responseRemix = {
+      ...remix,
+      slides: normalizedSlides,
+      originalPost: {
+        ...remix.originalPost,
+        viewCount: remix.originalPost.viewCount?.toString() || '0',
+        images: images,
+        coverUrl: coverUrl,
+        authorAvatar: authorAvatarUrl,
+        profile: {
+          ...remix.originalPost.profile,
+          // Generate avatar URL for profile if needed
+          avatarUrl: remix.originalPost.profile.avatarId
+            ? await cacheAssetService.getUrl(remix.originalPost.profile.avatarId)
+            : null
+        }
+      }
+    }
+
+    return NextResponse.json(responseRemix)
 
   } catch (error) {
-    console.error(`❌ [API] Failed to get remix ${params.id}:`, error)
+    const resolvedParams = await params
+    console.error(`❌ [API] Failed to get remix ${resolvedParams.id}:`, error)
 
     return NextResponse.json(
       {
@@ -93,10 +167,11 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const remixId = params.id
+    const resolvedParams = await params
+    const remixId = resolvedParams.id
 
     if (!remixId) {
       return NextResponse.json(
@@ -112,7 +187,7 @@ export async function PUT(
       return NextResponse.json(
         {
           error: 'Invalid request body',
-          details: validation.error.errors
+          details: validation.error.issues
         },
         { status: 400 }
       )
@@ -122,115 +197,95 @@ export async function PUT(
 
     console.log(`📝 [API] Updating remix: ${remixId}`)
 
-    await prisma.$transaction(async (tx) => {
-      // Update remix metadata if provided
-      if (name !== undefined || description !== undefined) {
-        await tx.remixPost.update({
-          where: { id: remixId },
-          data: {
-            ...(name !== undefined && { name }),
-            ...(description !== undefined && { description }),
-            updatedAt: new Date()
-          }
-        })
-      }
-
-      // Update slides if provided
-      if (slides) {
-        console.log(`📝 [API] Updating ${slides.length} slides`)
-
-        for (const slideData of slides) {
-          let slide
-
-          if (slideData.id) {
-            // Update existing slide
-            slide = await tx.remixSlide.update({
-              where: { id: slideData.id },
-              data: {
-                displayOrder: slideData.displayOrder,
-                originalImageId: slideData.originalImageId,
-                backgroundImageId: slideData.backgroundImageId,
-                backgroundImagePositionX: slideData.backgroundImagePositionX ?? 0.5,
-                backgroundImagePositionY: slideData.backgroundImagePositionY ?? 0.5,
-                backgroundImageZoom: slideData.backgroundImageZoom ?? 1.0,
-                updatedAt: new Date()
-              }
-            })
-          } else {
-            // Create new slide
-            slide = await tx.remixSlide.create({
-              data: {
-                remixPostId: remixId,
-                displayOrder: slideData.displayOrder,
-                originalImageId: slideData.originalImageId,
-                backgroundImageId: slideData.backgroundImageId,
-                backgroundImagePositionX: slideData.backgroundImagePositionX ?? 0.5,
-                backgroundImagePositionY: slideData.backgroundImagePositionY ?? 0.5,
-                backgroundImageZoom: slideData.backgroundImageZoom ?? 1.0
-              }
-            })
-          }
-
-          // Handle text boxes
-          if (slideData.textBoxes) {
-            // Delete existing text boxes for this slide
-            await tx.remixTextBox.deleteMany({
-              where: { slideId: slide.id }
-            })
-
-            // Create new text boxes
-            for (const textBoxData of slideData.textBoxes) {
-              await tx.remixTextBox.create({
-                data: {
-                  slideId: slide.id,
-                  text: textBoxData.text,
-                  x: textBoxData.x,
-                  y: textBoxData.y,
-                  width: textBoxData.width,
-                  height: textBoxData.height,
-                  fontSize: textBoxData.fontSize,
-                  fontFamily: textBoxData.fontFamily,
-                  fontWeight: textBoxData.fontWeight,
-                  fontStyle: textBoxData.fontStyle,
-                  textDecoration: textBoxData.textDecoration,
-                  color: textBoxData.color,
-                  textAlign: textBoxData.textAlign,
-                  zIndex: textBoxData.zIndex,
-                  textStroke: textBoxData.textStroke,
-                  textShadow: textBoxData.textShadow,
-                  borderWidth: textBoxData.borderWidth,
-                  borderColor: textBoxData.borderColor
-                }
-              })
-            }
-          }
-        }
-      }
-    })
-
-    // Get the updated remix
-    const updatedRemix = await prisma.remixPost.findUnique({
+    // Update the remix with the new data
+    const updatedRemix = await prisma.remixPost.update({
       where: { id: remixId },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(description !== undefined && { description }),
+        ...(slides !== undefined && { slides: JSON.stringify(slides) }),
+        updatedAt: new Date()
+      },
       include: {
-        slides: {
+        originalPost: {
           include: {
-            textBoxes: true
-          },
-          orderBy: { displayOrder: 'asc' }
+            profile: true
+          }
         }
       }
     })
+
+    // Parse images JSON and generate presigned URLs for each image
+    let images = []
+    try {
+      const imageString = typeof updatedRemix.originalPost.images === 'string'
+        ? updatedRemix.originalPost.images
+        : JSON.stringify(updatedRemix.originalPost.images || '[]')
+      const parsedImages = JSON.parse(imageString)
+      if (parsedImages.length > 0) {
+        const imageIds = parsedImages.map((img: any) => img.cacheAssetId)
+        const presignedImageUrls = await cacheAssetService.getUrls(imageIds)
+
+        images = parsedImages.map((img: any, imgIndex: number) => ({
+          ...img,
+          url: presignedImageUrls[imgIndex]
+        }))
+      } else {
+        images = parsedImages
+      }
+    } catch (error) {
+      console.warn('Failed to parse images for updated remix post:', updatedRemix.id, error)
+      const fallbackImageString = typeof updatedRemix.originalPost.images === 'string'
+        ? updatedRemix.originalPost.images
+        : JSON.stringify(updatedRemix.originalPost.images || '[]')
+      try {
+        images = JSON.parse(fallbackImageString)
+      } catch (fallbackError) {
+        console.warn('Failed to parse fallback images, using empty array:', fallbackError)
+        images = []
+      }
+    }
+
+    // Generate presigned URLs for other media assets
+    const [coverUrl, authorAvatarUrl] = await Promise.all([
+      cacheAssetService.getUrl(updatedRemix.originalPost.coverId),
+      cacheAssetService.getUrl(updatedRemix.originalPost.authorAvatarId)
+    ])
+
+    // Normalize slides data with proper bootstrapping and defaults
+    const normalizedSlides = normalizeSlides(updatedRemix.slides)
+
+    // Convert BigInt to string for JSON serialization and add presigned URLs
+    const responseRemix = {
+      ...updatedRemix,
+      slides: normalizedSlides,
+      originalPost: {
+        ...updatedRemix.originalPost,
+        viewCount: updatedRemix.originalPost.viewCount?.toString() || '0',
+        images: images,
+        coverUrl: coverUrl,
+        authorAvatar: authorAvatarUrl,
+        profile: {
+          ...updatedRemix.originalPost.profile,
+          // Generate avatar URL for profile if needed
+          avatarUrl: updatedRemix.originalPost.profile.avatarId
+            ? await cacheAssetService.getUrl(updatedRemix.originalPost.profile.avatarId)
+            : null
+        }
+      }
+    }
 
     console.log(`✅ [API] Successfully updated remix: ${remixId}`)
 
     return NextResponse.json({
       success: true,
       message: 'Remix updated successfully',
-      remix: updatedRemix
+      remix: responseRemix
     })
 
   } catch (error) {
-    console.error(`❌ [API] Failed to update remix ${params.id}:`, error)
+    const resolvedParams = await params
+    console.error(`❌ [API] Failed to update remix ${resolvedParams.id}:`, error)
 
     return NextResponse.json(
       {
@@ -244,10 +299,11 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const remixId = params.id
+    const resolvedParams = await params
+    const remixId = resolvedParams.id
 
     if (!remixId) {
       return NextResponse.json(
@@ -269,7 +325,8 @@ export async function DELETE(
     })
 
   } catch (error) {
-    console.error(`❌ [API] Failed to delete remix ${params.id}:`, error)
+    const resolvedParams = await params
+    console.error(`❌ [API] Failed to delete remix ${resolvedParams.id}:`, error)
 
     return NextResponse.json(
       {

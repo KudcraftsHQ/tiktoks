@@ -11,7 +11,6 @@ import {
 } from '@/components/ui/dialog'
 import { DataTable } from '@/components/ui/data-table'
 import { createPostsTableColumns, TikTokPost } from '@/components/posts-table-columns'
-import { CollectionSelector } from '@/components/CollectionSelector'
 import { ImageGallery } from '@/components/ImageGallery'
 import { getProxiedImageUrl } from '@/lib/image-proxy'
 import { useRouter } from 'next/navigation'
@@ -23,8 +22,6 @@ interface PostsTableProps {
 export function PostsTable({ posts }: PostsTableProps) {
   const router = useRouter()
   const [selectedPost, setSelectedPost] = useState<TikTokPost | null>(null)
-  const [showCollectionDialog, setShowCollectionDialog] = useState(false)
-  const [collectionPost, setCollectionPost] = useState<TikTokPost | null>(null)
   const [galleryImages, setGalleryImages] = useState<Array<{ url: string; width: number; height: number }>>([])
   const [showGallery, setShowGallery] = useState(false)
   const [galleryInitialIndex, setGalleryInitialIndex] = useState(0)
@@ -46,26 +43,6 @@ export function PostsTable({ posts }: PostsTableProps) {
     )
   }
 
-  const handleAddToCollection = (post: TikTokPost) => {
-    setCollectionPost(post)
-    setShowCollectionDialog(true)
-  }
-
-  const handleCollectionSelect = async (collectionId: string) => {
-    if (!collectionPost) return
-
-    try {
-      // Since posts are auto-saved now, we just need to add to collection
-      // This would need the post ID from database - for now we'll just close the dialog
-      setShowCollectionDialog(false)
-      setCollectionPost(null)
-
-      // TODO: Implement actual collection addition using the saved post ID
-      console.log('Adding post to collection:', collectionId, collectionPost.tiktokId)
-    } catch (error) {
-      console.error('Failed to add to collection:', error)
-    }
-  }
 
   const handlePreviewPost = (post: TikTokPost) => {
     setSelectedPost(post)
@@ -84,7 +61,6 @@ export function PostsTable({ posts }: PostsTableProps) {
   // Create columns with handlers
   const columns = useMemo(() => createPostsTableColumns({
     onPreviewPost: handlePreviewPost,
-    onAddToCollection: handleAddToCollection,
     onOpenImageGallery: handleOpenImageGallery,
     onRemixPost: handleRemixPost
   }), [])
@@ -158,22 +134,6 @@ export function PostsTable({ posts }: PostsTableProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Collection Selection Dialog */}
-      <Dialog open={showCollectionDialog} onOpenChange={setShowCollectionDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add to Collection</DialogTitle>
-            <DialogDescription>
-              Select a collection to add this post to.
-            </DialogDescription>
-          </DialogHeader>
-
-          <CollectionSelector
-            onSelect={handleCollectionSelect}
-            onCancel={() => setShowCollectionDialog(false)}
-          />
-        </DialogContent>
-      </Dialog>
 
       {/* Image Gallery Dialog */}
       <ImageGallery

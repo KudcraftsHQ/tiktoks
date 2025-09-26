@@ -1,26 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { PrismaClient } from '@/generated/prisma'
-import { generateRemixContent, createRemixFromParaphrasing, GenerateRemixOptions } from '@/lib/paraphrasing-service'
+import { CreateRemixSchema, GenerateRemixOptions, CANVAS_SIZES, createDefaultBackgroundLayers } from '@/lib/validations/remix-schema'
+import { generateRemixContent } from '@/lib/paraphrasing-service'
 
 const prisma = new PrismaClient()
 
-const CreateRemixSchema = z.object({
-  name: z.string().min(1).max(100),
-  description: z.string().optional(),
-  options: z.object({
-    theme: z.string().optional(),
-    style: z.enum(['casual', 'professional', 'trendy', 'educational', 'humorous']).optional(),
-    targetAudience: z.string().optional()
-  }).optional()
-})
-
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const postId = params.id
+    const resolvedParams = await params
+    const postId = resolvedParams.id
 
     if (!postId) {
       return NextResponse.json(
@@ -82,20 +74,31 @@ export async function POST(
     console.log(`🤖 [API] Generating paraphrased content...`)
     const remixContent = await generateRemixContent(originalPost, options as GenerateRemixOptions)
 
-    // Create the remix with generated content
-    console.log(`🏗️ [API] Creating remix with ${remixContent.length} slides...`)
-    const remixId = await createRemixFromParaphrasing(postId, remixContent, name, description)
+    // Transform remix content to new slide structure
+    const slides = remixContent.map((content, index) => ({
+      id: `slide_${Date.now()}_${index}`,
+      displayOrder: index,
+      canvas: options.canvasSize || CANVAS_SIZES.INSTAGRAM_STORY,
+      backgroundLayers: createDefaultBackgroundLayers(),
+      originalImageIndex: content.imageIndex,
+      paraphrasedText: content.paraphrasedText,
+      originalText: '', // Will be populated from OCR data
+      imageDescription: content.imageDescription,
+      suggestedBackgroundConcept: content.suggestedBackgroundConcept,
+      textBoxes: [] // Start with empty text boxes, user can add more
+    }))
 
-    // Get the created remix with full data
-    const createdRemix = await prisma.remixPost.findUnique({
-      where: { id: remixId },
+    // Create the remix with new JSON structure
+    console.log(`🏗️ [API] Creating remix with ${slides.length} slides...`)
+    const createdRemix = await prisma.remixPost.create({
+      data: {
+        originalPostId: postId,
+        name,
+        description,
+        generationType: 'ai_paraphrase',
+        slides: JSON.stringify(slides)
+      },
       include: {
-        slides: {
-          include: {
-            textBoxes: true
-          },
-          orderBy: { displayOrder: 'asc' }
-        },
         originalPost: {
           select: {
             id: true,
@@ -109,17 +112,24 @@ export async function POST(
       }
     })
 
-    console.log(`✅ [API] Successfully created remix: ${remixId}`)
+    // Parse slides for response
+    const remixWithParsedSlides = {
+      ...createdRemix,
+      slides: slides
+    }
+
+    console.log(`✅ [API] Successfully created remix: ${createdRemix.id}`)
 
     return NextResponse.json({
       success: true,
       message: 'Remix created successfully',
-      remix: createdRemix,
+      remix: remixWithParsedSlides,
       generatedContent: remixContent
     })
 
   } catch (error) {
-    console.error(`❌ [API] Failed to create remix for post ${params.id}:`, error)
+    const resolvedParams = await params
+    console.error(`❌ [API] Failed to create remix for post ${resolvedParams?.id || 'unknown'}:`, error)
 
     return NextResponse.json(
       {
@@ -133,10 +143,11 @@ export async function POST(
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const postId = params.id
+    const resolvedParams = await params
+    const postId = resolvedParams.id
 
     if (!postId) {
       return NextResponse.json(
@@ -148,25 +159,24 @@ export async function GET(
     // Get all remixes for this post
     const remixes = await prisma.remixPost.findMany({
       where: { originalPostId: postId },
-      include: {
-        slides: {
-          include: {
-            textBoxes: true
-          },
-          orderBy: { displayOrder: 'asc' }
-        }
-      },
       orderBy: { createdAt: 'desc' }
     })
 
+    // Parse the JSON slides for each remix
+    const remixesWithParsedSlides = remixes.map(remix => ({
+      ...remix,
+      slides: typeof remix.slides === 'string' ? JSON.parse(remix.slides) : remix.slides
+    }))
+
     return NextResponse.json({
       postId,
-      remixes,
+      remixes: remixesWithParsedSlides,
       count: remixes.length
     })
 
   } catch (error) {
-    console.error(`❌ [API] Failed to get remixes for post ${params.id}:`, error)
+    const resolvedParams = await params
+    console.error(`❌ [API] Failed to get remixes for post ${resolvedParams?.id || 'unknown'}:`, error)
 
     return NextResponse.json(
       {

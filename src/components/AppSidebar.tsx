@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { Home, Plus, Search, Settings, Library, Loader2, LayoutGrid, Users, UserCheck } from 'lucide-react'
+import { usePathname } from 'next/navigation'
+import Link from 'next/link'
+import { Home, FileText, Users, UserCheck, Sparkles } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -16,26 +18,13 @@ import {
 import { ThemeToggle } from '@/components/theme-toggle'
 
 export function AppSidebar() {
+  const pathname = usePathname()
+
   const navigationItems = [
     {
-      title: 'Dashboard',
+      title: 'Posts',
       url: '/',
       icon: Home,
-    },
-    {
-      title: 'Library',
-      url: '/',
-      icon: Library,
-    },
-    {
-      title: 'All Slides',
-      url: '/slides',
-      icon: LayoutGrid,
-    },
-    {
-      title: 'Profile Explorer',
-      url: '/profile-explorer',
-      icon: Users,
     },
     {
       title: 'Profiles',
@@ -43,9 +32,14 @@ export function AppSidebar() {
       icon: UserCheck,
     },
     {
-      title: 'Search',
-      url: '/',
-      icon: Search,
+      title: 'Profile Explorer',
+      url: '/profile-explorer',
+      icon: Users,
+    },
+    {
+      title: 'Product Contexts',
+      url: '/product-contexts',
+      icon: FileText,
     },
   ]
 
@@ -66,16 +60,19 @@ export function AppSidebar() {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navigationItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <a href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {navigationItems.map((item) => {
+                const isActive = pathname === item.url
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link href={item.url}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

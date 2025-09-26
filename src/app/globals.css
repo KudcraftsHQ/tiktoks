@@ -116,8 +116,50 @@
   * {
     @apply border-border outline-ring/50;
   }
+
+  html {
+    /* Prevent browser zoom completely */
+    touch-action: manipulation;
+    -ms-touch-action: manipulation;
+    overflow-x: hidden;
+  }
+
   body {
     @apply bg-background text-foreground;
+    /* Disable pinch-to-zoom globally */
+    touch-action: manipulation;
+    -ms-touch-action: manipulation;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    /* Prevent zoom on double tap */
+    -ms-text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+    /* Prevent overscroll */
+    overscroll-behavior: none;
+  }
+
+  /* Re-enable text selection for content areas */
+  p, span, div, input, textarea, [contenteditable] {
+    -webkit-user-select: text;
+  }
+
+  /* Disable zoom on inputs and forms */
+  input, textarea, select {
+    touch-action: manipulation;
+    -ms-touch-action: manipulation;
+  }
+
+  /* Override for canvas editor area - allow custom zoom handling */
+  .canvas-editor-area {
+    touch-action: none !important;
+    -ms-touch-action: none !important;
+    -webkit-user-select: none !important;
+    /* Isolate stacking context to prevent zoom bleed */
+    isolation: isolate;
+    /* Create new stacking context */
+    transform: translateZ(0);
+    will-change: transform;
   }
 }
 

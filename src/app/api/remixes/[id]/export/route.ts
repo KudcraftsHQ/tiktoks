@@ -11,10 +11,11 @@ const ExportSchema = z.object({
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const remixId = params.id
+    const resolvedParams = await params
+    const remixId = resolvedParams.id
 
     if (!remixId) {
       return NextResponse.json(
@@ -30,7 +31,7 @@ export async function POST(
       return NextResponse.json(
         {
           error: 'Invalid request body',
-          details: validation.error.errors
+          details: validation.error.issues
         },
         { status: 400 }
       )
@@ -52,10 +53,11 @@ export async function POST(
     headers.set('Content-Disposition', `attachment; filename="remix-${remixId}-export.zip"`)
     headers.set('Content-Length', zipBuffer.length.toString())
 
-    return new NextResponse(zipBuffer, { headers })
+    return new NextResponse(zipBuffer as Uint8Array, { headers })
 
   } catch (error) {
-    console.error(`❌ [API] Export failed for remix ${params.id}:`, error)
+    const resolvedParams = await params
+    console.error(`❌ [API] Export failed for remix ${resolvedParams.id}:`, error)
 
     return NextResponse.json(
       {

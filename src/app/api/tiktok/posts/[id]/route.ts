@@ -6,10 +6,11 @@ const prisma = new PrismaClient()
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const postId = params.id
+    const resolvedParams = await params
+    const postId = resolvedParams.id
 
     if (!postId) {
       return NextResponse.json(
@@ -63,7 +64,9 @@ export async function GET(
     }
 
     // Process images with resolved URLs
-    const images = post.images as Array<{ cacheAssetId: string; width: number; height: number }>
+    const images = typeof post.images === 'string'
+      ? JSON.parse(post.images) as Array<{ cacheAssetId: string; width: number; height: number }>
+      : (Array.isArray(post.images) ? post.images as Array<{ cacheAssetId: string; width: number; height: number }> : [])
     let imageUrls: string[] = []
     if (images.length > 0) {
       const cacheAssetIds = images.map(img => img.cacheAssetId)
@@ -124,7 +127,7 @@ export async function GET(
     return NextResponse.json(response)
 
   } catch (error) {
-    console.error(`❌ [API] Failed to get post ${params.id}:`, error)
+    console.error(`❌ [API] Failed to get post ${resolvedParams?.id || 'unknown'}:`, error)
 
     return NextResponse.json(
       {

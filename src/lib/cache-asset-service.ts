@@ -131,7 +131,7 @@ class CacheAssetService {
    * This is the main method that API endpoints should use
    */
   async getUrl(cacheAssetIdOrKey: string | null | undefined, originalUrl?: string): Promise<string> {
-    console.log(`🔗 [CacheAssetService] Getting URL for cache asset/key: ${cacheAssetIdOrKey}`)
+    console.log(`🔗 [CacheAssetService] Getting URL for cache asset/key: ${cacheAssetIdOrKey} (type: ${typeof cacheAssetIdOrKey})`)
 
     if (!cacheAssetIdOrKey) {
       console.log(`⚠️ [CacheAssetService] No cache asset ID/key, using original URL: ${originalUrl}`)
@@ -140,9 +140,17 @@ class CacheAssetService {
 
     try {
       // First try to find it as a cache asset ID
+      console.log(`🔍 [CacheAssetService] Querying database for cache asset ID: ${cacheAssetIdOrKey}`)
       const cacheAsset = await this.prisma.cacheAsset.findUnique({
         where: { id: cacheAssetIdOrKey }
       })
+
+      console.log(`📊 [CacheAssetService] Database query result:`, cacheAsset ? {
+        id: cacheAsset.id,
+        status: cacheAsset.status,
+        cacheKey: cacheAsset.cacheKey,
+        originalUrl: cacheAsset.originalUrl
+      } : 'null')
 
       if (cacheAsset) {
         // If cached successfully, return presigned URL

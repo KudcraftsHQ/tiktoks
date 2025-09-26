@@ -162,6 +162,14 @@ export async function performOCRForTikTokPost(postId: string): Promise<void> {
       throw new Error(`TikTokPost not found: ${postId}`)
     }
 
+    console.log(`📋 [OCR] Found TikTokPost:`, {
+      id: post.id,
+      contentType: post.contentType,
+      imagesData: post.images,
+      imagesType: typeof post.images,
+      imagesLength: Array.isArray(post.images) ? post.images.length : 'not an array'
+    })
+
     if (post.contentType !== 'photo') {
       throw new Error(`TikTokPost ${postId} is not a photo carousel`)
     }
@@ -175,13 +183,24 @@ export async function performOCRForTikTokPost(postId: string): Promise<void> {
       }
     })
 
-    const images = post.images as Array<{ cacheAssetId: string; width: number; height: number }>
+    // Parse the JSON string properly
+    const images = typeof post.images === 'string'
+      ? JSON.parse(post.images) as Array<{ cacheAssetId: string; width: number; height: number }>
+      : post.images as Array<{ cacheAssetId: string; width: number; height: number }>
 
-    if (!images.length) {
-      throw new Error(`No images found in TikTokPost: ${postId}`)
+    console.log(`🔍 [OCR] Parsed images array:`, images)
+    console.log(`🔍 [OCR] First image details:`, images[0])
+
+    if (!Array.isArray(images) || !images.length) {
+      throw new Error(`No valid images array found in TikTokPost: ${postId}`)
     }
 
     console.log(`📝 [OCR] Processing ${images.length} images for post: ${postId}`)
+
+    // Log each cacheAssetId
+    images.forEach((image, index) => {
+      console.log(`🏷️ [OCR] Image ${index + 1} cacheAssetId: ${image.cacheAssetId} (type: ${typeof image.cacheAssetId})`)
+    })
 
     const ocrResults: Array<{ imageIndex: number; text: string; success: boolean; error?: string }> = []
 

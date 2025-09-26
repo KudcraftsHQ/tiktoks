@@ -3,10 +3,11 @@ import { performOCRForTikTokPost } from '@/lib/ocr-service'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const postId = params.id
+    const resolvedParams = await params
+    const postId = resolvedParams.id
 
     if (!postId) {
       return NextResponse.json(
@@ -27,7 +28,8 @@ export async function POST(
     })
 
   } catch (error) {
-    console.error(`❌ [API] OCR failed for post ${params.id}:`, error)
+    const resolvedParams = await params.catch(() => ({ id: 'unknown' }))
+    console.error(`❌ [API] OCR failed for post ${resolvedParams?.id || 'unknown'}:`, error)
 
     return NextResponse.json(
       {

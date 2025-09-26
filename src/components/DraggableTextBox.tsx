@@ -1,33 +1,13 @@
 'use client'
 
-import React, { useState, useRef, useCallback } from 'react'
-
-interface CarouselTextBox {
-  id: string
-  text: string
-  x: number
-  y: number
-  width: number
-  height: number
-  fontSize: number
-  fontFamily: string
-  fontWeight: string
-  fontStyle: string
-  textDecoration: string
-  color: string
-  textAlign: string
-  zIndex: number
-  textStroke?: string
-  textShadow?: string
-  borderWidth?: number
-  borderColor?: string
-}
+import React, { useState, useRef, useCallback, useEffect } from 'react'
+import type { RemixTextBoxType } from '@/lib/validations/remix-schema'
 
 interface DraggableTextBoxProps {
-  textBox: CarouselTextBox
+  textBox: RemixTextBoxType
   isSelected: boolean
   onSelect: () => void
-  onUpdate: (updates: Partial<CarouselTextBox>) => void
+  onUpdate: (updates: Partial<RemixTextBoxType>) => void
   containerWidth: number
   containerHeight: number
 }
@@ -45,8 +25,10 @@ export function DraggableTextBox({
   const [isEditing, setIsEditing] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 })
+  const [contentSize, setContentSize] = useState({ width: 0, height: 0 })
   const elementRef = useRef<HTMLDivElement>(null)
   const editableRef = useRef<HTMLDivElement>(null)
+  const textContentRef = useRef<HTMLSpanElement>(null)
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -146,6 +128,22 @@ export function DraggableTextBox({
     handleTextChange()
   }, [handleTextChange])
 
+  // Calculate content size for minimal text box behavior
+  const calculateContentSize = useCallback(() => {
+    if (textContentRef.current) {
+      const rect = textContentRef.current.getBoundingClientRect()
+      setContentSize({
+        width: rect.width,
+        height: rect.height
+      })
+    }
+  }, [textBox.text, textBox.fontSize, textBox.fontFamily, textBox.fontWeight, textBox.fontStyle, textBox.textWrap])
+
+  // Update content size when text or styling changes
+  useEffect(() => {
+    calculateContentSize()
+  }, [textBox.text, textBox.fontSize, textBox.fontFamily, textBox.fontWeight, textBox.fontStyle, textBox.textWrap, calculateContentSize])
+
   // Attach global mouse events for dragging/resizing
   React.useEffect(() => {
     if (isDragging || isResizing) {
@@ -159,68 +157,118 @@ export function DraggableTextBox({
     }
   }, [isDragging, isResizing, handleMouseMove, handleMouseUp])
 
+  // Calculate if we should use minimal sizing (when not selected and no background)
+  const useMinimalSizing = !isSelected && !textBox.backgroundColor
+
   return (
     <div
       ref={elementRef}
       className={`absolute cursor-move select-none ${
-        isSelected 
-          ? 'ring-2 ring-primary ring-offset-1' 
+        isSelected
+          ? 'ring-2 ring-primary ring-offset-1'
           : 'hover:ring-1 hover:ring-gray-300'
       } ${isDragging ? 'opacity-75' : ''}`}
       style={{
         left: `${textBox.x * 100}%`,
         top: `${textBox.y * 100}%`,
-        width: `${textBox.width * 100}%`,
-        height: `${textBox.height * 100}%`,
-        zIndex: textBox.zIndex + (isSelected ? 1000 : 0)
+        width: useMinimalSizing ? 'auto' : `${textBox.width * 100}%`,
+        height: useMinimalSizing ? 'auto' : `${textBox.height * 100}%`,
+        zIndex: Math.max(textBox.zIndex + 10, 20) + (isSelected ? 1000 : 0)
       }}
       onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}
     >
       <div
-        className={`w-full h-full flex items-center justify-center p-2 ${isEditing ? 'bg-white/20 backdrop-blur-sm rounded' : ''}`}
+        className={`inline-flex ${isEditing ? 'bg-white/20 backdrop-blur-sm' : ''} ${textBox.textWrap === 'wrap' ? '' : 'whitespace-nowrap'}`}
         style={{
-          fontSize: textBox.fontSize,
+          fontSize: `${textBox.fontSize}px`,
           fontFamily: textBox.fontFamily,
           fontWeight: textBox.fontWeight,
           fontStyle: textBox.fontStyle,
           textDecoration: textBox.textDecoration,
           color: textBox.color,
           textAlign: textBox.textAlign as any,
-          lineHeight: '1.2',
-          WebkitTextStroke: textBox.borderWidth && textBox.borderWidth > 0 
-            ? `${textBox.borderWidth}px ${textBox.borderColor}` 
+          lineHeight: textBox.lineHeight || 1.2,
+          letterSpacing: textBox.letterSpacing ? `${textBox.letterSpacing}px` : undefined,
+          whiteSpace: textBox.textWrap === 'wrap' ? 'normal' : 'nowrap',
+          overflow: textBox.textWrap === 'ellipsis' ? 'hidden' : 'visible',
+          textOverflow: textBox.textWrap === 'ellipsis' ? 'ellipsis' : 'clip',
+          WebkitTextStroke: textBox.outlineWidth && textBox.outlineWidth > 0
+            ? `${textBox.outlineWidth}px ${textBox.outlineColor}`
             : undefined,
-          textShadow: textBox.textShadow,
+          textStroke: textBox.outlineWidth && textBox.outlineWidth > 0
+            ? `${textBox.outlineWidth}px ${textBox.outlineColor}`
+            : undefined,
+          textShadow: textBox.enableShadow
+            ? `${textBox.shadowOffsetX}px ${textBox.shadowOffsetY}px ${textBox.shadowBlur}px ${textBox.shadowColor}`
+            : textBox.textShadow,
+          backgroundColor: textBox.backgroundColor ?
+            `rgba(${parseInt(textBox.backgroundColor.slice(1, 3), 16)}, ${parseInt(textBox.backgroundColor.slice(3, 5), 16)}, ${parseInt(textBox.backgroundColor.slice(5, 7), 16)}, ${textBox.backgroundOpacity || 1})` :
+            undefined,
+          borderRadius: textBox.borderRadius ? `${textBox.borderRadius}px` : undefined,
+          paddingTop: `${textBox.paddingTop}px`,
+          paddingRight: `${textBox.paddingRight}px`,
+          paddingBottom: `${textBox.paddingBottom}px`,
+          paddingLeft: `${textBox.paddingLeft}px`,
+          maxWidth: useMinimalSizing ? 'none' : undefined,
         }}
       >
-        {isEditing ? (
-          <div
-            ref={editableRef}
-            contentEditable
-            suppressContentEditableWarning
-            className="w-full h-full flex items-center justify-center outline-none resize-none border-2 border-primary/50 rounded bg-white/90 p-1"
-            style={{
-              fontSize: textBox.fontSize,
-              fontFamily: textBox.fontFamily,
-              fontWeight: textBox.fontWeight,
-              fontStyle: textBox.fontStyle,
-              textDecoration: textBox.textDecoration,
-              color: textBox.color,
-              textAlign: textBox.textAlign as any,
-              lineHeight: '1.2',
-              WebkitTextStroke: textBox.borderWidth && textBox.borderWidth > 0 
-                ? `${textBox.borderWidth}px ${textBox.borderColor}` 
+        <span
+          ref={textContentRef}
+          style={{
+            display: 'inline-block',
+            maxWidth: textBox.textWrap === 'wrap' ? '100%' : 'none'
+          }}
+        >
+          {isEditing ? (
+            <div
+              ref={editableRef}
+              contentEditable
+              suppressContentEditableWarning
+              className="outline-none resize-none border-2 border-primary/50"
+              style={{
+                fontSize: `${textBox.fontSize}px`,
+                fontFamily: textBox.fontFamily,
+                fontWeight: textBox.fontWeight,
+                fontStyle: textBox.fontStyle,
+                textDecoration: textBox.textDecoration,
+                color: textBox.color,
+                textAlign: textBox.textAlign as any,
+                lineHeight: textBox.lineHeight || 1.2,
+                letterSpacing: textBox.letterSpacing ? `${textBox.letterSpacing}px` : undefined,
+                whiteSpace: textBox.textWrap === 'wrap' ? 'normal' : 'nowrap',
+                WebkitTextStroke: textBox.outlineWidth && textBox.outlineWidth > 0
+                  ? `${textBox.outlineWidth}px ${textBox.outlineColor}`
+                  : undefined,
+                textShadow: textBox.enableShadow
+                  ? `${textBox.shadowOffsetX}px ${textBox.shadowOffsetY}px ${textBox.shadowBlur}px ${textBox.shadowColor}`
+                  : textBox.textShadow,
+                backgroundColor: textBox.backgroundColor ?
+                  `rgba(${parseInt(textBox.backgroundColor.slice(1, 3), 16)}, ${parseInt(textBox.backgroundColor.slice(3, 5), 16)}, ${parseInt(textBox.backgroundColor.slice(5, 7), 16)}, ${Math.max(0.9, textBox.backgroundOpacity || 1)})` :
+                  'rgba(255, 255, 255, 0.9)',
+                borderRadius: textBox.borderRadius ? `${textBox.borderRadius}px` : '4px',
+                paddingTop: `${textBox.paddingTop}px`,
+                paddingRight: `${textBox.paddingRight}px`,
+                paddingBottom: `${textBox.paddingBottom}px`,
+                paddingLeft: `${textBox.paddingLeft}px`,
+              }}
+              onKeyDown={handleKeyDown}
+              onBlur={handleBlur}
+              dangerouslySetInnerHTML={{ __html: textBox.text }}
+            />
+          ) : (
+            <span style={{
+              WebkitTextStroke: textBox.outlineWidth && textBox.outlineWidth > 0
+                ? `${textBox.outlineWidth}px ${textBox.outlineColor}`
                 : undefined,
-              textShadow: textBox.textShadow,
-            }}
-            onKeyDown={handleKeyDown}
-            onBlur={handleBlur}
-            dangerouslySetInnerHTML={{ __html: textBox.text }}
-          />
-        ) : (
-          textBox.text
-        )}
+              textShadow: textBox.enableShadow
+                ? `${textBox.shadowOffsetX}px ${textBox.shadowOffsetY}px ${textBox.shadowBlur}px ${textBox.shadowColor}`
+                : textBox.textShadow,
+            }}>
+              {textBox.text}
+            </span>
+          )}
+        </span>
       </div>
 
       {/* Resize handles */}
