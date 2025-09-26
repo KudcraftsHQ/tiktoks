@@ -27,6 +27,7 @@ interface ProfilePostsResult {
   total: number
   page: number
   limit: number
+  error?: string
 }
 
 export default function ProfileDetailPage() {

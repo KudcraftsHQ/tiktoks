@@ -351,7 +351,11 @@ export default function RemixEditorKonva({ params }: EditorProps) {
           color: '#ffffff',
           opacity: 1,
           blendMode: 'normal',
-          zIndex: 1
+          zIndex: 1,
+          x: 0,
+          y: 0,
+          width: 1080,
+          height: 1920
         }
       ],
       originalImageIndex: Math.min(remix.slides.length, (remix.originalPost.images.length || 1) - 1),
@@ -1138,7 +1142,7 @@ export default function RemixEditorKonva({ params }: EditorProps) {
                       return (
                         <SortableThumbnail
                           key={`${slide.id}-${thumbnailUpdateTrigger}`}
-                          slide={slideWithResolvedUrl}
+                          slide={slideWithResolvedUrl as any}
                           index={index}
                           isActive={index === currentSlideIndex}
                           onClick={() => setCurrentSlideIndex(index)}

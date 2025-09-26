@@ -179,11 +179,11 @@ export function CanvasEditor({
               return (
                 <KonvaBackgroundImage
                   key={layer.id}
-                  layer={layer}
+                  layer={layer as any}
                   imageUrl={backgroundImageUrls[layer.imageId] || `/api/assets/${layer.imageId}`}
                   isSelected={selectedBackgroundLayerId === layer.id}
-                  onSelect={(e) => handleBackgroundClick(e, layer.id)}
-                  onUpdate={(updates) => onBackgroundLayerUpdate(layer.id, updates)}
+                  onSelect={() => handleBackgroundClick(null, layer.id)}
+                  onUpdate={(updates) => onBackgroundLayerUpdate(layer.id, updates as any)}
                   stageWidth={canvasWidth}
                   stageHeight={canvasHeight}
                 />
@@ -230,7 +230,7 @@ export function CanvasEditor({
               <KonvaText
                 textBox={textBox}
                 isSelected={selectedTextBoxId === textBox.id}
-                onSelect={(e) => handleTextClick(e, textBox.id)}
+                onSelect={() => handleTextClick(null, textBox.id)}
                 onUpdate={(updates) => onTextBoxUpdate(textBox.id, updates)}
                 isEditing={isEditing && selectedTextBoxId === textBox.id}
                 onEditingChange={handleTextEditingChange}

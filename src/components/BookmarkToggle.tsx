@@ -143,7 +143,7 @@ export function BookmarkToggle({
 
   if (loading) {
     return (
-      <Button {...getButtonProps()}>
+      <Button {...getButtonProps() as any}>
         <Loader2 className="w-3 h-3 animate-spin" />
         {showText && <span className="ml-2">Loading...</span>}
       </Button>
@@ -152,7 +152,7 @@ export function BookmarkToggle({
 
   return (
     <>
-      <Button {...getButtonProps()}>
+      <Button {...getButtonProps() as any}>
         {isBookmarked ? (
           <BookmarkCheck className="w-3 h-3" />
         ) : (

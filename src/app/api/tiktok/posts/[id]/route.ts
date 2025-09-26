@@ -127,6 +127,7 @@ export async function GET(
     return NextResponse.json(response)
 
   } catch (error) {
+    const resolvedParams = await params
     console.error(`❌ [API] Failed to get post ${resolvedParams?.id || 'unknown'}:`, error)
 
     return NextResponse.json(

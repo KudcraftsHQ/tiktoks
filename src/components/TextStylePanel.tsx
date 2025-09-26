@@ -21,8 +21,7 @@ import {
   Eye,
   EyeOff,
   WrapText,
-  Shadow,
-  BorderAll
+  Square
 } from 'lucide-react'
 import type { RemixTextBoxType } from '@/lib/validations/remix-schema'
 

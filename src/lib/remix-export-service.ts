@@ -4,7 +4,7 @@
  * Service for exporting remix slides as images and ZIP archives
  */
 
-import { createCanvas, loadImage, registerFont, Canvas, CanvasRenderingContext2D } from '@napi-rs/canvas'
+import { createCanvas, loadImage, Canvas } from '@napi-rs/canvas'
 import { PrismaClient } from '@/generated/prisma'
 import { cacheAssetService } from './cache-asset-service'
 import JSZip from 'jszip'
@@ -90,7 +90,7 @@ const DEFAULT_CANVAS_HEIGHT = 1920
 
 export class RemixExportService {
   private canvas: Canvas
-  private ctx: CanvasRenderingContext2D
+  private ctx: any
 
   constructor() {
     this.canvas = createCanvas(DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT)
@@ -370,12 +370,6 @@ export class RemixExportService {
     const remix = await prisma.remixPost.findUnique({
       where: { id: remixId },
       include: {
-        slides: {
-          include: {
-            textBoxes: true
-          },
-          orderBy: { displayOrder: 'asc' }
-        },
         originalPost: {
           select: {
             id: true,
@@ -419,7 +413,7 @@ export class RemixExportService {
 ${remix.description || 'AI-generated remix content'}
 
 ## Details
-- Original Author: ${remix.originalPost?.authorNickname || remix.originalPost?.authorHandle || 'Unknown'}
+- Original Author: ${(remix as any).originalPost?.authorNickname || (remix as any).originalPost?.authorHandle || 'Unknown'}
 - Total Slides: ${remixSlides.length}
 - Export Date: ${new Date().toISOString()}
 

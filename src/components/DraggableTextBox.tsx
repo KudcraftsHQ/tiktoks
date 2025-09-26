@@ -196,9 +196,6 @@ export function DraggableTextBox({
           WebkitTextStroke: textBox.outlineWidth && textBox.outlineWidth > 0
             ? `${textBox.outlineWidth}px ${textBox.outlineColor}`
             : undefined,
-          textStroke: textBox.outlineWidth && textBox.outlineWidth > 0
-            ? `${textBox.outlineWidth}px ${textBox.outlineColor}`
-            : undefined,
           textShadow: textBox.enableShadow
             ? `${textBox.shadowOffsetX}px ${textBox.shadowOffsetY}px ${textBox.shadowBlur}px ${textBox.shadowColor}`
             : textBox.textShadow,

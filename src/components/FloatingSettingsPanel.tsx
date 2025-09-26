@@ -73,7 +73,7 @@ export function FloatingSettingsPanel({
   return (
     <>
       <div
-        style={panelStyle}
+        style={panelStyle as any}
         className="bg-background rounded-lg shadow-lg p-2 flex items-center gap-1 pointer-events-auto"
         onClick={(e) => e.stopPropagation()}
       >

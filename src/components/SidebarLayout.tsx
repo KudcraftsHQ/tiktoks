@@ -12,7 +12,7 @@ interface SidebarLayoutProps {
 export function SidebarLayout({ children, onAddCarousel, isAddingCarousel }: SidebarLayoutProps) {
   return (
     <SidebarProvider>
-      <AppSidebar onAddCarousel={onAddCarousel} isAddingCarousel={isAddingCarousel} />
+      <AppSidebar {...(onAddCarousel ? { onAddCarousel, isAddingCarousel } : {}) as any} />
       <div className="flex-1 h-screen">
         {/* Scrollable Main Content */}
         <main className="overflow-auto">

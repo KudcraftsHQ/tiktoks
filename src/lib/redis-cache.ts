@@ -49,7 +49,7 @@ export async function getCachedData(endpoint: string, params?: Record<string, an
 
     const cachedData = await client.get(cacheKey)
 
-    if (cachedData) {
+    if (cachedData && typeof cachedData === 'string') {
       return JSON.parse(cachedData)
     }
 

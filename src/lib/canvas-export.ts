@@ -15,7 +15,7 @@ export async function exportSlideAsImage(
   options: ExportOptions = { format: 'png', quality: 0.95 }
 ): Promise<string> {
   // Import Konva only on server side
-  const Konva = await import('konva')
+  const Konva = (await import('konva')).default
 
   return new Promise((resolve, reject) => {
     // Create a temporary stage for export (server-side)
@@ -118,12 +118,7 @@ export async function exportSlideAsImage(
         letterSpacing: textBox.letterSpacing,
         wrap: textBox.textWrap === 'wrap' ? 'word' : 'none',
         ellipsis: textBox.textWrap === 'ellipsis',
-        padding: {
-          top: textBox.paddingTop,
-          right: textBox.paddingRight,
-          bottom: textBox.paddingBottom,
-          left: textBox.paddingLeft
-        },
+        padding: textBox.paddingTop || 0,
         stroke: textBox.outlineWidth && textBox.outlineWidth > 0 ? textBox.outlineColor : undefined,
         strokeWidth: textBox.outlineWidth || 0,
         shadowColor: textBox.enableShadow ? textBox.shadowColor : undefined,

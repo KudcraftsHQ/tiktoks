@@ -5,10 +5,11 @@ const prisma = new PrismaClient()
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const postId = params.id
+    const resolvedParams = await params
+    const postId = resolvedParams.id
 
     if (!postId) {
       return NextResponse.json(
@@ -62,7 +63,8 @@ export async function GET(
     })
 
   } catch (error) {
-    console.error(`❌ [API] Failed to get OCR status for post ${params.id}:`, error)
+    const resolvedParams = await params
+    console.error(`❌ [API] Failed to get OCR status for post ${resolvedParams.id}:`, error)
 
     return NextResponse.json(
       {

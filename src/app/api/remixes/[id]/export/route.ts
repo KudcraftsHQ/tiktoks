@@ -53,7 +53,7 @@ export async function POST(
     headers.set('Content-Disposition', `attachment; filename="remix-${remixId}-export.zip"`)
     headers.set('Content-Length', zipBuffer.length.toString())
 
-    return new NextResponse(zipBuffer as Uint8Array, { headers })
+    return new NextResponse(zipBuffer as any, { headers })
 
   } catch (error) {
     const resolvedParams = await params

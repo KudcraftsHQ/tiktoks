@@ -115,7 +115,7 @@ export function KonvaBackgroundImage({
         height={height}
         opacity={layer.opacity}
         draggable={isSelected}
-        onClick={(e) => onSelect(e)}
+        onClick={onSelect}
         onDragEnd={handleDragEnd}
         alt=""
         onTransformEnd={handleTransform}

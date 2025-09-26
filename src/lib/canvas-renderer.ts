@@ -1,4 +1,4 @@
-import { createCanvas, loadImage, registerFont, CanvasRenderingContext2D } from '@napi-rs/canvas'
+import { createCanvas, loadImage } from '@napi-rs/canvas'
 
 interface TextBox {
   id: string
@@ -95,14 +95,14 @@ export async function renderSlideToCanvas(slide: Slide, options: RenderOptions =
 
   // Draw text boxes
   for (const textBox of sortedTextBoxes) {
-    await drawTextBox(ctx, textBox, canvasWidth, canvasHeight)
+    await drawTextBox(ctx as any, textBox, canvasWidth, canvasHeight)
   }
 
   // Return buffer
   if (format === 'png') {
     return canvas.toBuffer('image/png')
   } else {
-    return canvas.toBuffer('image/jpeg', { quality })
+    return canvas.toBuffer('image/jpeg', quality)
   }
 }
 

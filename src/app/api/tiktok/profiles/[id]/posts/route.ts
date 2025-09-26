@@ -76,7 +76,9 @@ export async function GET(
         // Parse images JSON and generate presigned URLs for each image
         let images = []
         try {
-          const parsedImages = JSON.parse(post.images || '[]')
+          const parsedImages = typeof post.images === 'string'
+            ? JSON.parse(post.images || '[]')
+            : Array.isArray(post.images) ? post.images : []
           if (parsedImages.length > 0) {
             const imageIds = parsedImages.map((img: any) => img.cacheAssetId)
             const presignedImageUrls = await cacheAssetService.getUrls(imageIds)
@@ -90,7 +92,9 @@ export async function GET(
           }
         } catch (error) {
           console.warn('Failed to parse images for post:', post.id, error)
-          images = JSON.parse(post.images || '[]')
+          images = typeof post.images === 'string'
+            ? JSON.parse(post.images || '[]')
+            : Array.isArray(post.images) ? post.images : []
         }
 
         return {

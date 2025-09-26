@@ -59,8 +59,8 @@ export const defaultQueueOptions: QueueOptions = {
 export const defaultWorkerOptions: WorkerOptions = {
   connection: redisConfig, // Use config object directly
   concurrency: 5, // Process up to 5 jobs concurrently
-  removeOnComplete: 100,
-  removeOnFail: 50,
+  removeOnComplete: { count: 100 },
+  removeOnFail: { count: 50 },
 }
 
 // Job data interfaces
