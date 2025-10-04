@@ -3,7 +3,7 @@ import { designTokens } from '@/lib/design-tokens'
 
 interface PageLayoutProps {
   children: React.ReactNode
-  title: string
+  title: React.ReactNode
   description?: string
   headerActions?: React.ReactNode
 }
