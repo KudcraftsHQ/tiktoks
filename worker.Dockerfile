@@ -22,8 +22,9 @@ ENV NODE_ENV production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 workeruser
 
-# Copy dependencies
+# Copy dependencies and generated Prisma client
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/src/generated ./src/generated
 
 # Copy application files
 COPY --chown=workeruser:nodejs package.json pnpm-lock.yaml ./
