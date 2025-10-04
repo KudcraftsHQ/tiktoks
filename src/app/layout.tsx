@@ -4,6 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -39,11 +40,12 @@ export default function RootLayout({
           <SidebarProvider>
             <AppSidebar />
             <div className="flex-1 h-screen w-[calc(100%-16rem)]">
-              <main className="overflow-auto">
+              <main className="h-full">
                 {children}
               </main>
             </div>
           </SidebarProvider>
+          <Toaster />
       </body>
     </html>
   );

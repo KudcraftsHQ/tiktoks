@@ -14,17 +14,13 @@ const prisma = new PrismaClient()
 const RemixContentSchema = z.object({
   slides: z.array(z.object({
     imageIndex: z.number(),
-    paraphrasedText: z.string(),
-    imageDescription: z.string(),
-    suggestedBackgroundConcept: z.string()
+    paraphrasedText: z.string()
   }))
 })
 
 export interface RemixContent {
   imageIndex: number
   paraphrasedText: string
-  imageDescription: string
-  suggestedBackgroundConcept: string
 }
 
 export interface GenerateRemixOptions {
@@ -119,11 +115,9 @@ export async function generateRemixContent(
                 type: Type.OBJECT,
                 properties: {
                   imageIndex: { type: Type.NUMBER },
-                  paraphrasedText: { type: Type.STRING },
-                  imageDescription: { type: Type.STRING },
-                  suggestedBackgroundConcept: { type: Type.STRING }
+                  paraphrasedText: { type: Type.STRING }
                 },
-                required: ["imageIndex", "paraphrasedText", "imageDescription", "suggestedBackgroundConcept"]
+                required: ["imageIndex", "paraphrasedText"]
               }
             }
           },
@@ -204,18 +198,12 @@ For each slide, create a paraphrased version that:
 4. Stays engaging for social media
 5. Preserves any key numbers, facts, or calls-to-action
 
-Also provide:
-- A brief description of what visual elements would work well
-- A suggested background concept that complements the text
-
 IMPORTANT: Respond with ONLY a valid JSON object in this exact format:
 {
   "slides": [
     {
       "imageIndex": 0,
-      "paraphrasedText": "Your paraphrased version here",
-      "imageDescription": "Brief description of visual elements that would work well",
-      "suggestedBackgroundConcept": "Concept for background image (e.g., 'minimalist gradient', 'nature scene', 'abstract pattern')"
+      "paraphrasedText": "Your paraphrased version here"
     }
   ]
 }

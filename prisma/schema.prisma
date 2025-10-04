@@ -83,6 +83,7 @@ model TiktokPost {
 
   // OCR and text extraction
   ocrTexts     Json     @default("[]") // Array of objects: [{"imageIndex": 0, "text": "extracted text"}]
+  imageDescriptions Json @default("[]") // Array of objects: [{"imageIndex": 0, "imageDescription": "detailed visual description"}]
   ocrStatus    String   @default("pending") // 'pending', 'processing', 'completed', 'failed'
   ocrProcessedAt DateTime?
 

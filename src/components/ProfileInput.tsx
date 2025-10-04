@@ -100,15 +100,6 @@ export function ProfileInput({ onSubmit, loading = false, placeholder }: Profile
           )}
         </Button>
       </div>
-
-      <div className="text-xs text-muted-foreground space-y-1">
-        <p><strong>Supported formats:</strong></p>
-        <ul className="list-disc list-inside space-y-0.5 ml-2">
-          <li>Handle: username or @username</li>
-          <li>Profile URL: https://www.tiktok.com/@username</li>
-          <li>Mobile URL: https://vm.tiktok.com/username</li>
-        </ul>
-      </div>
     </form>
   )
 }

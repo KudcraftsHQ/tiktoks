@@ -116,6 +116,7 @@ export const createPostsTableColumns = ({
   {
     accessorKey: 'contentType',
     header: '',
+    size: 50,
     cell: ({ row }) => {
       const post = row.original
       return (
@@ -143,6 +144,32 @@ export const createPostsTableColumns = ({
       const bType = rowB.original.contentType
       if (aType === bType) return 0
       return aType === 'video' ? -1 : 1
+    }
+  },
+  {
+    accessorKey: 'authorHandle',
+    header: createSortableHeader('Author'),
+    cell: ({ row }) => {
+      const post = row.original
+      return (
+        <div className="flex items-center space-x-3 min-w-[180px]">
+          {post.authorAvatar ? (
+            <img
+              src={getProxiedImageUrl(post.authorAvatar)}
+              alt={post.authorHandle}
+              className="w-10 h-10 rounded-full object-cover"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+              <span className="text-xs font-semibold">{post.authorHandle?.[0]?.toUpperCase()}</span>
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm truncate">{post.authorNickname || post.authorHandle}</p>
+            <p className="text-xs text-muted-foreground truncate">@{post.authorHandle}</p>
+          </div>
+        </div>
+      )
     }
   },
   {
@@ -329,23 +356,22 @@ export const createPostsTableColumns = ({
       return (
         <div className="flex items-center space-x-2">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={() => window.open(post.tiktokUrl, '_blank')}
             title="Open on TikTok"
           >
-            <ExternalLink className="w-3 h-3" />
+            <ExternalLink className="w-4 h-4" />
           </Button>
 
           {post.contentType === 'photo' && onRemixPost && (
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() => onRemixPost(post)}
               title="Create Remix"
-              className="text-purple-600 border-purple-200 hover:bg-purple-50"
             >
-              <Sparkles className="w-3 h-3" />
+              <Sparkles className="w-4 h-4 text-purple-600" />
             </Button>
           )}
 

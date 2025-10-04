@@ -14,12 +14,16 @@ import {
   Heart,
   Video,
   CheckCircle,
-  User
+  User,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react'
 import { TikTokPost } from '@/components/posts-table-columns'
 import { TikTokProfile } from '@/components/profiles-table-columns'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import { designTokens } from '@/lib/design-tokens'
+import { PageLayout } from '@/components/PageLayout'
 
 interface ProfilePostsResult {
   posts: TikTokPost[]
@@ -42,6 +46,7 @@ export default function ProfileDetailPage() {
   const [contentTypeFilter, setContentTypeFilter] = useState<'all' | 'video' | 'photo'>('all')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPosts, setTotalPosts] = useState(0)
+  const [showProfileInfo, setShowProfileInfo] = useState(false)
 
 
   const fetchProfile = useCallback(async () => {
@@ -138,9 +143,9 @@ export default function ProfileDetailPage() {
 
   if (profileLoading) {
     return (
-      <div className="container mx-auto py-8">
+      <div className={`${designTokens.container.full} ${designTokens.spacing.page.responsive}`}>
         <Card>
-          <CardContent className="flex items-center justify-center py-12">
+          <CardContent className={`${designTokens.spacing.cardContent.responsive} flex items-center justify-center py-12`}>
             <div className="flex items-center space-x-2">
               <RefreshCw className="w-5 h-5 animate-spin" />
               <span>Loading profile...</span>
@@ -153,12 +158,12 @@ export default function ProfileDetailPage() {
 
   if (!profile) {
     return (
-      <div className="container mx-auto py-8">
+      <div className={`${designTokens.container.full} ${designTokens.spacing.page.responsive}`}>
         <Card className="border-red-200 bg-red-50">
-          <CardContent className="pt-6">
+          <CardContent className={`${designTokens.spacing.cardContent.responsive} py-6`}>
             <p className="text-red-600">{error || 'Profile not found'}</p>
             <Link href="/profiles">
-              <Button className="mt-4" variant="outline">
+              <Button className="mt-4 w-full sm:w-auto" variant="outline">
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back to Profiles
               </Button>
@@ -170,142 +175,132 @@ export default function ProfileDetailPage() {
   }
 
   return (
-      <div className="container mx-auto py-8 space-y-8">
-        {/* Header with back button */}
-        <div className="flex items-center space-x-4">
+    <PageLayout
+      title={
+        <div className="flex items-center gap-2">
+          <span>@{profile.handle}</span>
+          {profile.verified && (
+            <CheckCircle className="w-5 h-5 text-blue-500" />
+          )}
+        </div>
+      }
+      description={`${profile.nickname} • Last updated ${formatDate(profile.updatedAt)}`}
+      headerActions={
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowProfileInfo(!showProfileInfo)}
+          >
+            {showProfileInfo ? <ChevronUp className="w-4 h-4 mr-2" /> : <ChevronDown className="w-4 h-4 mr-2" />}
+            Profile Info
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(`https://www.tiktok.com/@${profile.handle}`, '_blank')}
+          >
+            <ExternalLink className="w-4 h-4 mr-2" />
+            TikTok
+          </Button>
+          <Button onClick={handleRefresh} disabled={loading} variant="outline" size="sm">
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
           <Link href="/profiles">
-            <Button variant="outline" size="sm">
+            <Button variant="ghost" size="sm">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back
             </Button>
           </Link>
-          <div className="flex-1">
-            <div className="flex items-center space-x-2">
-              <h1 className="text-3xl font-bold">@{profile.handle}</h1>
-              {profile.verified && (
-                <CheckCircle className="w-6 h-6 text-blue-500" />
-              )}
-            </div>
-            <p className="text-muted-foreground">
-              {profile.nickname} • Last updated {formatDate(profile.updatedAt)}
-            </p>
-          </div>
-          <Button onClick={handleRefresh} disabled={loading} variant="outline">
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
         </div>
+      }
+    >
+      <div className="h-full grid grid-rows-[auto_1fr] min-h-0 gap-4">
+        {/* Collapsible Profile Info */}
+        {showProfileInfo && (
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex flex-col sm:flex-row items-start gap-4">
+                {/* Avatar */}
+                {profile.avatar ? (
+                  <img
+                    src={profile.avatar}
+                    alt={`${profile.handle} avatar`}
+                    className="w-16 h-16 rounded-full object-cover flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                    <User className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                )}
 
-        {/* Profile Info */}
-        <div className="bg-background border rounded-lg p-6">
-          <div className="flex items-start space-x-6">
-          {/* Avatar */}
-          {profile.avatar ? (
-            <img
-              src={profile.avatar}
-              alt={`${profile.handle} avatar`}
-              className="w-24 h-24 rounded-full object-cover"
-            />
-          ) : (
-            <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center">
-              <User className="w-12 h-12 text-muted-foreground" />
-            </div>
-          )}
+                <div className="flex-1 w-full">
+                  {profile.bio && (
+                    <p className="text-sm text-muted-foreground mb-3">{profile.bio}</p>
+                  )}
 
-          {/* Profile details and metrics */}
-          <div className="flex-1">
-            {profile.bio && (
-              <p className="text-muted-foreground mb-4">{profile.bio}</p>
-            )}
-
-            {/* Metrics Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-              <div className="text-center p-3 bg-muted/30 rounded-lg">
-                <Users className="w-5 h-5 mx-auto mb-1 text-blue-500" />
-                <div className="text-lg font-bold">
-                  {formatNumber(profile.followerCount)}
+                  {/* Metrics Grid */}
+                  <div className="grid grid-cols-4 gap-2">
+                    <div className="text-center p-2 bg-muted/30 rounded">
+                      <Users className="w-4 h-4 mx-auto mb-1 text-blue-500" />
+                      <div className="text-sm font-bold">{formatNumber(profile.followerCount)}</div>
+                      <div className="text-xs text-muted-foreground">Followers</div>
+                    </div>
+                    <div className="text-center p-2 bg-muted/30 rounded">
+                      <Users className="w-4 h-4 mx-auto mb-1 text-green-500" />
+                      <div className="text-sm font-bold">{formatNumber(profile.followingCount)}</div>
+                      <div className="text-xs text-muted-foreground">Following</div>
+                    </div>
+                    <div className="text-center p-2 bg-muted/30 rounded">
+                      <Video className="w-4 h-4 mx-auto mb-1 text-purple-500" />
+                      <div className="text-sm font-bold">{formatNumber(profile.videoCount)}</div>
+                      <div className="text-xs text-muted-foreground">Videos</div>
+                    </div>
+                    <div className="text-center p-2 bg-muted/30 rounded">
+                      <Heart className="w-4 h-4 mx-auto mb-1 text-red-500" />
+                      <div className="text-sm font-bold">{formatNumber(profile.likeCount)}</div>
+                      <div className="text-xs text-muted-foreground">Likes</div>
+                    </div>
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground">Followers</div>
               </div>
-
-              <div className="text-center p-3 bg-muted/30 rounded-lg">
-                <Users className="w-5 h-5 mx-auto mb-1 text-green-500" />
-                <div className="text-lg font-bold">
-                  {formatNumber(profile.followingCount)}
-                </div>
-                <div className="text-xs text-muted-foreground">Following</div>
-              </div>
-
-              <div className="text-center p-3 bg-muted/30 rounded-lg">
-                <Video className="w-5 h-5 mx-auto mb-1 text-purple-500" />
-                <div className="text-lg font-bold">
-                  {formatNumber(profile.videoCount)}
-                </div>
-                <div className="text-xs text-muted-foreground">Videos</div>
-              </div>
-
-              <div className="text-center p-3 bg-muted/30 rounded-lg">
-                <Heart className="w-5 h-5 mx-auto mb-1 text-red-500" />
-                <div className="text-lg font-bold">
-                  {formatNumber(profile.likeCount)}
-                </div>
-                <div className="text-xs text-muted-foreground">Likes</div>
-              </div>
-            </div>
-
-            <Button
-              variant="outline"
-              onClick={() => window.open(`https://www.tiktok.com/@${profile.handle}`, '_blank')}
-            >
-              <ExternalLink className="w-4 h-4 mr-2" />
-              View on TikTok
-            </Button>
-          </div>
-          </div>
-        </div>
-
-        {error && (
-          <Card className="border-red-200 bg-red-50">
-            <CardContent className="pt-6">
-              <p className="text-red-600">{error}</p>
             </CardContent>
           </Card>
         )}
 
-        {/* Posts section */}
-        <div className="bg-background border rounded-lg">
-          <div className="p-6 border-b">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">
-                Posts ({formatNumber(totalPosts)} total, {formatNumber(filteredPosts.length)} shown)
-              </h2>
-              <PostTypeFilter
-                value={contentTypeFilter}
-                onChange={setContentTypeFilter}
-              />
-            </div>
+        {/* Posts Table - Takes remaining height, filter is inside */}
+        {posts.length > 0 ? (
+          <div className="min-h-0">
+            <PostsTable
+              posts={filteredPosts}
+              contentTypeFilter={{
+                value: contentTypeFilter,
+                onChange: setContentTypeFilter
+              }}
+            />
           </div>
-          <div className="p-6">
-            {posts.length > 0 ? (
-              <PostsTable posts={filteredPosts} />
-            ) : loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="flex items-center space-x-2">
-                  <RefreshCw className="w-5 h-5 animate-spin" />
-                  <span>Loading posts...</span>
-                </div>
+        ) : loading ? (
+          <Card>
+            <CardContent className="flex items-center justify-center py-12">
+              <div className="flex items-center space-x-2">
+                <RefreshCw className="w-5 h-5 animate-spin" />
+                <span>Loading posts...</span>
               </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-12">
-                <Video className="w-12 h-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No posts found</h3>
-                <p className="text-muted-foreground text-center max-w-md">
-                  No posts have been saved for this profile yet. Use the Profile Explorer to fetch and save posts from @{profile.handle}.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <Video className="w-12 h-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No posts found</h3>
+              <p className="text-muted-foreground text-center max-w-md">
+                No posts have been saved for this profile yet. Use the Profile Explorer to fetch and save posts from @{profile.handle}.
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
+    </PageLayout>
   )
 }

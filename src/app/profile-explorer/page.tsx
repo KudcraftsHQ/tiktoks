@@ -1,13 +1,15 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { ProfileInput } from '@/components/ProfileInput'
 import { PostsTable } from '@/components/PostsTable'
 import { PostTypeFilter } from '@/components/PostTypeFilter'
 import { LoadMoreButton } from '@/components/LoadMoreButton'
 import { Button } from '@/components/ui/button'
 import { RefreshCw, Database } from 'lucide-react'
+import { PageLayout } from '@/components/PageLayout'
+import { designTokens } from '@/lib/design-tokens'
 
 interface TikTokPost {
   id: string
@@ -130,38 +132,58 @@ export default function ProfileExplorerPage() {
   })
 
   return (
-    <div className="container mx-auto py-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">TikTok Profile Explorer</h1>
-          <p className="text-muted-foreground">
-            Explore and analyze TikTok profiles, posts, and metrics
-          </p>
-        </div>
-        {currentHandle && (
+    <PageLayout
+      title="TikTok Profile Explorer"
+      description="Explore and analyze TikTok profiles, posts, and metrics"
+      headerActions={
+        currentHandle ? (
           <Button onClick={handleRefresh} disabled={loading} variant="outline">
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-        )}
+        ) : undefined
+      }
+    >
+      {/* Unified Header Section */}
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b shadow-sm">
+        <div className="py-4 space-y-4">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1">
+              <ProfileInput
+                onSubmit={fetchProfileVideos}
+                loading={loading}
+                placeholder="Enter TikTok handle (e.g., @username) or profile URL"
+              />
+            </div>
+            <div className="flex items-start">
+              <PostTypeFilter
+                value={contentTypeFilter}
+                onChange={setContentTypeFilter}
+              />
+            </div>
+          </div>
+
+          {posts.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t">
+              <h2 className={`${designTokens.typography.sectionTitle.responsive} font-semibold`}>
+                Posts from @{currentHandle} ({filteredPosts.length} of {posts.length})
+              </h2>
+              {upsertStats && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Database className="w-4 h-4" />
+                  <span className="text-green-600">
+                    Synced: {upsertStats.postsCreated} new, {upsertStats.postsUpdated} updated
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Profile Input</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ProfileInput
-            onSubmit={fetchProfileVideos}
-            loading={loading}
-            placeholder="Enter TikTok handle (e.g., @username) or profile URL"
-          />
-        </CardContent>
-      </Card>
-
       {error && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="pt-6">
+        <Card className="border-red-200 bg-red-50 mt-6">
+          <CardContent className={`${designTokens.spacing.cardContent.responsive} py-6`}>
             <p className="text-red-600">{error}</p>
           </CardContent>
         </Card>
@@ -169,32 +191,15 @@ export default function ProfileExplorerPage() {
 
       {posts.length > 0 && (
         <>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <h2 className="text-xl font-semibold">
-                Posts from @{currentHandle} ({filteredPosts.length} of {posts.length})
-              </h2>
-              <PostTypeFilter
-                value={contentTypeFilter}
-                onChange={setContentTypeFilter}
-              />
-            </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Database className="w-4 h-4" />
-              {upsertStats && (
-                <span className="text-green-600">
-                  Synced: {upsertStats.postsCreated} new, {upsertStats.postsUpdated} updated
-                </span>
-              )}
-            </div>
+
+          <div className="mt-6 flex-1 flex flex-col min-h-0">
+            <Card className="flex flex-col flex-1 overflow-hidden">
+              <PostsTable posts={filteredPosts} />
+            </Card>
           </div>
 
-          <PostsTable
-            posts={filteredPosts}
-          />
-
           {hasMore && (
-            <div className="flex justify-center">
+            <div className="flex justify-center mt-6">
               <LoadMoreButton
                 onClick={handleLoadMore}
                 loading={loading}
@@ -211,8 +216,8 @@ export default function ProfileExplorerPage() {
       )}
 
       {loading && posts.length === 0 && (
-        <Card>
-          <CardContent className="flex items-center justify-center py-12">
+        <Card className="mt-6">
+          <CardContent className={`${designTokens.spacing.cardContent.responsive} flex items-center justify-center py-12`}>
             <div className="flex items-center space-x-2">
               <RefreshCw className="w-5 h-5 animate-spin" />
               <span>Loading profile videos...</span>
@@ -220,6 +225,6 @@ export default function ProfileExplorerPage() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </PageLayout>
   )
 }

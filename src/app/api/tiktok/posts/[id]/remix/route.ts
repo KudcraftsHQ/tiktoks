@@ -83,8 +83,6 @@ export async function POST(
       originalImageIndex: content.imageIndex,
       paraphrasedText: content.paraphrasedText,
       originalText: '', // Will be populated from OCR data
-      imageDescription: content.imageDescription,
-      suggestedBackgroundConcept: content.suggestedBackgroundConcept,
       textBoxes: [] // Start with empty text boxes, user can add more
     }))
 

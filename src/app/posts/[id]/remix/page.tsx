@@ -4,6 +4,7 @@ import React, { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { InlineEditableText } from '@/components/InlineEditableText'
 import {
   ArrowLeft,
   Sparkles,
@@ -15,6 +16,7 @@ import {
   CheckCircle,
   AlertCircle
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface TikTokPost {
   id: string
@@ -40,8 +42,6 @@ interface RemixPost {
     id: string
     displayOrder: number
     paraphrasedText: string
-    imageDescription?: string
-    suggestedBackgroundConcept?: string
     textBoxes: Array<{
       id: string
       text: string
@@ -67,8 +67,10 @@ export default function RemixPage({ params }: RemixPageProps) {
     fetchPostAndRemixes()
   }, [resolvedParams.id])
 
-  const fetchPostAndRemixes = async () => {
-    setIsLoading(true)
+  const fetchPostAndRemixes = async (showLoader = true) => {
+    if (showLoader) {
+      setIsLoading(true)
+    }
     try {
       // Fetch post details
       const postResponse = await fetch(`/api/tiktok/posts/${resolvedParams.id}`)
@@ -88,13 +90,22 @@ export default function RemixPage({ params }: RemixPageProps) {
       console.error('Failed to fetch data:', error)
       setError('Failed to load post data')
     } finally {
-      setIsLoading(false)
+      if (showLoader) {
+        setIsLoading(false)
+      }
     }
   }
 
 
   const runOCR = async () => {
     if (!post) return
+
+    // Show confirmation dialog if OCR is already completed
+    if (post.ocrStatus === 'completed') {
+      if (!confirm('This will re-run OCR processing and replace existing text. Continue?')) {
+        return
+      }
+    }
 
     setIsRunningOCR(true)
     try {
@@ -106,11 +117,13 @@ export default function RemixPage({ params }: RemixPageProps) {
         throw new Error('OCR processing failed')
       }
 
-      // Refresh the post data to get updated OCR status
-      await fetchPostAndRemixes()
+      // Refresh the post data to get updated OCR status (no full screen loader)
+      await fetchPostAndRemixes(false)
+      toast.success('OCR processing completed')
     } catch (error) {
       console.error('OCR failed:', error)
       setError('Failed to run OCR processing')
+      toast.error('Failed to run OCR processing')
     } finally {
       setIsRunningOCR(false)
     }
@@ -145,12 +158,15 @@ export default function RemixPage({ params }: RemixPageProps) {
       const result = await response.json()
       console.log('✅ Remix created successfully:', result)
 
-      // Refresh data
-      await fetchPostAndRemixes()
+      // Refresh data (no full screen loader)
+      await fetchPostAndRemixes(false)
+      toast.success('Remix created successfully')
 
     } catch (error) {
       console.error('Failed to create remix:', error)
-      setError(error instanceof Error ? error.message : 'Failed to create remix')
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create remix'
+      setError(errorMessage)
+      toast.error(errorMessage)
     } finally {
       setIsCreatingRemix(false)
     }
@@ -168,10 +184,71 @@ export default function RemixPage({ params }: RemixPageProps) {
         throw new Error('Failed to delete remix')
       }
 
-      await fetchPostAndRemixes()
+      // Optimistically update UI
+      setRemixes(prevRemixes => prevRemixes.filter(r => r.id !== remixId))
+      toast.success('Remix deleted successfully')
     } catch (error) {
       console.error('Failed to delete remix:', error)
-      setError('Failed to delete remix')
+      const errorMessage = 'Failed to delete remix'
+      setError(errorMessage)
+      toast.error(errorMessage)
+      // Refresh on error to restore state
+      await fetchPostAndRemixes(false)
+    }
+  }
+
+  const updateSlideText = async (
+    remixId: string,
+    slideIndex: number,
+    field: 'paraphrasedText',
+    newValue: string
+  ) => {
+    try {
+      // Find the remix in the current state
+      const remix = remixes.find(r => r.id === remixId)
+      if (!remix) {
+        throw new Error('Remix not found')
+      }
+
+      // Update the specific slide field
+      const updatedSlides = remix.slides.map((slide, index) => {
+        if (index === slideIndex) {
+          return {
+            ...slide,
+            [field]: newValue
+          }
+        }
+        return slide
+      })
+
+      // Send the update to the API
+      const response = await fetch(`/api/remixes/${remixId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          slides: updatedSlides
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update slide')
+      }
+
+      // Update local state
+      setRemixes(prevRemixes =>
+        prevRemixes.map(r =>
+          r.id === remixId
+            ? { ...r, slides: updatedSlides }
+            : r
+        )
+      )
+
+      toast.success('Saved successfully')
+    } catch (error) {
+      console.error('Failed to update slide:', error)
+      throw error // Re-throw to be handled by InlineEditableText
     }
   }
 
@@ -327,7 +404,7 @@ export default function RemixPage({ params }: RemixPageProps) {
                   >
                     {getOCRStatusIcon()}
                     <span className="ml-2">
-                      {post.ocrStatus === 'completed' ? 'OCR Complete' :
+                      {post.ocrStatus === 'completed' ? 'Redo OCR' :
                        post.ocrStatus === 'processing' ? 'Processing...' :
                        isRunningOCR ? 'Running OCR...' : 'Run OCR'}
                     </span>
@@ -549,21 +626,21 @@ export default function RemixPage({ params }: RemixPageProps) {
                     return (
                       <div key={slideIndex} className="w-72 border-r p-4">
                         {slide ? (
-                          <div className="space-y-3">
-                            {/* Preview */}
-                            <div className="aspect-[9/16] bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg border flex flex-col justify-between p-3">
-                              <div className="text-xs text-muted-foreground text-center">
-                                {slide.slide.suggestedBackgroundConcept || 'Concept'}
-                              </div>
-                              <div className="text-xs leading-tight text-center text-gray-700 bg-white/80 rounded px-2 py-1">
-                                {slide.text.substring(0, 60)}{slide.text.length > 60 ? '...' : ''}
-                              </div>
-                            </div>
-                            {/* Text Content */}
-                            <div className="bg-muted/30 rounded p-2 text-xs">
-                              <p className="text-foreground leading-relaxed">
-                                {slide.text.substring(0, 150)}{slide.text.length > 150 ? '...' : ''}
-                              </p>
+                          <div className="space-y-2">
+                            <div>
+                              <InlineEditableText
+                                value={slide.text}
+                                onSave={(newValue) =>
+                                  updateSlideText(
+                                    remixRow.remix.id,
+                                    slideIndex,
+                                    'paraphrasedText',
+                                    newValue
+                                  )
+                                }
+                                placeholder="Enter text content..."
+                                rows={4}
+                              />
                             </div>
                           </div>
                         ) : (

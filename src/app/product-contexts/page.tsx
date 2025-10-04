@@ -26,6 +26,8 @@ import {
 } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { PageLayout } from '@/components/PageLayout'
+import { designTokens } from '@/lib/design-tokens'
 
 interface ProductContext {
   id: string
@@ -177,27 +179,20 @@ export default function ProductContextsPage() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">Product Contexts</h1>
-              <p className="text-muted-foreground">
-                Manage product information and prompt descriptions
-              </p>
-            </div>
-            <Dialog open={showAddDialog} onOpenChange={(open) => {
-              setShowAddDialog(open)
-              if (!open) resetForm()
-            }}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Product Context
-                </Button>
-              </DialogTrigger>
+    <PageLayout
+      title="Product Contexts"
+      description="Manage product information and prompt descriptions"
+      headerActions={
+        <Dialog open={showAddDialog} onOpenChange={(open) => {
+          setShowAddDialog(open)
+          if (!open) resetForm()
+        }}>
+          <DialogTrigger asChild>
+            <Button className="w-full sm:w-auto">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Product Context
+            </Button>
+          </DialogTrigger>
               <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                   <DialogTitle>Add Product Context</DialogTitle>
@@ -253,42 +248,46 @@ export default function ProductContextsPage() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-          </div>
+          }
+    >
+      <div className="space-y-6">
+        {/* Search Bar */}
+        <Card>
+          <CardContent className={designTokens.spacing.cardContent.responsive}>
+            <form onSubmit={handleSearch}>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search product contexts..."
+                  className="pl-10"
+                />
+              </div>
+            </form>
+          </CardContent>
+        </Card>
 
-          {/* Search Bar */}
-          <form onSubmit={handleSearch} className="mt-4">
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search product contexts..."
-                className="pl-10"
-              />
-            </div>
-          </form>
-        </div>
-      </header>
-
-      <div className="container mx-auto px-4 py-6">
         {filteredContexts.length === 0 && !isLoading ? (
-          <div className="text-center py-12">
-            <div className="rounded-full bg-muted/50 w-16 h-16 flex items-center justify-center mx-auto mb-4">
-              <FileText className="h-8 w-8 opacity-50" />
-            </div>
-            <h3 className="font-medium mb-2">No product contexts yet</h3>
-            <p className="text-muted-foreground mb-4">
-              Create your first product context to store product information and prompts
-            </p>
-            <Button onClick={() => setShowAddDialog(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create First Context
-            </Button>
-          </div>
+          <Card>
+            <CardContent className={`${designTokens.spacing.cardContent.responsive} text-center py-12`}>
+              <div className="rounded-full bg-muted/50 w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                <FileText className="h-8 w-8 opacity-50" />
+              </div>
+              <h3 className="font-medium mb-2">No product contexts yet</h3>
+              <p className="text-muted-foreground mb-4">
+                Create your first product context to store product information and prompts
+              </p>
+              <Button onClick={() => setShowAddDialog(true)} className="w-full sm:w-auto">
+                <Plus className="h-4 w-4 mr-2" />
+                Create First Context
+              </Button>
+            </CardContent>
+          </Card>
         ) : (
           <>
             {/* Product Contexts Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className={`${designTokens.grid.responsive.cols3} gap-6`}>
               {filteredContexts.map((context) => (
                 <Card key={context.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader className="pb-3">
@@ -338,9 +337,8 @@ export default function ProductContextsPage() {
             </div>
           </>
         )}
-      </div>
 
-      {/* Edit Dialog */}
+        {/* Edit Dialog */}
       <Dialog open={showEditDialog} onOpenChange={(open) => {
         setShowEditDialog(open)
         if (!open) resetForm()
@@ -397,6 +395,7 @@ export default function ProductContextsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </PageLayout>
   )
 }
