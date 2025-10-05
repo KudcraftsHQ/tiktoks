@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Validate that it's a TikTok CDN URL for security
+    // Validate that it's a TikTok CDN URL or presigned TikTok URL for security
     const allowedDomains = [
       'tiktokcdn.com',
       'tiktokcdn-us.com',
@@ -25,7 +25,10 @@ export async function GET(request: NextRequest) {
       urlObj.hostname.includes(domain)
     )
 
-    if (!isAllowedDomain) {
+    // Also check if it's a presigned URL from TikTok (has signature params)
+    const isPresignedUrl = imageUrl.includes('X-Amz-Signature') || imageUrl.includes('x-amz-signature')
+
+    if (!isAllowedDomain && !isPresignedUrl) {
       return NextResponse.json(
         { error: 'URL not from allowed domain' },
         { status: 400 }
@@ -51,8 +54,11 @@ export async function GET(request: NextRequest) {
     const contentType = response.headers.get('content-type') || 'image/jpeg'
     let buffer = Buffer.from(await response.arrayBuffer())
 
-    // Convert HEIC to JPEG if needed (fallback for uncached images)
-    if (imageUrl.toLowerCase().includes('.heic') || contentType.includes('heic') || contentType.includes('heif')) {
+    // Only convert if it's ACTUALLY a HEIC file (check content-type, not just URL)
+    // Note: Files may have .heic extension but already be JPEG (from MediaCacheWorker)
+    const isActuallyHeic = contentType.includes('heic') || contentType.includes('heif')
+
+    if (isActuallyHeic) {
       try {
         console.log('🔄 Converting HEIC image to JPEG...')
         const convertedBuffer = await heicConvert({

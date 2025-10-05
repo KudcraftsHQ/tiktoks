@@ -48,8 +48,22 @@ export async function getImageUrl(originalUrl: string): Promise<string> {
 export function getProxiedImageUrl(originalUrl: string): string {
   if (!originalUrl) return ''
 
-  // If it's already an R2 URL or presigned URL, return as-is
-  if (isR2Url(originalUrl) || isPresignedUrl(originalUrl)) {
+  // If it's an R2 URL, return as-is (already cached and converted)
+  if (isR2Url(originalUrl)) {
+    return originalUrl
+  }
+
+  // If it's a presigned URL and HEIC, proxy it for conversion
+  if (isPresignedUrl(originalUrl) && isHeicUrl(originalUrl)) {
+    const baseUrl = typeof window !== 'undefined'
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+
+    return `${baseUrl}/api/images/proxy?url=${encodeURIComponent(originalUrl)}`
+  }
+
+  // If it's a presigned URL but not HEIC, return as-is
+  if (isPresignedUrl(originalUrl)) {
     return originalUrl
   }
 

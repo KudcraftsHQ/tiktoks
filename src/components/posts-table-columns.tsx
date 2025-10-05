@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { createSortableHeader } from '@/components/ui/data-table'
 import { getProxiedImageUrl } from '@/lib/image-proxy'
-import { BookmarkToggle } from '@/components/BookmarkToggle'
+import { SmartImage } from '@/components/SmartImage'
 
 export interface TikTokPost {
   id: string
@@ -58,7 +58,6 @@ export interface TikTokPost {
 
 interface PostsTableColumnsProps {
   onPreviewPost: (post: TikTokPost) => void
-  onAddToCollection?: (post: TikTokPost) => void
   onOpenImageGallery?: (images: Array<{ url: string; width: number; height: number }>, initialIndex: number) => void
   onRemixPost?: (post: TikTokPost) => void
 }
@@ -109,7 +108,6 @@ const parseImages = (images: any): Array<{ url: string; width: number; height: n
 
 export const createPostsTableColumns = ({
   onPreviewPost,
-  onAddToCollection,
   onOpenImageGallery,
   onRemixPost
 }: PostsTableColumnsProps): ColumnDef<TikTokPost>[] => [
@@ -154,10 +152,15 @@ export const createPostsTableColumns = ({
       return (
         <div className="flex items-center space-x-3 min-w-[180px]">
           {post.authorAvatar ? (
-            <img
+            <SmartImage
               src={getProxiedImageUrl(post.authorAvatar)}
               alt={post.authorHandle}
               className="w-10 h-10 rounded-full object-cover"
+              fallback={
+                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                  <span className="text-xs font-semibold">{post.authorHandle?.[0]?.toUpperCase()}</span>
+                </div>
+              }
             />
           ) : (
             <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
@@ -183,7 +186,7 @@ export const createPostsTableColumns = ({
             {post.contentType === 'photo' && parseImages(post.images).length > 0 ? (
               <div className="flex space-x-1">
                 {parseImages(post.images).map((image, index) => (
-                  <img
+                  <SmartImage
                     key={index}
                     src={getProxiedImageUrl(image.url)}
                     alt={`Photo ${index + 1}`}
@@ -193,7 +196,7 @@ export const createPostsTableColumns = ({
                 ))}
               </div>
             ) : post.coverUrl ? (
-              <img
+              <SmartImage
                 src={getProxiedImageUrl(post.coverUrl)}
                 alt="Cover"
                 className="w-10 h-10 rounded object-cover cursor-pointer hover:opacity-80"
@@ -374,8 +377,6 @@ export const createPostsTableColumns = ({
               <Sparkles className="w-4 h-4 text-purple-600" />
             </Button>
           )}
-
-          <BookmarkToggle postId={post.id} />
         </div>
       )
     }

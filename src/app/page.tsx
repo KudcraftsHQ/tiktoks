@@ -35,21 +35,19 @@ interface PostsResponse {
 export default function PostsPage() {
   const router = useRouter()
   const [posts, setPosts] = useState<TikTokPost[]>([])
-  const [hasMore, setHasMore] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [page, setPage] = useState(1)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [newPostUrl, setNewPostUrl] = useState('')
   const [isAddingPost, setIsAddingPost] = useState(false)
 
-  const fetchPosts = async (pageNum: number, query: string = '') => {
+  const fetchPosts = async (page: number, limit: number) => {
     setIsLoading(true)
     try {
       const params = new URLSearchParams({
-        page: pageNum.toString(),
-        limit: '10',
-        ...(query && { search: query })
+        page: page.toString(),
+        limit: limit.toString()
       })
 
       const response = await fetch(`/api/tiktok/posts?${params}`)
@@ -59,37 +57,21 @@ export default function PostsPage() {
         throw new Error(data.error || 'Failed to fetch posts')
       }
 
-      if (pageNum === 1) {
-        setPosts(data.posts || [])
-      } else {
-        setPosts(prev => [...prev, ...(data.posts || [])])
-      }
-
-      setHasMore(data.hasMore ?? false)
+      setPosts(data.posts || [])
     } catch (error) {
       console.error('Failed to fetch posts:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to fetch posts')
-      if (pageNum === 1) {
-        setPosts([])
-      }
-      setHasMore(false)
+      setPosts([])
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    setPage(1)
-    fetchPosts(1, searchQuery)
-  }
-
-  const handleLoadMore = () => {
-    if (!isLoading && hasMore) {
-      const nextPage = page + 1
-      setPage(nextPage)
-      fetchPosts(nextPage, searchQuery)
-    }
+  const handlePageChange = (pageIndex: number, newPageSize: number) => {
+    const newPage = pageIndex + 1 // Convert 0-based to 1-based
+    setCurrentPage(newPage)
+    setPageSize(newPageSize)
+    fetchPosts(newPage, newPageSize)
   }
 
   const handleAddPost = async () => {
@@ -108,8 +90,8 @@ export default function PostsPage() {
       if (response.ok) {
         setShowAddDialog(false)
         setNewPostUrl('')
-        setPage(1)
-        fetchPosts(1, searchQuery)
+        setCurrentPage(1)
+        fetchPosts(1, pageSize)
         toast.success('Post imported successfully')
       } else {
         const error = await response.json()
@@ -125,7 +107,7 @@ export default function PostsPage() {
 
 
   useEffect(() => {
-    fetchPosts(1)
+    fetchPosts(1, pageSize)
   }, [])
 
   return (
@@ -186,9 +168,8 @@ export default function PostsPage() {
     >
       <PostsTable
         posts={posts}
-        loadMore={handleLoadMore}
-        isFetching={isLoading}
-        hasMore={hasMore}
+        onPageChange={handlePageChange}
+        isLoading={isLoading}
       />
     </PageLayout>
   )

@@ -44,6 +44,8 @@ interface DataTableProps<TData, TValue> {
     value: 'all' | 'video' | 'photo'
     onChange: (value: 'all' | 'video' | 'photo') => void
   }
+  onPageChange?: (pageIndex: number, pageSize: number) => void
+  isLoading?: boolean
 }
 
 export function DataTable<TData, TValue>({
@@ -53,7 +55,9 @@ export function DataTable<TData, TValue>({
   searchPlaceholder = 'Search...',
   showPagination = true,
   globalFilterFn,
-  contentTypeFilter
+  contentTypeFilter,
+  onPageChange,
+  isLoading
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -83,10 +87,15 @@ export function DataTable<TData, TValue>({
       rowSelection,
       globalFilter,
     },
+    initialState: {
+      pagination: {
+        pageSize: 25,
+      },
+    },
   })
 
   return (
-    <div className="w-full h-full grid grid-rows-[auto_1fr] min-h-0">
+    <div className="w-full h-full grid grid-rows-[auto_1fr_auto] min-h-0">
       {/* Filters - Auto height at top */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 py-4 border-b bg-background">
         {globalFilterFn ? (
@@ -165,7 +174,19 @@ export function DataTable<TData, TValue>({
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows?.length ? (
+            {isLoading ? (
+              <TableRow>
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center"
+                >
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                    <span>Loading...</span>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
@@ -195,26 +216,64 @@ export function DataTable<TData, TValue>({
         </Table>
       </div>
       {showPagination && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4">
-          <div className="text-sm text-muted-foreground text-center sm:text-left">
-            {table.getFilteredSelectedRowModel().rows.length} of{' '}
-            {table.getFilteredRowModel().rows.length} row(s) selected.
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4 border-t">
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-muted-foreground">
+              Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to{' '}
+              {Math.min(
+                (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
+                table.getFilteredRowModel().rows.length
+              )}{' '}
+              of {table.getFilteredRowModel().rows.length} entries
+            </div>
+            <select
+              value={table.getState().pagination.pageSize}
+              onChange={(e) => {
+                const newSize = Number(e.target.value)
+                table.setPageSize(newSize)
+                if (onPageChange) {
+                  onPageChange(table.getState().pagination.pageIndex, newSize)
+                }
+              }}
+              className="h-8 rounded-md border border-input bg-background px-3 text-sm"
+            >
+              {[10, 25, 50, 100].map((pageSize) => (
+                <option key={pageSize} value={pageSize}>
+                  {pageSize} per page
+                </option>
+              ))}
+            </select>
           </div>
           <div className="flex gap-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => table.previousPage()}
-              disabled={!table.getCanPreviousPage()}
+              onClick={() => {
+                table.previousPage()
+                if (onPageChange) {
+                  onPageChange(table.getState().pagination.pageIndex - 1, table.getState().pagination.pageSize)
+                }
+              }}
+              disabled={!table.getCanPreviousPage() || isLoading}
               className="flex-1 sm:flex-none"
             >
               Previous
             </Button>
+            <div className="flex items-center gap-1 text-sm">
+              <span className="text-muted-foreground">
+                Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+              </span>
+            </div>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => table.nextPage()}
-              disabled={!table.getCanNextPage()}
+              onClick={() => {
+                table.nextPage()
+                if (onPageChange) {
+                  onPageChange(table.getState().pagination.pageIndex + 1, table.getState().pagination.pageSize)
+                }
+              }}
+              disabled={!table.getCanNextPage() || isLoading}
               className="flex-1 sm:flex-none"
             >
               Next

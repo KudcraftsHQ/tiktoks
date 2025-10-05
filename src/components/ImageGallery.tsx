@@ -5,6 +5,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { getProxiedImageUrl } from '@/lib/image-proxy'
+import { SmartImage } from '@/components/SmartImage'
 
 interface Image {
   url: string
@@ -106,7 +107,7 @@ export function ImageGallery({ images, isOpen, onClose, initialIndex = 0 }: Imag
 
           {/* Main image */}
           <div className="relative w-full h-full flex items-center justify-center p-8">
-            <img
+            <SmartImage
               src={getProxiedImageUrl(currentImage.url)}
               alt={`Image ${currentIndex + 1} of ${images.length}`}
               className="max-w-full max-h-full object-contain"
@@ -134,7 +135,7 @@ export function ImageGallery({ images, isOpen, onClose, initialIndex = 0 }: Imag
                   }`}
                   onClick={() => setCurrentIndex(index)}
                 >
-                  <img
+                  <SmartImage
                     src={getProxiedImageUrl(image.url)}
                     alt={`Thumbnail ${index + 1}`}
                     className="w-full h-full object-cover"

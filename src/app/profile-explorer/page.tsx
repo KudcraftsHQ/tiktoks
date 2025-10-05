@@ -168,14 +168,18 @@ export default function ProfileExplorerPage() {
               <h2 className={`${designTokens.typography.sectionTitle.responsive} font-semibold`}>
                 Posts from @{currentHandle} ({filteredPosts.length} of {posts.length})
               </h2>
-              {upsertStats && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Database className="w-4 h-4" />
-                  <span className="text-green-600">
-                    Synced: {upsertStats.postsCreated} new, {upsertStats.postsUpdated} updated
-                  </span>
-                </div>
-              )}
+              <LoadMoreButton
+                onClick={handleLoadMore}
+                loading={loading}
+                disabled={!hasMore || contentTypeFilter !== 'all'}
+                tooltip={
+                  !hasMore
+                    ? 'No more posts to load'
+                    : contentTypeFilter !== 'all'
+                    ? 'Load more is only available when showing all posts'
+                    : undefined
+                }
+              />
             </div>
           )}
         </div>
@@ -190,29 +194,10 @@ export default function ProfileExplorerPage() {
       )}
 
       {posts.length > 0 && (
-        <>
-
-          <div className="mt-6 flex-1 flex flex-col min-h-0">
-            <Card className="flex flex-col flex-1 overflow-hidden">
-              <PostsTable posts={filteredPosts} />
-            </Card>
-          </div>
-
-          {hasMore && (
-            <div className="flex justify-center mt-6">
-              <LoadMoreButton
-                onClick={handleLoadMore}
-                loading={loading}
-                disabled={contentTypeFilter !== 'all'}
-                tooltip={
-                  contentTypeFilter !== 'all'
-                    ? 'Load more is only available when showing all posts'
-                    : undefined
-                }
-              />
-            </div>
-          )}
-        </>
+        <PostsTable
+          posts={filteredPosts}
+          isLoading={loading}
+        />
       )}
 
       {loading && posts.length === 0 && (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
@@ -14,21 +14,20 @@ import { createPostsTableColumns, TikTokPost } from '@/components/posts-table-co
 import { ImageGallery } from '@/components/ImageGallery'
 import { getProxiedImageUrl } from '@/lib/image-proxy'
 import { useRouter } from 'next/navigation'
+import { SmartImage } from '@/components/SmartImage'
 
 interface PostsTableProps {
   posts: TikTokPost[]
-  loadMore?: () => void
-  isFetching?: boolean
-  hasMore?: boolean
   contentTypeFilter?: {
     value: 'all' | 'video' | 'photo'
     onChange: (value: 'all' | 'video' | 'photo') => void
   }
+  onPageChange?: (pageIndex: number, pageSize: number) => void
+  isLoading?: boolean
 }
 
-export function PostsTable({ posts, loadMore, isFetching, hasMore, contentTypeFilter }: PostsTableProps) {
+export function PostsTable({ posts, contentTypeFilter, onPageChange, isLoading }: PostsTableProps) {
   const router = useRouter()
-  const tableContainerRef = useRef<HTMLDivElement>(null)
   const [selectedPost, setSelectedPost] = useState<TikTokPost | null>(null)
   const [galleryImages, setGalleryImages] = useState<Array<{ url: string; width: number; height: number }>>([])
   const [showGallery, setShowGallery] = useState(false)
@@ -66,54 +65,6 @@ export function PostsTable({ posts, loadMore, isFetching, hasMore, contentTypeFi
     router.push(`/posts/${post.id}/remix`)
   }
 
-  // Infinite scroll detection - find the actual scrollable container
-  const fetchMoreOnBottomReached = useCallback(() => {
-    if (loadMore && hasMore && !isFetching) {
-      // Find the scrollable parent (PageLayout's overflow-auto div)
-      let scrollContainer = tableContainerRef.current?.parentElement
-      while (scrollContainer) {
-        const { overflow, overflowY } = window.getComputedStyle(scrollContainer)
-        if (overflow === 'auto' || overflowY === 'auto' || overflow === 'scroll' || overflowY === 'scroll') {
-          break
-        }
-        scrollContainer = scrollContainer.parentElement
-      }
-
-      if (scrollContainer) {
-        const { scrollHeight, scrollTop, clientHeight } = scrollContainer
-        // Fetch more when user scrolls within 500px of bottom
-        if (scrollHeight - scrollTop - clientHeight < 500) {
-          loadMore()
-        }
-      }
-    }
-  }, [loadMore, isFetching, hasMore])
-
-  // Attach scroll listener to the actual scrollable container
-  useEffect(() => {
-    if (!loadMore) return
-
-    // Find the scrollable parent
-    let scrollContainer = tableContainerRef.current?.parentElement
-    while (scrollContainer) {
-      const { overflow, overflowY } = window.getComputedStyle(scrollContainer)
-      if (overflow === 'auto' || overflowY === 'auto' || overflow === 'scroll' || overflowY === 'scroll') {
-        break
-      }
-      scrollContainer = scrollContainer.parentElement
-    }
-
-    if (!scrollContainer) return
-
-    const handleScroll = () => fetchMoreOnBottomReached()
-
-    scrollContainer.addEventListener('scroll', handleScroll)
-    // Check immediately on mount
-    fetchMoreOnBottomReached()
-
-    return () => scrollContainer?.removeEventListener('scroll', handleScroll)
-  }, [fetchMoreOnBottomReached, loadMore])
-
   // Create columns with handlers
   const columns = useMemo(() => createPostsTableColumns({
     onPreviewPost: handlePreviewPost,
@@ -145,20 +96,17 @@ export function PostsTable({ posts, loadMore, isFetching, hasMore, contentTypeFi
 
   return (
     <>
-      <div ref={tableContainerRef} className="h-full flex flex-col min-h-0">
+      <div className="h-full flex flex-col min-h-0">
         <DataTable
           columns={columns}
           data={posts}
           globalFilterFn={globalFilterFn}
           searchPlaceholder="Search by author, description..."
-          showPagination={false}
+          showPagination={true}
           contentTypeFilter={contentTypeFilter}
+          onPageChange={onPageChange}
+          isLoading={isLoading}
         />
-        {isFetching && (
-          <div className="text-center py-4 text-muted-foreground border-t bg-background">
-            Loading more posts...
-          </div>
-        )}
       </div>
 
       {/* Post Preview Dialog */}
@@ -175,7 +123,7 @@ export function PostsTable({ posts, loadMore, isFetching, hasMore, contentTypeFi
             <div className="space-y-4">
               {selectedPost.coverUrl && (
                 <div className="flex justify-center">
-                  <img
+                  <SmartImage
                     src={getProxiedImageUrl(selectedPost.coverUrl)}
                     alt="Post cover"
                     className="max-w-full h-auto rounded-lg"
