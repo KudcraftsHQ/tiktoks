@@ -29,6 +29,7 @@ interface PostsResponse {
   posts: TikTokPost[]
   hasMore: boolean
   total: number
+  error?: string
 }
 
 export default function PostsPage() {
