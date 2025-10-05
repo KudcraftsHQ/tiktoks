@@ -14,6 +14,9 @@ COPY package.json pnpm-lock.yaml ./
 COPY prisma ./prisma
 RUN pnpm i --frozen-lockfile
 
+# Generate Prisma client
+RUN pnpm prisma generate
+
 FROM base AS runner
 WORKDIR /app
 
@@ -23,8 +26,8 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 workeruser
 
 # Copy dependencies and generated Prisma client
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/src/generated ./src/generated
+COPY --from=deps --chown=workeruser:nodejs /app/node_modules ./node_modules
+COPY --from=deps --chown=workeruser:nodejs /app/src/generated ./src/generated
 
 # Copy application files
 COPY --chown=workeruser:nodejs package.json pnpm-lock.yaml ./
