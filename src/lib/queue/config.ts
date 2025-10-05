@@ -8,11 +8,9 @@ import { Redis } from 'ioredis'
 import { QueueOptions, WorkerOptions } from 'bullmq'
 
 // Redis connection configuration
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379'
+
 const redisConfig = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
-  db: parseInt(process.env.REDIS_DB || '0'),
   maxRetriesPerRequest: null, // Required by BullMQ for blocking operations
   retryDelayOnFailover: 100,
   lazyConnect: true,
@@ -26,7 +24,7 @@ export const createRedisConnection = () => {
     return sharedRedisConnection
   }
 
-  sharedRedisConnection = new Redis(redisConfig)
+  sharedRedisConnection = new Redis(redisUrl, redisConfig)
 
   // Ensure maxRetriesPerRequest is set correctly for BullMQ
   if (sharedRedisConnection.options.maxRetriesPerRequest !== null) {
@@ -43,7 +41,7 @@ export const QUEUE_NAMES = {
 
 // Default queue options
 export const defaultQueueOptions: QueueOptions = {
-  connection: redisConfig, // Use config object directly
+  connection: new Redis(redisUrl, redisConfig),
   defaultJobOptions: {
     removeOnComplete: 100, // Keep last 100 completed jobs
     removeOnFail: 50,      // Keep last 50 failed jobs
@@ -57,7 +55,7 @@ export const defaultQueueOptions: QueueOptions = {
 
 // Default worker options
 export const defaultWorkerOptions: WorkerOptions = {
-  connection: redisConfig, // Use config object directly
+  connection: new Redis(redisUrl, redisConfig),
   concurrency: 5, // Process up to 5 jobs concurrently
   removeOnComplete: { count: 100 },
   removeOnFail: { count: 50 },
