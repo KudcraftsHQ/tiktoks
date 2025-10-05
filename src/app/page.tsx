@@ -23,6 +23,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { TikTokPost } from '@/components/posts-table-columns'
 import { PageLayout } from '@/components/PageLayout'
 import { designTokens } from '@/lib/design-tokens'
+import { toast } from 'sonner'
 
 interface PostsResponse {
   posts: TikTokPost[]
@@ -53,15 +54,24 @@ export default function PostsPage() {
       const response = await fetch(`/api/tiktok/posts?${params}`)
       const data: PostsResponse = await response.json()
 
-      if (pageNum === 1) {
-        setPosts(data.posts)
-      } else {
-        setPosts(prev => [...prev, ...data.posts])
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch posts')
       }
 
-      setHasMore(data.hasMore)
+      if (pageNum === 1) {
+        setPosts(data.posts || [])
+      } else {
+        setPosts(prev => [...prev, ...(data.posts || [])])
+      }
+
+      setHasMore(data.hasMore ?? false)
     } catch (error) {
       console.error('Failed to fetch posts:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to fetch posts')
+      if (pageNum === 1) {
+        setPosts([])
+      }
+      setHasMore(false)
     } finally {
       setIsLoading(false)
     }
@@ -99,13 +109,14 @@ export default function PostsPage() {
         setNewPostUrl('')
         setPage(1)
         fetchPosts(1, searchQuery)
+        toast.success('Post imported successfully')
       } else {
         const error = await response.json()
-        alert(error.message || 'Failed to add post')
+        toast.error(error.message || 'Failed to add post')
       }
     } catch (error) {
       console.error('Failed to add post:', error)
-      alert('Failed to add post')
+      toast.error('Failed to add post')
     } finally {
       setIsAddingPost(false)
     }
