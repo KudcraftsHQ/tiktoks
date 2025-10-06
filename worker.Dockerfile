@@ -35,6 +35,7 @@ COPY --chown=workeruser:nodejs package.json pnpm-lock.yaml ./
 COPY --chown=workeruser:nodejs prisma ./prisma
 COPY --chown=workeruser:nodejs worker.ts ./
 COPY --chown=workeruser:nodejs src ./src
+COPY --chown=workeruser:nodejs scripts ./scripts
 COPY --chown=workeruser:nodejs tsconfig.json ./
 
 USER workeruser
