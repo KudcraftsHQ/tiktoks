@@ -6,6 +6,9 @@ import { PostsTable } from '@/components/PostsTable'
 import { PostTypeFilter } from '@/components/PostTypeFilter'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+import { toast } from 'sonner'
 import {
   RefreshCw,
   ArrowLeft,
@@ -15,8 +18,9 @@ import {
   Video,
   CheckCircle,
   User,
-  ChevronDown,
-  ChevronUp
+  Activity,
+  Play,
+  Eye
 } from 'lucide-react'
 import { TikTokPost } from '@/components/posts-table-columns'
 import { TikTokProfile } from '@/components/profiles-table-columns'
@@ -36,7 +40,7 @@ interface ProfilePostsResult {
 
 export default function ProfileDetailPage() {
   const params = useParams()
-  const profileId = params.id as string
+  const handle = params.handle as string
 
   const [profile, setProfile] = useState<TikTokProfile | null>(null)
   const [posts, setPosts] = useState<TikTokPost[]>([])
@@ -46,15 +50,17 @@ export default function ProfileDetailPage() {
   const [contentTypeFilter, setContentTypeFilter] = useState<'all' | 'video' | 'photo'>('all')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPosts, setTotalPosts] = useState(0)
-  const [showProfileInfo, setShowProfileInfo] = useState(false)
+  const [monitoringEnabled, setMonitoringEnabled] = useState(false)
+  const [monitoringLoading, setMonitoringLoading] = useState(false)
+  const [triggerLoading, setTriggerLoading] = useState(false)
 
 
   const fetchProfile = useCallback(async () => {
-    if (!profileId) return
+    if (!handle) return
 
     setProfileLoading(true)
     try {
-      const response = await fetch(`/api/tiktok/profiles/${profileId}`)
+      const response = await fetch(`/api/tiktok/profiles/by-handle/${handle}`)
       const result = await response.json()
 
       if (!response.ok) {
@@ -62,15 +68,16 @@ export default function ProfileDetailPage() {
       }
 
       setProfile(result)
+      setMonitoringEnabled(result.monitoringEnabled || false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch profile')
     } finally {
       setProfileLoading(false)
     }
-  }, [profileId])
+  }, [handle])
 
   const fetchProfilePosts = useCallback(async () => {
-    if (!profileId) return
+    if (!profile?.id) return
 
     setLoading(true)
     setError(null)
@@ -85,7 +92,7 @@ export default function ProfileDetailPage() {
         params.append('contentType', contentTypeFilter)
       }
 
-      const response = await fetch(`/api/tiktok/profiles/${profileId}/posts?${params.toString()}`)
+      const response = await fetch(`/api/tiktok/profiles/${profile.id}/posts?${params.toString()}`)
       const result: ProfilePostsResult = await response.json()
 
       if (!response.ok) {
@@ -100,12 +107,76 @@ export default function ProfileDetailPage() {
     } finally {
       setLoading(false)
     }
-  }, [profileId, currentPage, contentTypeFilter])
+  }, [profile?.id, currentPage, contentTypeFilter])
 
   const handleRefresh = useCallback(() => {
     fetchProfile()
     fetchProfilePosts()
   }, [fetchProfile, fetchProfilePosts])
+
+  const handleMonitoringToggle = useCallback(async (enabled: boolean) => {
+    if (!profile?.id) return
+
+    setMonitoringLoading(true)
+    try {
+      const response = await fetch(`/api/tiktok/profiles/${profile.id}/monitoring`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ enabled })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update monitoring status')
+      }
+
+      const result = await response.json()
+      setMonitoringEnabled(result.profile.monitoringEnabled)
+
+      toast.success(enabled ? 'Monitoring enabled' : 'Monitoring disabled', {
+        description: enabled ? 'Profile will be monitored every 24 hours' : 'Automatic monitoring stopped'
+      })
+
+      // Refresh profile to get updated monitoring info
+      fetchProfile()
+    } catch (err) {
+      console.error('Failed to toggle monitoring:', err)
+      toast.error('Failed to update monitoring status')
+      // Revert the switch on error
+      setMonitoringEnabled(!enabled)
+    } finally {
+      setMonitoringLoading(false)
+    }
+  }, [profile?.id, fetchProfile])
+
+  const handleManualTrigger = useCallback(async () => {
+    if (!profile?.id) return
+
+    setTriggerLoading(true)
+    try {
+      const response = await fetch(`/api/tiktok/profiles/${profile.id}/monitoring/trigger`, {
+        method: 'POST'
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to trigger monitoring')
+      }
+
+      const result = await response.json()
+
+      toast.success('Monitoring queued', {
+        description: 'Profile update has been queued and will be processed shortly'
+      })
+    } catch (err) {
+      console.error('Failed to trigger monitoring:', err)
+      toast.error('Failed to queue monitoring', {
+        description: 'Please try again later'
+      })
+    } finally {
+      setTriggerLoading(false)
+    }
+  }, [profile?.id])
 
   // Load profile and posts on mount and when filters change
   useEffect(() => {
@@ -178,22 +249,45 @@ export default function ProfileDetailPage() {
     <PageLayout
       title={
         <div className="flex items-center gap-2">
+          {profile.avatar ? (
+            <img
+              src={profile.avatar}
+              alt={`${profile.handle} avatar`}
+              className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+              <User className="w-6 h-6 text-muted-foreground" />
+            </div>
+          )}
           <span>@{profile.handle}</span>
           {profile.verified && (
             <CheckCircle className="w-5 h-5 text-blue-500" />
           )}
         </div>
       }
-      description={`${profile.nickname} • Last updated ${formatDate(profile.updatedAt)}`}
       headerActions={
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border bg-background">
+            <Activity className="w-4 h-4 text-muted-foreground" />
+            <Label htmlFor="monitoring-switch" className="text-sm cursor-pointer">
+              Monitor
+            </Label>
+            <Switch
+              id="monitoring-switch"
+              checked={monitoringEnabled}
+              onCheckedChange={handleMonitoringToggle}
+              disabled={monitoringLoading}
+            />
+          </div>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setShowProfileInfo(!showProfileInfo)}
+            onClick={handleManualTrigger}
+            disabled={triggerLoading}
           >
-            {showProfileInfo ? <ChevronUp className="w-4 h-4 mr-2" /> : <ChevronDown className="w-4 h-4 mr-2" />}
-            Profile Info
+            <Play className={`w-4 h-4 mr-2 ${triggerLoading ? 'animate-spin' : ''}`} />
+            Update Now
           </Button>
           <Button
             variant="outline"
@@ -217,57 +311,64 @@ export default function ProfileDetailPage() {
       }
     >
       <div className="h-full grid grid-rows-[auto_1fr] min-h-0 gap-4">
-        {/* Collapsible Profile Info */}
-        {showProfileInfo && (
+        {/* Profile Metrics */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <Card>
             <CardContent className="p-4">
-              <div className="flex flex-col sm:flex-row items-start gap-4">
-                {/* Avatar */}
-                {profile.avatar ? (
-                  <img
-                    src={profile.avatar}
-                    alt={`${profile.handle} avatar`}
-                    className="w-16 h-16 rounded-full object-cover flex-shrink-0"
-                  />
-                ) : (
-                  <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                    <User className="w-8 h-8 text-muted-foreground" />
-                  </div>
-                )}
-
-                <div className="flex-1 w-full">
-                  {profile.bio && (
-                    <p className="text-sm text-muted-foreground mb-3">{profile.bio}</p>
-                  )}
-
-                  {/* Metrics Grid */}
-                  <div className="grid grid-cols-4 gap-2">
-                    <div className="text-center p-2 bg-muted/30 rounded">
-                      <Users className="w-4 h-4 mx-auto mb-1 text-blue-500" />
-                      <div className="text-sm font-bold">{formatNumber(profile.followerCount)}</div>
-                      <div className="text-xs text-muted-foreground">Followers</div>
-                    </div>
-                    <div className="text-center p-2 bg-muted/30 rounded">
-                      <Users className="w-4 h-4 mx-auto mb-1 text-green-500" />
-                      <div className="text-sm font-bold">{formatNumber(profile.followingCount)}</div>
-                      <div className="text-xs text-muted-foreground">Following</div>
-                    </div>
-                    <div className="text-center p-2 bg-muted/30 rounded">
-                      <Video className="w-4 h-4 mx-auto mb-1 text-purple-500" />
-                      <div className="text-sm font-bold">{formatNumber(profile.videoCount)}</div>
-                      <div className="text-xs text-muted-foreground">Videos</div>
-                    </div>
-                    <div className="text-center p-2 bg-muted/30 rounded">
-                      <Heart className="w-4 h-4 mx-auto mb-1 text-red-500" />
-                      <div className="text-sm font-bold">{formatNumber(profile.likeCount)}</div>
-                      <div className="text-xs text-muted-foreground">Likes</div>
-                    </div>
-                  </div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                  <Video className="w-4 h-4 text-purple-500" />
                 </div>
+                <span className="text-sm text-muted-foreground">Posts</span>
               </div>
+              <div className="text-2xl font-bold">{formatNumber(profile.totalPosts)}</div>
             </CardContent>
           </Card>
-        )}
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <Eye className="w-4 h-4 text-blue-500" />
+                </div>
+                <span className="text-sm text-muted-foreground">Views</span>
+              </div>
+              <div className="text-2xl font-bold">{formatNumber(parseInt(profile.totalViews?.toString() || '0'))}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center">
+                  <Heart className="w-4 h-4 text-red-500" />
+                </div>
+                <span className="text-sm text-muted-foreground">Likes</span>
+              </div>
+              <div className="text-2xl font-bold">{formatNumber(parseInt(profile.totalLikes?.toString() || '0'))}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+                  <Users className="w-4 h-4 text-green-500" />
+                </div>
+                <span className="text-sm text-muted-foreground">Shares</span>
+              </div>
+              <div className="text-2xl font-bold">{formatNumber(parseInt(profile.totalShares?.toString() || '0'))}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center">
+                  <Heart className="w-4 h-4 text-orange-500" />
+                </div>
+                <span className="text-sm text-muted-foreground">Comments</span>
+              </div>
+              <div className="text-2xl font-bold">{formatNumber(parseInt(profile.totalComments?.toString() || '0'))}</div>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Posts Table - Takes remaining height, filter is inside */}
         {posts.length > 0 ? (

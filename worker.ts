@@ -3,12 +3,13 @@
 /**
  * Background Worker Process
  *
- * Processes media caching jobs in the background using BullMQ
+ * Processes background jobs using BullMQ
  *
  * Usage:
  *   pnpm tsx worker.ts
  *
  * Environment Variables:
+ *   QUEUE_NAME - Queue to process: 'all', 'media-cache', 'profile-monitor' (default: 'all')
  *   REDIS_HOST - Redis server host (default: localhost)
  *   REDIS_PORT - Redis server port (default: 6379)
  *   REDIS_PASSWORD - Redis password (optional)
@@ -16,39 +17,65 @@
  */
 
 import { mediaCacheWorker } from './src/lib/queue/media-cache-worker'
+import { profileMonitorWorker } from './src/lib/queue/profile-monitor-worker'
 
-console.log('🚀 Starting Media Cache Worker...')
+const queueName = process.env.QUEUE_NAME || 'all'
+
+console.log('🚀 Starting Background Workers...')
 console.log(`📋 Worker Process ID: ${process.pid}`)
+console.log(`🎯 Queue Mode: ${queueName}`)
+console.log(`🔗 Redis URL: ${process.env.REDIS_URL || 'localhost:6379'}`)
+console.log(`⏰ Timestamp: ${new Date().toISOString()}`)
+console.log('─'.repeat(60))
+
+const activeWorkers: Array<{ close: () => Promise<void> }> = []
+
+// Start workers based on queue name
+if (queueName === 'all' || queueName === 'media-cache') {
+  console.log('📦 Starting Media Cache Worker...')
+  activeWorkers.push(mediaCacheWorker)
+  console.log('✅ Media Cache Worker added to active workers')
+}
+
+if (queueName === 'all' || queueName === 'profile-monitor') {
+  console.log('👁️ Starting Profile Monitor Worker...')
+  activeWorkers.push(profileMonitorWorker)
+  console.log('✅ Profile Monitor Worker added to active workers')
+}
+
+if (activeWorkers.length === 0) {
+  console.error(`❌ Invalid QUEUE_NAME: ${queueName}. Valid values: 'all', 'media-cache', 'profile-monitor'`)
+  process.exit(1)
+}
+
+console.log('─'.repeat(60))
 
 // Graceful shutdown handling
-process.on('SIGTERM', async () => {
-  console.log('📥 Received SIGTERM, shutting down gracefully...')
-  await mediaCacheWorker.close()
+const shutdown = async () => {
+  console.log('📥 Shutting down gracefully...')
+  await Promise.all(activeWorkers.map(worker => worker.close()))
   process.exit(0)
-})
+}
 
-process.on('SIGINT', async () => {
-  console.log('📥 Received SIGINT, shutting down gracefully...')
-  await mediaCacheWorker.close()
-  process.exit(0)
-})
+process.on('SIGTERM', shutdown)
+process.on('SIGINT', shutdown)
 
 process.on('uncaughtException', async (error) => {
   console.error('❌ Uncaught Exception:', error)
-  await mediaCacheWorker.close()
+  await Promise.all(activeWorkers.map(worker => worker.close()))
   process.exit(1)
 })
 
 process.on('unhandledRejection', async (reason, promise) => {
   console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason)
-  await mediaCacheWorker.close()
+  await Promise.all(activeWorkers.map(worker => worker.close()))
   process.exit(1)
 })
 
-console.log('✅ Media Cache Worker is running and ready to process jobs')
-console.log('🛑 Press Ctrl+C to stop the worker')
+console.log(`✅ Workers are running and ready to process jobs (${activeWorkers.length} active)`)
+console.log('🛑 Press Ctrl+C to stop the workers')
 
 // Keep the process alive
 setInterval(() => {
-  // This keeps the process alive while the worker handles jobs
+  // This keeps the process alive while the workers handle jobs
 }, 60000) // Check every minute

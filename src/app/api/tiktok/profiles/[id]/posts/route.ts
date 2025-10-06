@@ -15,6 +15,7 @@ export async function GET(
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100)
     const contentType = searchParams.get('contentType')
     const search = searchParams.get('search') || ''
+    const includeHistory = searchParams.get('includeHistory') === 'true'
 
     const skip = (page - 1) * limit
 
@@ -45,6 +46,14 @@ export async function GET(
     const [posts, total] = await Promise.all([
       prisma.tiktokPost.findMany({
         where,
+        include: includeHistory ? {
+          metricsHistory: {
+            orderBy: {
+              recordedAt: 'desc'
+            },
+            take: 30 // Last 30 history entries
+          }
+        } : undefined,
         orderBy: {
           publishedAt: 'desc'
         },
@@ -102,7 +111,13 @@ export async function GET(
           viewCount: post.viewCount?.toString() || '0',
           coverUrl: presignedCoverUrls[index],
           authorAvatar: presignedAvatarUrls[index],
-          images: images
+          images: images,
+          metricsHistory: includeHistory && (post as any).metricsHistory
+            ? (post as any).metricsHistory.map((h: any) => ({
+                ...h,
+                viewCount: h.viewCount?.toString() || '0'
+              }))
+            : undefined
         }
       })
     )

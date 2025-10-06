@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Dialog,
   DialogContent,
@@ -16,9 +17,11 @@ import { ExternalLink, Users, Heart, Video, CheckCircle } from 'lucide-react'
 
 interface ProfilesTableProps {
   profiles: TikTokProfile[]
+  onProfilesChange?: () => void
 }
 
-export function ProfilesTable({ profiles }: ProfilesTableProps) {
+export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps) {
+  const router = useRouter()
   const [selectedProfile, setSelectedProfile] = useState<TikTokProfile | null>(null)
 
   const formatNumber = (num?: number | null): string => {
@@ -43,10 +46,39 @@ export function ProfilesTable({ profiles }: ProfilesTableProps) {
     setSelectedProfile(profile)
   }
 
+  const handleRowClick = (profile: TikTokProfile) => {
+    router.push(`/profiles/${profile.handle}`)
+  }
+
+  const handleToggleOwnProfile = async (profileId: string, isOwn: boolean) => {
+    try {
+      const response = await fetch(`/api/tiktok/profiles/${profileId}/own`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ isOwnProfile: isOwn })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update profile')
+      }
+
+      // Trigger parent refresh
+      if (onProfilesChange) {
+        onProfilesChange()
+      }
+    } catch (err) {
+      console.error('Failed to toggle own profile:', err)
+      throw err
+    }
+  }
+
   // Create columns with handlers
   const columns = useMemo(() => createProfilesTableColumns({
-    onPreviewProfile: handlePreviewProfile
-  }), [])
+    onPreviewProfile: handlePreviewProfile,
+    onToggleOwnProfile: handleToggleOwnProfile
+  }), [onProfilesChange])
 
   return (
     <>
@@ -56,6 +88,7 @@ export function ProfilesTable({ profiles }: ProfilesTableProps) {
         searchKey="handle"
         searchPlaceholder="Search profiles..."
         showPagination={false}
+        onRowClick={handleRowClick}
       />
 
       {/* Profile Preview Dialog */}
@@ -154,7 +187,7 @@ export function ProfilesTable({ profiles }: ProfilesTableProps) {
                     Posts from this profile in your database
                   </p>
                   <Button asChild>
-                    <a href={`/profiles/${selectedProfile.id}`}>
+                    <a href={`/profiles/${selectedProfile.handle}`}>
                       View All Posts
                     </a>
                   </Button>

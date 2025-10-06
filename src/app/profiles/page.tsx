@@ -81,7 +81,7 @@ export default function ProfilesPage() {
           </CardContent>
         </Card>
       ) : profiles.length > 0 ? (
-        <ProfilesTable profiles={profiles} />
+        <ProfilesTable profiles={profiles} onProfilesChange={handleRefresh} />
       ) : loading ? (
         <Card>
           <CardContent className="flex items-center justify-center py-12">

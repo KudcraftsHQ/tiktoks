@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { ColumnDef } from '@tanstack/react-table'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,7 +12,11 @@ import {
   Video,
   Eye,
   ArrowUpDown,
-  CheckCircle
+  CheckCircle,
+  MessageCircle,
+  Share2,
+  Bookmark,
+  Star
 } from 'lucide-react'
 import { createSortableHeader } from '@/components/ui/data-table'
 import Link from 'next/link'
@@ -24,29 +29,50 @@ export interface TikTokProfile {
   avatarId?: string // Cache asset ID (for reference, usually not used directly in UI)
   bio?: string
   verified: boolean
+
+  // Deprecated - kept for backwards compatibility
   followerCount?: number
   followingCount?: number
   videoCount?: number
   likeCount?: number
+
+  // Aggregated metrics from posts
+  totalPosts?: number
+  totalViews?: string | bigint // BigInt serialized as string
+  totalLikes?: string | bigint
+  totalShares?: string | bigint
+  totalComments?: string | bigint
+  totalSaves?: string | bigint
+
+  // Monitoring
+  monitoringEnabled?: boolean
+  lastMonitoringRun?: string
+  nextMonitoringRun?: string
+
+  // Own profile flag
+  isOwnProfile?: boolean
+
   createdAt: string
   updatedAt: string
-  _count: {
+  _count?: {
     posts: number
   }
 }
 
 interface ProfilesTableColumnsProps {
   onPreviewProfile: (profile: TikTokProfile) => void
+  onToggleOwnProfile?: (profileId: string, isOwn: boolean) => Promise<void>
 }
 
-const formatNumber = (num?: number | null): string => {
+const formatNumber = (num?: number | string | bigint | null): string => {
   if (!num) return '0'
-  if (num >= 1000000) {
-    return `${(num / 1000000).toFixed(1)}M`
-  } else if (num >= 1000) {
-    return `${(num / 1000).toFixed(1)}K`
+  const value = typeof num === 'string' ? parseInt(num) : typeof num === 'bigint' ? Number(num) : num
+  if (value >= 1000000) {
+    return `${(value / 1000000).toFixed(1)}M`
+  } else if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}K`
   }
-  return num.toString()
+  return value.toString()
 }
 
 const formatDate = (dateString: string): string => {
@@ -57,8 +83,44 @@ const formatDate = (dateString: string): string => {
   )
 }
 
+interface OwnProfileToggleProps {
+  profile: TikTokProfile
+  onToggle?: (profileId: string, isOwn: boolean) => Promise<void>
+}
+
+function OwnProfileToggle({ profile, onToggle }: OwnProfileToggleProps) {
+  const [isToggling, setIsToggling] = React.useState(false)
+
+  const handleToggle = async () => {
+    if (!onToggle) return
+
+    setIsToggling(true)
+    try {
+      await onToggle(profile.id, !profile.isOwnProfile)
+    } finally {
+      setIsToggling(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+      <Button
+        variant={profile.isOwnProfile ? "default" : "outline"}
+        size="sm"
+        onClick={handleToggle}
+        disabled={isToggling || !onToggle}
+        className="gap-1"
+      >
+        <Star className={`w-3 h-3 ${profile.isOwnProfile ? 'fill-current' : ''}`} />
+        {profile.isOwnProfile ? 'Mine' : 'Mark'}
+      </Button>
+    </div>
+  )
+}
+
 export const createProfilesTableColumns = ({
-  onPreviewProfile
+  onPreviewProfile,
+  onToggleOwnProfile
 }: ProfilesTableColumnsProps): ColumnDef<TikTokProfile>[] => [
   {
     accessorKey: 'handle',
@@ -66,34 +128,32 @@ export const createProfilesTableColumns = ({
     cell: ({ row }) => {
       const profile = row.original
       return (
-        <Link href={`/profiles/${profile.id}`} className="block hover:opacity-75 transition-opacity">
-          <div className="flex items-center space-x-3">
-            {profile.avatar ? (
-              <img
-                src={profile.avatar}
-                alt={`${profile.handle} avatar`}
-                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-              />
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                <User className="w-4 h-4 text-muted-foreground" />
-              </div>
-            )}
-            <div>
-              <div className="flex items-center space-x-1">
-                <span className="font-medium">@{profile.handle}</span>
-                {profile.verified && (
-                  <CheckCircle className="w-4 h-4 text-blue-500" />
-                )}
-              </div>
-              {profile.nickname && (
-                <div className="text-sm text-muted-foreground">
-                  {profile.nickname}
-                </div>
+        <div className="flex items-center space-x-3">
+          {profile.avatar ? (
+            <img
+              src={profile.avatar}
+              alt={`${profile.handle} avatar`}
+              className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+              <User className="w-4 h-4 text-muted-foreground" />
+            </div>
+          )}
+          <div>
+            <div className="flex items-center space-x-1">
+              <span className="font-medium">@{profile.handle}</span>
+              {profile.verified && (
+                <CheckCircle className="w-4 h-4 text-blue-500" />
               )}
             </div>
+            {profile.nickname && (
+              <div className="text-sm text-muted-foreground">
+                {profile.nickname}
+              </div>
+            )}
           </div>
-        </Link>
+        </div>
       )
     }
   },
@@ -112,66 +172,73 @@ export const createProfilesTableColumns = ({
     }
   },
   {
-    accessorKey: 'followerCount',
-    header: createSortableHeader('Followers'),
+    accessorKey: 'totalPosts',
+    header: createSortableHeader('Posts'),
     cell: ({ row }) => {
       const profile = row.original
       return (
-        <div className="flex items-center space-x-1">
-          <Users className="w-4 h-4 text-muted-foreground" />
-          <span>{formatNumber(profile.followerCount)}</span>
+        <div className="text-center">
+          <span>{formatNumber(profile.totalPosts)}</span>
         </div>
       )
     }
   },
   {
-    accessorKey: 'followingCount',
-    header: createSortableHeader('Following'),
+    accessorKey: 'totalViews',
+    header: createSortableHeader('Views'),
     cell: ({ row }) => {
       const profile = row.original
       return (
-        <div className="flex items-center space-x-1">
-          <User className="w-4 h-4 text-muted-foreground" />
-          <span>{formatNumber(profile.followingCount)}</span>
+        <div className="text-center">
+          <span>{formatNumber(profile.totalViews)}</span>
         </div>
       )
     }
   },
   {
-    accessorKey: 'videoCount',
-    header: createSortableHeader('Videos'),
-    cell: ({ row }) => {
-      const profile = row.original
-      return (
-        <div className="flex items-center space-x-1">
-          <Video className="w-4 h-4 text-muted-foreground" />
-          <span>{formatNumber(profile.videoCount)}</span>
-        </div>
-      )
-    }
-  },
-  {
-    accessorKey: 'likeCount',
+    accessorKey: 'totalLikes',
     header: createSortableHeader('Likes'),
     cell: ({ row }) => {
       const profile = row.original
       return (
-        <div className="flex items-center space-x-1">
-          <Heart className="w-4 h-4 text-red-500" />
-          <span>{formatNumber(profile.likeCount)}</span>
+        <div className="text-center">
+          <span>{formatNumber(profile.totalLikes)}</span>
         </div>
       )
     }
   },
   {
-    accessorKey: '_count.posts',
-    header: createSortableHeader('Saved Posts'),
+    accessorKey: 'totalComments',
+    header: createSortableHeader('Comments'),
     cell: ({ row }) => {
       const profile = row.original
       return (
-        <div className="flex items-center space-x-1">
-          <Eye className="w-4 h-4 text-muted-foreground" />
-          <span>{formatNumber(profile._count.posts)}</span>
+        <div className="text-center">
+          <span>{formatNumber(profile.totalComments)}</span>
+        </div>
+      )
+    }
+  },
+  {
+    accessorKey: 'totalShares',
+    header: createSortableHeader('Shares'),
+    cell: ({ row }) => {
+      const profile = row.original
+      return (
+        <div className="text-center">
+          <span>{formatNumber(profile.totalShares)}</span>
+        </div>
+      )
+    }
+  },
+  {
+    accessorKey: 'totalSaves',
+    header: createSortableHeader('Saves'),
+    cell: ({ row }) => {
+      const profile = row.original
+      return (
+        <div className="text-center">
+          <span>{formatNumber(profile.totalSaves)}</span>
         </div>
       )
     }
@@ -182,9 +249,22 @@ export const createProfilesTableColumns = ({
     cell: ({ row }) => {
       const profile = row.original
       return (
-        <span className="text-sm text-muted-foreground">
-          {formatDate(profile.updatedAt)}
-        </span>
+        <div className="text-center">
+          <span className="text-sm text-muted-foreground">
+            {formatDate(profile.updatedAt)}
+          </span>
+        </div>
+      )
+    }
+  },
+  {
+    accessorKey: 'isOwnProfile',
+    header: 'Own Profile',
+    cell: ({ row }) => {
+      const profile = row.original
+
+      return (
+        <OwnProfileToggle profile={profile} onToggle={onToggleOwnProfile} />
       )
     }
   },
@@ -195,7 +275,7 @@ export const createProfilesTableColumns = ({
       const profile = row.original
 
       return (
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
           <Button
             variant="outline"
             size="sm"
@@ -205,7 +285,7 @@ export const createProfilesTableColumns = ({
             <ExternalLink className="w-3 h-3" />
           </Button>
 
-          <Link href={`/profiles/${profile.id}`}>
+          <Link href={`/profiles/${profile.handle}`}>
             <Button
               variant="default"
               size="sm"

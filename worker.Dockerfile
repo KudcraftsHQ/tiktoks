@@ -21,6 +21,7 @@ FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV production
+ENV QUEUE_NAME all
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 workeruser

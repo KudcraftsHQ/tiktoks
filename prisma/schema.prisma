@@ -50,17 +50,39 @@ model TiktokProfile {
   avatarId    String?  @db.Uuid // Cache asset ID reference
   bio         String?  // Profile bio/description
   verified    Boolean  @default(false)
+
+  // Deprecated - kept for backwards compatibility, not used
   followerCount Int?   @default(0)
   followingCount Int?  @default(0)
   videoCount  Int?     @default(0)
   likeCount   Int?     @default(0)
+
+  // Aggregated metrics from posts (actually used)
+  totalPosts      Int      @default(0)
+  totalViews      BigInt   @default(0)
+  totalLikes      BigInt   @default(0)
+  totalShares     BigInt   @default(0)
+  totalComments   BigInt   @default(0)
+  totalSaves      BigInt   @default(0)
+
+  // Monitoring fields
+  monitoringEnabled Boolean  @default(false)
+  lastMonitoringRun DateTime?
+  nextMonitoringRun DateTime?
+
+  // Own profile flag
+  isOwnProfile Boolean @default(false)
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   posts       TiktokPost[]
+  monitoringLogs ProfileMonitoringLog[]
 
   @@map("tiktok_profiles")
   @@index([handle])
+  @@index([monitoringEnabled, nextMonitoringRun])
+  @@index([isOwnProfile])
 }
 
 model TiktokPost {
@@ -114,6 +136,7 @@ model TiktokPost {
   profile      TiktokProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   collections  CollectionPost[]
   remixes      RemixPost[]
+  metricsHistory TikTokPostMetricsHistory[]
 
   @@map("tiktok_posts")
   @@index([profileId])
@@ -184,5 +207,42 @@ model ProductContext {
 
   @@map("product_contexts")
   @@index([title])
+}
+
+// TikTok Post Metrics History for tracking engagement over time
+
+model TikTokPostMetricsHistory {
+  id           String   @id @default(cuid())
+  postId       String
+  viewCount    BigInt?
+  likeCount    Int?
+  shareCount   Int?
+  commentCount Int?
+  saveCount    Int?
+  recordedAt   DateTime @default(now())
+
+  post         TiktokPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("tiktok_post_metrics_history")
+  @@index([postId, recordedAt])
+}
+
+// Profile Monitoring Logs for tracking monitoring execution
+
+model ProfileMonitoringLog {
+  id            String    @id @default(cuid())
+  profileId     String
+  status        String    // 'pending', 'running', 'completed', 'failed'
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+  postsScraped  Int?
+  pagesScraped  Int?
+  error         String?
+
+  profile       TiktokProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("profile_monitoring_logs")
+  @@index([profileId, startedAt])
+  @@index([status])
 }
 

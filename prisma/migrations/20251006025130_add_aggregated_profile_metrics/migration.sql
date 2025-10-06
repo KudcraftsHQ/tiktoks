@@ -1,0 +1,7 @@
+-- AlterTable
+ALTER TABLE "public"."tiktok_profiles" ADD COLUMN     "totalComments" BIGINT NOT NULL DEFAULT 0,
+ADD COLUMN     "totalLikes" BIGINT NOT NULL DEFAULT 0,
+ADD COLUMN     "totalPosts" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "totalSaves" BIGINT NOT NULL DEFAULT 0,
+ADD COLUMN     "totalShares" BIGINT NOT NULL DEFAULT 0,
+ADD COLUMN     "totalViews" BIGINT NOT NULL DEFAULT 0;

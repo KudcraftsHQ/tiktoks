@@ -148,21 +148,13 @@ export async function POST(request: NextRequest) {
           nickname: profileData.nickname,
           avatarId: profileAvatarId,
           bio: profileData.bio,
-          verified: profileData.verified || false,
-          followerCount: profileData.followerCount || 0,
-          followingCount: profileData.followingCount || 0,
-          videoCount: profileData.videoCount || 0,
-          likeCount: profileData.likeCount || 0
+          verified: profileData.verified || false
         },
         update: {
           nickname: profileData.nickname,
           avatarId: profileAvatarId,
           bio: profileData.bio,
           verified: profileData.verified || false,
-          followerCount: profileData.followerCount || 0,
-          followingCount: profileData.followingCount || 0,
-          videoCount: profileData.videoCount || 0,
-          likeCount: profileData.likeCount || 0,
           updatedAt: new Date()
         }
       })
@@ -273,15 +265,39 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const results = {
-      profile,
-      posts: allPostResults,
-      stats: {
-        postsCreated: createdCount,
-        postsUpdated: updatedCount,
-        totalPosts: postsData.length
+    // Calculate aggregated metrics from all profile posts
+    console.log(`🔄 [BulkUpsert] Calculating aggregated metrics for profile: ${profileData.handle}`)
+    const aggregatedMetrics = await prisma.tiktokPost.aggregate({
+      where: { profileId: profile.id },
+      _count: { id: true },
+      _sum: {
+        viewCount: true,
+        likeCount: true,
+        shareCount: true,
+        commentCount: true,
+        saveCount: true
       }
-    }
+    })
+
+    // Update profile with aggregated metrics
+    await prisma.tiktokProfile.update({
+      where: { id: profile.id },
+      data: {
+        totalPosts: aggregatedMetrics._count.id,
+        totalViews: aggregatedMetrics._sum.viewCount || BigInt(0),
+        totalLikes: BigInt(aggregatedMetrics._sum.likeCount || 0),
+        totalShares: BigInt(aggregatedMetrics._sum.shareCount || 0),
+        totalComments: BigInt(aggregatedMetrics._sum.commentCount || 0),
+        totalSaves: BigInt(aggregatedMetrics._sum.saveCount || 0),
+        updatedAt: new Date()
+      }
+    })
+
+    console.log(`✅ [BulkUpsert] Updated profile metrics:`, {
+      totalPosts: aggregatedMetrics._count.id,
+      totalViews: aggregatedMetrics._sum.viewCount?.toString() || '0',
+      totalLikes: aggregatedMetrics._sum.likeCount || 0
+    })
 
     console.log(`✅ [BulkUpsert] Completed bulk upsert for profile ${profileData.handle}:`, {
       totalPosts: postsData.length,
@@ -289,6 +305,15 @@ export async function POST(request: NextRequest) {
       postsUpdated: updatedCount,
       profileAvatarCached: !!profileAvatarId
     })
+
+    // Return stats only (don't return full profile/posts to avoid BigInt serialization issues)
+    const results = {
+      stats: {
+        postsCreated: createdCount,
+        postsUpdated: updatedCount,
+        totalPosts: postsData.length
+      }
+    }
 
     return NextResponse.json(results, { status: 200 })
   } catch (error) {

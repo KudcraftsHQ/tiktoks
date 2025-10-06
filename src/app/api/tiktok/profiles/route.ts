@@ -13,11 +13,19 @@ export async function GET(request: NextRequest) {
     const verified = searchParams.get('verified')
     const minFollowers = searchParams.get('minFollowers')
     const maxFollowers = searchParams.get('maxFollowers')
+    const isOwnProfile = searchParams.get('isOwnProfile')
 
     const skip = (page - 1) * limit
 
     // Build where clause
     const where: any = {}
+
+    // Filter by own profile flag
+    if (isOwnProfile === 'true') {
+      where.isOwnProfile = true
+    } else if (isOwnProfile === 'false') {
+      where.isOwnProfile = false
+    }
 
     if (search) {
       where.OR = [
@@ -88,7 +96,13 @@ export async function GET(request: NextRequest) {
         const avatarUrl = await cacheAssetService.getUrl(profile.avatarId)
         return {
           ...profile,
-          avatar: avatarUrl
+          avatar: avatarUrl,
+          // Serialize BigInt fields to strings for JSON
+          totalViews: profile.totalViews?.toString() || '0',
+          totalLikes: profile.totalLikes?.toString() || '0',
+          totalShares: profile.totalShares?.toString() || '0',
+          totalComments: profile.totalComments?.toString() || '0',
+          totalSaves: profile.totalSaves?.toString() || '0'
         }
       })
     )
