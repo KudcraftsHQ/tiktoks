@@ -128,10 +128,31 @@ class ProfileMonitorWorker {
 
       // Loop through all pages
       while (hasMore) {
-        console.log(`📄 [ProfileMonitorWorker] Fetching page ${pagesScraped + 1} for @${profile.handle}`)
+        console.log(`📄 [ProfileMonitorWorker] Fetching page ${pagesScraped + 1} for @${profile.handle}`, {
+          currentCursor: maxCursor,
+          pagesScrapedSoFar: pagesScraped,
+          totalPostsSoFar: totalPostsScraped
+        })
 
         // Scrape profile videos
-        const result = await scrapeProfileVideos(profile.handle, maxCursor, true)
+        let result
+        try {
+          result = await scrapeProfileVideos(profile.handle, maxCursor, true)
+          console.log(`✅ [ProfileMonitorWorker] Page ${pagesScraped + 1} scraping completed:`, {
+            postsCount: result.posts.length,
+            hasMore: result.hasMore,
+            maxCursor: result.maxCursor
+          })
+        } catch (scrapeError) {
+          console.error(`❌ [ProfileMonitorWorker] Scraping error on page ${pagesScraped + 1}:`, {
+            error: scrapeError instanceof Error ? scrapeError.message : String(scrapeError),
+            errorType: scrapeError?.constructor?.name,
+            stack: scrapeError instanceof Error ? scrapeError.stack : undefined,
+            handle: profile.handle,
+            cursor: maxCursor
+          })
+          throw new Error(`Scraping failed on page ${pagesScraped + 1}: ${scrapeError instanceof Error ? scrapeError.message : String(scrapeError)}`)
+        }
 
         pagesScraped++
         console.log(`✅ [ProfileMonitorWorker] Page ${pagesScraped} fetched: ${result.posts.length} posts`)
@@ -179,25 +200,49 @@ class ProfileMonitorWorker {
 
           // Call bulk upsert API (internal call)
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-          const upsertResponse = await fetch(`${baseUrl}/api/tiktok/posts/bulk`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              profile: profileData,
-              posts: postsForUpsert
-            })
+          console.log(`🔗 [ProfileMonitorWorker] Calling bulk upsert API:`, {
+            url: `${baseUrl}/api/tiktok/posts/bulk`,
+            profileHandle: profileData.handle,
+            postsCount: postsForUpsert.length
           })
 
-          if (!upsertResponse.ok) {
-            const errorText = await upsertResponse.text()
-            throw new Error(`Bulk upsert failed: ${errorText}`)
-          }
+          try {
+            const upsertResponse = await fetch(`${baseUrl}/api/tiktok/posts/bulk`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                profile: profileData,
+                posts: postsForUpsert
+              })
+            })
 
-          const upsertResult = await upsertResponse.json()
-          totalPostsScraped += upsertResult.stats.totalPosts
-          console.log(`✅ [ProfileMonitorWorker] Upserted ${upsertResult.stats.totalPosts} posts from page ${pagesScraped}`)
+            console.log(`📡 [ProfileMonitorWorker] Bulk upsert response status:`, {
+              status: upsertResponse.status,
+              statusText: upsertResponse.statusText,
+              ok: upsertResponse.ok
+            })
+
+            if (!upsertResponse.ok) {
+              const errorText = await upsertResponse.text()
+              console.error(`❌ [ProfileMonitorWorker] Bulk upsert failed with status ${upsertResponse.status}:`, errorText)
+              throw new Error(`Bulk upsert failed (${upsertResponse.status}): ${errorText}`)
+            }
+
+            const upsertResult = await upsertResponse.json()
+            totalPostsScraped += upsertResult.stats.totalPosts
+            console.log(`✅ [ProfileMonitorWorker] Upserted ${upsertResult.stats.totalPosts} posts from page ${pagesScraped}`, {
+              stats: upsertResult.stats
+            })
+          } catch (fetchError) {
+            console.error(`❌ [ProfileMonitorWorker] Fetch error during bulk upsert:`, {
+              error: fetchError instanceof Error ? fetchError.message : String(fetchError),
+              errorType: fetchError?.constructor?.name,
+              stack: fetchError instanceof Error ? fetchError.stack : undefined
+            })
+            throw new Error(`Bulk upsert fetch failed: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`)
+          }
         }
 
         // Check if there are more pages
@@ -252,17 +297,30 @@ class ProfileMonitorWorker {
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      console.error(`❌ [ProfileMonitorWorker] Failed to monitor profile ${profileId}:`, errorMessage)
+      const errorStack = error instanceof Error ? error.stack : undefined
+
+      console.error(`❌ [ProfileMonitorWorker] Failed to monitor profile ${profileId}:`, {
+        message: errorMessage,
+        errorType: error?.constructor?.name,
+        stack: errorStack,
+        profileId,
+        monitoringLogId: monitoringLog.id
+      })
 
       // Update monitoring log with failure
-      await this.prisma.profileMonitoringLog.update({
-        where: { id: monitoringLog.id },
-        data: {
-          status: 'failed',
-          completedAt: new Date(),
-          error: errorMessage
-        }
-      })
+      try {
+        await this.prisma.profileMonitoringLog.update({
+          where: { id: monitoringLog.id },
+          data: {
+            status: 'failed',
+            completedAt: new Date(),
+            error: errorMessage
+          }
+        })
+        console.log(`📝 [ProfileMonitorWorker] Updated monitoring log ${monitoringLog.id} with failure status`)
+      } catch (updateError) {
+        console.error(`❌ [ProfileMonitorWorker] Failed to update monitoring log:`, updateError)
+      }
 
       return {
         success: false,
