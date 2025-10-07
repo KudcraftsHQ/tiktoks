@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Edit, Trash2, Download, Sparkles } from 'lucide-react'
+import { Edit, Trash2, Download, Sparkles, Bookmark } from 'lucide-react'
 
 interface RemixSlide {
   id: string
@@ -22,14 +22,16 @@ interface RemixCardProps {
     description?: string
     generationType: string
     createdAt: string
+    bookmarked?: boolean
     slides: RemixSlide[]
   }
   onEdit: (id: string) => void
   onDelete: (id: string) => void
   onDownload: (id: string) => void
+  onToggleBookmark: (id: string) => void
 }
 
-export function RemixCard({ remix, onEdit, onDelete, onDownload }: RemixCardProps) {
+export function RemixCard({ remix, onEdit, onDelete, onDownload, onToggleBookmark }: RemixCardProps) {
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -46,6 +48,14 @@ export function RemixCard({ remix, onEdit, onDelete, onDownload }: RemixCardProp
             )}
           </div>
           <div className="flex items-center gap-1 ml-2">
+            <Button
+              onClick={() => onToggleBookmark(remix.id)}
+              size="sm"
+              variant={remix.bookmarked ? "default" : "outline"}
+              title={remix.bookmarked ? "Remove bookmark" : "Bookmark"}
+            >
+              <Bookmark className={`h-3 w-3 ${remix.bookmarked ? 'fill-current' : ''}`} />
+            </Button>
             <Button
               onClick={() => onEdit(remix.id)}
               size="sm"

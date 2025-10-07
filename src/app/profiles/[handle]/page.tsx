@@ -20,7 +20,8 @@ import {
   User,
   Activity,
   Play,
-  Eye
+  Eye,
+  ChevronLeft
 } from 'lucide-react'
 import { TikTokPost } from '@/components/posts-table-columns'
 import { TikTokProfile } from '@/components/profiles-table-columns'
@@ -28,6 +29,8 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { designTokens } from '@/lib/design-tokens'
 import { PageLayout } from '@/components/PageLayout'
+import { PostingActivityHeatmap } from '@/components/PostingActivityHeatmap'
+import { SortingState } from '@tanstack/react-table'
 
 interface ProfilePostsResult {
   posts: TikTokPost[]
@@ -53,6 +56,10 @@ export default function ProfileDetailPage() {
   const [monitoringEnabled, setMonitoringEnabled] = useState(false)
   const [monitoringLoading, setMonitoringLoading] = useState(false)
   const [triggerLoading, setTriggerLoading] = useState(false)
+  const [activityData, setActivityData] = useState<Array<{ date: string; count: number }>>([])
+  const [sorting, setSorting] = useState<SortingState>([])
+  const [firstPostDate, setFirstPostDate] = useState<string | null>(null)
+  const [activityLoading, setActivityLoading] = useState(false)
 
 
   const fetchProfile = useCallback(async () => {
@@ -92,6 +99,13 @@ export default function ProfileDetailPage() {
         params.append('contentType', contentTypeFilter)
       }
 
+      // Add sorting parameters
+      if (sorting.length > 0) {
+        const sort = sorting[0]
+        params.append('sortBy', sort.id)
+        params.append('sortOrder', sort.desc ? 'desc' : 'asc')
+      }
+
       const response = await fetch(`/api/tiktok/profiles/${profile.id}/posts?${params.toString()}`)
       const result: ProfilePostsResult = await response.json()
 
@@ -107,12 +121,36 @@ export default function ProfileDetailPage() {
     } finally {
       setLoading(false)
     }
-  }, [profile?.id, currentPage, contentTypeFilter])
+  }, [profile?.id, currentPage, contentTypeFilter, sorting])
+
+  const fetchActivityData = useCallback(async () => {
+    if (!profile?.id) return
+
+    setActivityLoading(true)
+    try {
+      const response = await fetch(`/api/tiktok/profiles/${profile.id}/activity`)
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch activity data')
+      }
+
+      setActivityData(result.data || [])
+      setFirstPostDate(result.firstPostDate || null)
+    } catch (err) {
+      console.error('Failed to fetch activity data:', err)
+      setActivityData([])
+      setFirstPostDate(null)
+    } finally {
+      setActivityLoading(false)
+    }
+  }, [profile?.id])
 
   const handleRefresh = useCallback(() => {
     fetchProfile()
     fetchProfilePosts()
-  }, [fetchProfile, fetchProfilePosts])
+    fetchActivityData()
+  }, [fetchProfile, fetchProfilePosts, fetchActivityData])
 
   const handleMonitoringToggle = useCallback(async (enabled: boolean) => {
     if (!profile?.id) return
@@ -187,6 +225,10 @@ export default function ProfileDetailPage() {
     fetchProfilePosts()
   }, [fetchProfilePosts])
 
+  useEffect(() => {
+    fetchActivityData()
+  }, [fetchActivityData])
+
   const formatNumber = (num?: number | null): string => {
     if (!num) return '0'
     if (num >= 1000000) {
@@ -214,16 +256,63 @@ export default function ProfileDetailPage() {
 
   if (profileLoading) {
     return (
-      <div className={`${designTokens.container.full} ${designTokens.spacing.page.responsive}`}>
-        <Card>
-          <CardContent className={`${designTokens.spacing.cardContent.responsive} flex items-center justify-center py-12`}>
-            <div className="flex items-center space-x-2">
-              <RefreshCw className="w-5 h-5 animate-spin" />
-              <span>Loading profile...</span>
+      <PageLayout
+        title={
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-full bg-muted animate-pulse flex-shrink-0" />
+            <div className="h-6 w-32 bg-muted animate-pulse rounded" />
+          </div>
+        }
+        headerActions={
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-24 bg-muted animate-pulse rounded-md" />
+            <div className="h-9 w-32 bg-muted animate-pulse rounded-md" />
+            <div className="h-9 w-24 bg-muted animate-pulse rounded-md" />
+            <div className="h-9 w-20 bg-muted animate-pulse rounded-md" />
+          </div>
+        }
+      >
+        <div className="h-full grid grid-rows-[auto_1fr] min-h-0 gap-4">
+          {/* Profile Metrics and Activity Skeleton */}
+          <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-4">
+            {/* Metrics Grid Skeleton - 2x3 */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-lg bg-muted animate-pulse" />
+                    <div className="h-4 w-16 bg-muted animate-pulse rounded" />
+                  </div>
+                  <div className="h-8 w-20 bg-muted animate-pulse rounded" />
+                </div>
+              ))}
             </div>
-          </CardContent>
-        </Card>
-      </div>
+
+            {/* Heatmap Skeleton */}
+            <div className="h-full rounded-lg border border-border bg-card">
+              <div className="p-4 pb-3">
+                <div className="h-6 w-32 bg-muted animate-pulse rounded" />
+              </div>
+              <div className="p-4 pt-0">
+                <div className="space-y-2">
+                  <div className="h-4 w-full bg-muted animate-pulse rounded" />
+                  <div className="h-24 w-full bg-muted animate-pulse rounded" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Posts Table Skeleton */}
+          <Card>
+            <CardContent className="flex items-center justify-center py-12">
+              <div className="flex items-center space-x-2">
+                <RefreshCw className="w-5 h-5 animate-spin" />
+                <span>Loading profile...</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </PageLayout>
     )
   }
 
@@ -249,6 +338,11 @@ export default function ProfileDetailPage() {
     <PageLayout
       title={
         <div className="flex items-center gap-2">
+          <Link href="/profiles">
+            <Button variant="secondary" size="icon" className="rounded-full">
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+          </Link>
           {profile.avatar ? (
             <img
               src={profile.avatar}
@@ -264,6 +358,13 @@ export default function ProfileDetailPage() {
           {profile.verified && (
             <CheckCircle className="w-5 h-5 text-blue-500" />
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(`https://www.tiktok.com/@${profile.handle}`, '_blank')}
+          >
+            <ExternalLink className="w-4 h-4" />
+          </Button>
         </div>
       }
       headerActions={
@@ -289,85 +390,90 @@ export default function ProfileDetailPage() {
             <Play className={`w-4 h-4 mr-2 ${triggerLoading ? 'animate-spin' : ''}`} />
             Update Now
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.open(`https://www.tiktok.com/@${profile.handle}`, '_blank')}
-          >
-            <ExternalLink className="w-4 h-4 mr-2" />
-            TikTok
-          </Button>
           <Button onClick={handleRefresh} disabled={loading} variant="outline" size="sm">
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          <Link href="/profiles">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back
-            </Button>
-          </Link>
         </div>
       }
     >
       <div className="h-full grid grid-rows-[auto_1fr] min-h-0 gap-4">
-        {/* Profile Metrics */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-3">
+        {/* Profile Metrics and Activity */}
+        <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-4">
+          {/* Metrics Grid - 2x3 */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="rounded-lg border border-border bg-card p-3">
+              <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
                   <Video className="w-4 h-4 text-purple-500" />
                 </div>
                 <span className="text-sm text-muted-foreground">Posts</span>
               </div>
               <div className="text-2xl font-bold">{formatNumber(profile.totalPosts)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-3">
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3">
+              <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
                   <Eye className="w-4 h-4 text-blue-500" />
                 </div>
                 <span className="text-sm text-muted-foreground">Views</span>
               </div>
               <div className="text-2xl font-bold">{formatNumber(parseInt(profile.totalViews?.toString() || '0'))}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-3">
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3">
+              <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center">
                   <Heart className="w-4 h-4 text-red-500" />
                 </div>
                 <span className="text-sm text-muted-foreground">Likes</span>
               </div>
               <div className="text-2xl font-bold">{formatNumber(parseInt(profile.totalLikes?.toString() || '0'))}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-3">
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3">
+              <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
                   <Users className="w-4 h-4 text-green-500" />
                 </div>
                 <span className="text-sm text-muted-foreground">Shares</span>
               </div>
               <div className="text-2xl font-bold">{formatNumber(parseInt(profile.totalShares?.toString() || '0'))}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-3">
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3">
+              <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center">
                   <Heart className="w-4 h-4 text-orange-500" />
                 </div>
                 <span className="text-sm text-muted-foreground">Comments</span>
               </div>
               <div className="text-2xl font-bold">{formatNumber(parseInt(profile.totalComments?.toString() || '0'))}</div>
-            </CardContent>
-          </Card>
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center">
+                  <Users className="w-4 h-4 text-pink-500" />
+                </div>
+                <span className="text-sm text-muted-foreground">Followers</span>
+              </div>
+              <div className="text-2xl font-bold">{formatNumber(profile.followerCount)}</div>
+            </div>
+          </div>
+
+          {/* Posting Activity Heatmap */}
+          {activityLoading ? (
+            <div className="h-full rounded-lg border border-border bg-card">
+              <div className="p-4 pb-3">
+                <div className="h-6 w-32 bg-muted animate-pulse rounded" />
+              </div>
+              <div className="p-4 pt-0">
+                <div className="space-y-2">
+                  <div className="h-4 w-full bg-muted animate-pulse rounded" />
+                  <div className="h-24 w-full bg-muted animate-pulse rounded" />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <PostingActivityHeatmap data={activityData} firstPostDate={firstPostDate} />
+          )}
         </div>
 
         {/* Posts Table - Takes remaining height, filter is inside */}
@@ -379,6 +485,10 @@ export default function ProfileDetailPage() {
                 value: contentTypeFilter,
                 onChange: setContentTypeFilter
               }}
+              onSortingChange={setSorting}
+              sorting={sorting}
+              enableServerSideSorting={true}
+              hiddenColumns={['authorHandle']}
             />
           </div>
         ) : loading ? (

@@ -21,6 +21,7 @@ import {
 import { createSortableHeader } from '@/components/ui/data-table'
 import { getProxiedImageUrl } from '@/lib/image-proxy'
 import { SmartImage } from '@/components/SmartImage'
+import { MiniSparkline } from '@/components/MiniSparkline'
 
 export interface TikTokPost {
   id: string
@@ -54,12 +55,21 @@ export interface TikTokPost {
     cacheAssetId?: string // Cache asset ID (for reference, usually not used directly in UI)
   }>
   publishedAt: string
+  metricsHistory?: Array<{
+    viewCount: number
+    likeCount: number
+    shareCount: number
+    commentCount: number
+    saveCount: number
+    recordedAt: string
+  }>
 }
 
 interface PostsTableColumnsProps {
   onPreviewPost: (post: TikTokPost) => void
   onOpenImageGallery?: (images: Array<{ url: string; width: number; height: number }>, initialIndex: number) => void
   onRemixPost?: (post: TikTokPost) => void
+  onRowClick?: (post: TikTokPost) => void
 }
 
 const formatNumber = (num: number): string => {
@@ -85,10 +95,11 @@ const formatDuration = (seconds?: number): string => {
 
 const formatDate = (dateString: string): string => {
   const date = new Date(dateString)
-  return new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(
-    Math.floor((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
-    'day'
-  )
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  }).format(date)
 }
 
 const parseImages = (images: any): Array<{ url: string; width: number; height: number }> => {
@@ -109,12 +120,16 @@ const parseImages = (images: any): Array<{ url: string; width: number; height: n
 export const createPostsTableColumns = ({
   onPreviewPost,
   onOpenImageGallery,
-  onRemixPost
+  onRemixPost,
+  onRowClick
 }: PostsTableColumnsProps): ColumnDef<TikTokPost>[] => [
   {
     accessorKey: 'contentType',
     header: '',
     size: 50,
+    meta: {
+      pinned: 'left'
+    },
     cell: ({ row }) => {
       const post = row.original
       return (
@@ -147,13 +162,16 @@ export const createPostsTableColumns = ({
   {
     accessorKey: 'authorHandle',
     header: createSortableHeader('Author'),
+    meta: {
+      pinned: 'left'
+    },
     cell: ({ row }) => {
-      const post = row.original
+      const post = row.original as any
       return (
         <div className="flex items-center space-x-3 min-w-[180px]">
-          {post.authorAvatar ? (
+          {post._proxiedAuthorAvatar ? (
             <SmartImage
-              src={getProxiedImageUrl(post.authorAvatar)}
+              src={post._proxiedAuthorAvatar}
               alt={post.authorHandle}
               className="w-10 h-10 rounded-full object-cover"
               fallback={
@@ -179,28 +197,58 @@ export const createPostsTableColumns = ({
     accessorKey: 'title',
     header: createSortableHeader('Content'),
     cell: ({ row }) => {
-      const post = row.original
+      const post = row.original as any
+      const images = post._proxiedImages || []
+      const maxDisplay = 5
+      const displayImages = images.slice(0, maxDisplay)
+      const remainingCount = images.length - maxDisplay
+
       return (
         <div className="space-y-2 min-w-[200px]">
           <div className="flex items-center space-x-2">
-            {post.contentType === 'photo' && parseImages(post.images).length > 0 ? (
+            {post.contentType === 'photo' && images.length > 0 ? (
               <div className="flex space-x-1">
-                {parseImages(post.images).map((image, index) => (
-                  <SmartImage
-                    key={index}
-                    src={getProxiedImageUrl(image.url)}
-                    alt={`Photo ${index + 1}`}
-                    className="w-10 aspect-[9/16] rounded object-cover cursor-pointer hover:opacity-80 border"
-                    onClick={() => onOpenImageGallery?.(parseImages(post.images), index)}
-                  />
-                ))}
+                {displayImages.map((image: any, index: number) => {
+                  const isLast = index === displayImages.length - 1
+                  const showOverlay = isLast && remainingCount > 0
+
+                  return (
+                    <div key={index} className="relative">
+                      <SmartImage
+                        src={image._proxiedUrl}
+                        alt={`Photo ${index + 1}`}
+                        className="w-10 aspect-[9/16] rounded object-cover cursor-pointer hover:opacity-80 border"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onOpenImageGallery?.(images.map((img: any) => ({ url: img.url, width: img.width, height: img.height })), index)
+                        }}
+                      />
+                      {showOverlay && (
+                        <div
+                          className="absolute inset-0 bg-black/70 rounded flex items-center justify-center cursor-pointer hover:bg-black/80 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onOpenImageGallery?.(images.map((img: any) => ({ url: img.url, width: img.width, height: img.height })), index)
+                          }}
+                        >
+                          <span className="text-white text-xs font-bold">
+                            +{remainingCount}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
-            ) : post.coverUrl ? (
+            ) : post._proxiedCoverUrl ? (
               <SmartImage
-                src={getProxiedImageUrl(post.coverUrl)}
+                src={post._proxiedCoverUrl}
                 alt="Cover"
                 className="w-10 h-10 rounded object-cover cursor-pointer hover:opacity-80"
-                onClick={() => onPreviewPost(post)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onPreviewPost(post)
+                }}
               />
             ) : null}
           </div>
@@ -227,9 +275,58 @@ export const createPostsTableColumns = ({
     },
     cell: ({ row }) => {
       const viewCount = row.getValue('viewCount') as number
+      const post = row.original
+
+      // Build timeline from posting date to now
+      let viewHistory: number[] = []
+
+      if (post.publishedAt) {
+        const startDate = new Date(post.publishedAt)
+        const now = new Date()
+        const dataMap = new Map<string, number>()
+
+        // Map existing metrics by date
+        if (post.metricsHistory && post.metricsHistory.length > 0) {
+          post.metricsHistory.forEach(h => {
+            const dateKey = new Date(h.recordedAt).toISOString().split('T')[0]
+            dataMap.set(dateKey, Number(h.viewCount || 0))
+          })
+        }
+
+        // Fill timeline
+        let currentDate = new Date(startDate)
+        let lastValue = 0
+
+        while (currentDate <= now) {
+          const dateKey = currentDate.toISOString().split('T')[0]
+          const value = dataMap.get(dateKey)
+          if (value !== undefined) {
+            lastValue = value
+          }
+          viewHistory.push(lastValue)
+          currentDate.setDate(currentDate.getDate() + 1)
+        }
+
+        // Ensure last value is current
+        if (viewHistory.length > 0) {
+          viewHistory[viewHistory.length - 1] = viewCount
+        }
+      } else {
+        // Fallback: simple line from 0 to current
+        viewHistory = [0, viewCount]
+      }
+
       return (
-        <div className="text-center font-mono text-sm">
-          {formatNumber(viewCount)}
+        <div className="flex items-center gap-2 justify-center">
+          <div className="font-mono text-sm">
+            {formatNumber(viewCount)}
+          </div>
+          <MiniSparkline
+            data={viewHistory}
+            width={60}
+            height={20}
+            color="rgb(37, 99, 235)"
+          />
         </div>
       )
     }
@@ -353,6 +450,10 @@ export const createPostsTableColumns = ({
   {
     id: 'actions',
     header: 'Actions',
+    size: 120,
+    meta: {
+      pinned: 'right'
+    },
     cell: ({ row }) => {
       const post = row.original
 
@@ -361,7 +462,10 @@ export const createPostsTableColumns = ({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => window.open(post.tiktokUrl, '_blank')}
+            onClick={(e) => {
+              e.stopPropagation()
+              window.open(post.tiktokUrl, '_blank')
+            }}
             title="Open on TikTok"
           >
             <ExternalLink className="w-4 h-4" />
@@ -371,7 +475,10 @@ export const createPostsTableColumns = ({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => onRemixPost(post)}
+              onClick={(e) => {
+                e.stopPropagation()
+                onRemixPost(post)
+              }}
               title="Create Remix"
             >
               <Sparkles className="w-4 h-4 text-purple-600" />

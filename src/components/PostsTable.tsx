@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
@@ -12,9 +12,11 @@ import {
 import { DataTable } from '@/components/ui/data-table'
 import { createPostsTableColumns, TikTokPost } from '@/components/posts-table-columns'
 import { ImageGallery } from '@/components/ImageGallery'
-import { getProxiedImageUrl } from '@/lib/image-proxy'
+import { getProxiedImageUrl, getProxiedImageUrlById } from '@/lib/image-proxy'
 import { useRouter } from 'next/navigation'
 import { SmartImage } from '@/components/SmartImage'
+import { PostAnalyticsSheet } from '@/components/PostAnalyticsSheet'
+import { SortingState } from '@tanstack/react-table'
 
 interface PostsTableProps {
   posts: TikTokPost[]
@@ -23,12 +25,59 @@ interface PostsTableProps {
     onChange: (value: 'all' | 'video' | 'photo') => void
   }
   onPageChange?: (pageIndex: number, pageSize: number) => void
+  onSortingChange?: (sorting: SortingState) => void
+  sorting?: SortingState
   isLoading?: boolean
+  hiddenColumns?: string[]
+  enableServerSideSorting?: boolean
 }
 
-export function PostsTable({ posts, contentTypeFilter, onPageChange, isLoading }: PostsTableProps) {
+export function PostsTable({
+  posts,
+  contentTypeFilter,
+  onPageChange,
+  onSortingChange,
+  sorting,
+  isLoading,
+  hiddenColumns,
+  enableServerSideSorting = false
+}: PostsTableProps) {
   const router = useRouter()
   const [selectedPost, setSelectedPost] = useState<TikTokPost | null>(null)
+  const [analyticsPost, setAnalyticsPost] = useState<TikTokPost | null>(null)
+  const [showAnalytics, setShowAnalytics] = useState(false)
+
+  // Use a stable cache to store proxied URLs by cache asset IDs
+  // This ensures URLs never change, even when underlying R2 URLs change
+  const urlCacheRef = useRef<Map<string, string>>(new Map())
+
+  // Helper to get stable proxy URL from cache asset ID
+  const getStableProxyUrl = (cacheAssetId: string | null | undefined): string => {
+    if (!cacheAssetId) return ''
+
+    // Check cache first
+    const cached = urlCacheRef.current.get(cacheAssetId)
+    if (cached) return cached
+
+    // Generate and cache
+    const url = getProxiedImageUrlById(cacheAssetId)
+    urlCacheRef.current.set(cacheAssetId, url)
+    return url
+  }
+
+  // Memoize posts with stable proxy URLs using cache asset IDs
+  const postsWithProxiedUrls = useMemo(() => {
+    return posts.map(post => ({
+      ...post,
+      _proxiedAuthorAvatar: getStableProxyUrl(post.authorAvatarId),
+      _proxiedCoverUrl: getStableProxyUrl(post.coverId),
+      _proxiedImages: post.images?.map(img => ({
+        ...img,
+        _proxiedUrl: getStableProxyUrl(img.cacheAssetId)
+      }))
+    }))
+  }, [posts])
+
   const [galleryImages, setGalleryImages] = useState<Array<{ url: string; width: number; height: number }>>([])
   const [showGallery, setShowGallery] = useState(false)
   const [galleryInitialIndex, setGalleryInitialIndex] = useState(0)
@@ -65,11 +114,17 @@ export function PostsTable({ posts, contentTypeFilter, onPageChange, isLoading }
     router.push(`/posts/${post.id}/remix`)
   }
 
+  const handleRowClick = (post: TikTokPost) => {
+    setAnalyticsPost(post)
+    setShowAnalytics(true)
+  }
+
   // Create columns with handlers
   const columns = useMemo(() => createPostsTableColumns({
     onPreviewPost: handlePreviewPost,
     onOpenImageGallery: handleOpenImageGallery,
-    onRemixPost: handleRemixPost
+    onRemixPost: handleRemixPost,
+    onRowClick: handleRowClick
   }), [])
 
   // Global filter function to search across author and OCR text
@@ -99,13 +154,20 @@ export function PostsTable({ posts, contentTypeFilter, onPageChange, isLoading }
       <div className="h-full flex flex-col min-h-0">
         <DataTable
           columns={columns}
-          data={posts}
+          data={postsWithProxiedUrls}
+          getRowId={(post) => post.id}
           globalFilterFn={globalFilterFn}
           searchPlaceholder="Search by author, description..."
           showPagination={true}
           contentTypeFilter={contentTypeFilter}
           onPageChange={onPageChange}
+          onSortingChange={onSortingChange}
+          sorting={sorting}
+          manualSorting={enableServerSideSorting}
           isLoading={isLoading}
+          enableColumnPinning={true}
+          hiddenColumns={hiddenColumns}
+          onRowClick={handleRowClick}
         />
       </div>
 
@@ -121,10 +183,10 @@ export function PostsTable({ posts, contentTypeFilter, onPageChange, isLoading }
 
           {selectedPost && (
             <div className="space-y-4">
-              {selectedPost.coverUrl && (
+              {selectedPost.coverId && (
                 <div className="flex justify-center">
                   <SmartImage
-                    src={getProxiedImageUrl(selectedPost.coverUrl)}
+                    src={getStableProxyUrl(selectedPost.coverId)}
                     alt="Post cover"
                     className="max-w-full h-auto rounded-lg"
                   />
@@ -175,6 +237,13 @@ export function PostsTable({ posts, contentTypeFilter, onPageChange, isLoading }
         isOpen={showGallery}
         onClose={() => setShowGallery(false)}
         initialIndex={galleryInitialIndex}
+      />
+
+      {/* Post Analytics Sheet */}
+      <PostAnalyticsSheet
+        post={analyticsPost}
+        open={showAnalytics}
+        onOpenChange={setShowAnalytics}
       />
     </>
   )

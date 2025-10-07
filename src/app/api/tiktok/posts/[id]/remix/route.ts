@@ -34,9 +34,24 @@ export async function POST(
       )
     }
 
-    const { name, description, options = {} } = validation.data
+    const { name, description, options = {}, productContextId, additionalPrompt } = body
 
     console.log(`🎬 [API] Creating remix for TikTokPost: ${postId}`)
+
+    // Get product context if provided
+    let productContext = null
+    if (productContextId) {
+      productContext = await prisma.productContext.findUnique({
+        where: { id: productContextId }
+      })
+
+      if (!productContext) {
+        return NextResponse.json(
+          { error: 'Product context not found' },
+          { status: 404 }
+        )
+      }
+    }
 
     // Get the original post with OCR data
     const originalPost = await prisma.tiktokPost.findUnique({
@@ -72,7 +87,12 @@ export async function POST(
 
     // Generate paraphrased content
     console.log(`🤖 [API] Generating paraphrased content...`)
-    const remixContent = await generateRemixContent(originalPost, options as GenerateRemixOptions)
+    const remixOptions: GenerateRemixOptions = {
+      ...options,
+      productContextDescription: productContext?.description,
+      additionalPrompt
+    }
+    const remixContent = await generateRemixContent(originalPost, remixOptions)
 
     // Transform remix content to new slide structure
     const slides = remixContent.map((content, index) => ({
@@ -91,6 +111,8 @@ export async function POST(
     const createdRemix = await prisma.remixPost.create({
       data: {
         originalPostId: postId,
+        productContextId: productContextId || null,
+        additionalPrompt: additionalPrompt || null,
         name,
         description,
         generationType: 'ai_paraphrase',
@@ -105,6 +127,13 @@ export async function POST(
             authorHandle: true,
             description: true,
             images: true
+          }
+        },
+        productContext: {
+          select: {
+            id: true,
+            title: true,
+            description: true
           }
         }
       }
@@ -157,6 +186,15 @@ export async function GET(
     // Get all remixes for this post
     const remixes = await prisma.remixPost.findMany({
       where: { originalPostId: postId },
+      include: {
+        productContext: {
+          select: {
+            id: true,
+            title: true,
+            description: true
+          }
+        }
+      },
       orderBy: { createdAt: 'desc' }
     })
 

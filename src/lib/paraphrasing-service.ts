@@ -27,6 +27,8 @@ export interface GenerateRemixOptions {
   theme?: string
   style?: 'casual' | 'professional' | 'trendy' | 'educational' | 'humorous'
   targetAudience?: string
+  productContextDescription?: string
+  additionalPrompt?: string
 }
 
 export async function generateRemixContent(
@@ -165,9 +167,9 @@ function buildParaphrasingPrompt(
   originalTexts: Array<{ imageIndex: number; originalText: string }>,
   options: GenerateRemixOptions
 ): string {
-  const { theme, style = 'casual', targetAudience } = options
+  const { theme, style = 'casual', targetAudience, productContextDescription, additionalPrompt } = options
 
-  return `
+  let prompt = `
 You are an expert content creator specializing in social media remix generation.
 
 Given a TikTok photo carousel post, create paraphrased variations of the text content while maintaining the same message and impact.
@@ -183,7 +185,27 @@ STYLE REQUIREMENTS:
 - Writing Style: ${style}
 - Theme: ${theme || 'Keep original theme'}
 - Target Audience: ${targetAudience || 'General social media users'}
+`
 
+  // Add product context section if provided
+  if (productContextDescription) {
+    prompt += `
+PRODUCT CONTEXT:
+${productContextDescription}
+
+IMPORTANT: Paraphrase the content to align with the above product context. The remix should feel natural for promoting or discussing this product/service while maintaining the original message structure.
+`
+  }
+
+  // Add additional prompt if provided
+  if (additionalPrompt) {
+    prompt += `
+ADDITIONAL INSTRUCTIONS:
+${additionalPrompt}
+`
+  }
+
+  prompt += `
 ORIGINAL TEXT CONTENT:
 ${originalTexts.map(item => `
 Slide ${item.imageIndex + 1}:
@@ -196,7 +218,7 @@ For each slide, create a paraphrased version that:
 2. Uses different wording and structure
 3. Matches the specified style (${style})
 4. Stays engaging for social media
-5. Preserves any key numbers, facts, or calls-to-action
+5. Preserves any key numbers, facts, or calls-to-action${productContextDescription ? '\n6. Aligns with the product context provided above' : ''}${additionalPrompt ? '\n7. Follows the additional instructions provided' : ''}
 
 IMPORTANT: Respond with ONLY a valid JSON object in this exact format:
 {
@@ -209,7 +231,9 @@ IMPORTANT: Respond with ONLY a valid JSON object in this exact format:
 }
 
 Generate content for all ${originalTexts.length} slides. Do not include any other text outside the JSON.
-`.trim()
+`
+
+  return prompt.trim()
 }
 
 // Note: This function is deprecated with the new JSON structure

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { InlineEditableText } from '@/components/InlineEditableText'
+import { CreateRemixDialog } from '@/components/CreateRemixDialog'
 import {
   ArrowLeft,
   Sparkles,
@@ -14,7 +15,8 @@ import {
   Eye,
   Clock,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Bookmark
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -37,7 +39,13 @@ interface RemixPost {
   name: string
   description?: string
   generationType: string
+  bookmarked: boolean
   createdAt: string
+  productContext?: {
+    id: string
+    title: string
+    description: string
+  }
   slides: Array<{
     id: string
     displayOrder: number
@@ -60,8 +68,8 @@ export default function RemixPage({ params }: RemixPageProps) {
   const [remixes, setRemixes] = useState<RemixPost[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isCreatingRemix, setIsCreatingRemix] = useState(false)
   const [isRunningOCR, setIsRunningOCR] = useState(false)
+  const [isRemixDialogOpen, setIsRemixDialogOpen] = useState(false)
 
   useEffect(() => {
     fetchPostAndRemixes()
@@ -129,47 +137,9 @@ export default function RemixPage({ params }: RemixPageProps) {
     }
   }
 
-  const createRemix = async () => {
-    if (!post) return
-
-    setIsCreatingRemix(true)
-    try {
-      const remixName = `Remix ${remixes.length + 1}`
-
-      const response = await fetch(`/api/tiktok/posts/${resolvedParams.id}/remix`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          name: remixName,
-          description: `AI-generated remix variation`,
-          options: {
-            style: 'casual'
-          }
-        })
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.details || 'Failed to create remix')
-      }
-
-      const result = await response.json()
-      console.log('✅ Remix created successfully:', result)
-
-      // Refresh data (no full screen loader)
-      await fetchPostAndRemixes(false)
-      toast.success('Remix created successfully')
-
-    } catch (error) {
-      console.error('Failed to create remix:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create remix'
-      setError(errorMessage)
-      toast.error(errorMessage)
-    } finally {
-      setIsCreatingRemix(false)
-    }
+  const handleRemixCreated = async () => {
+    // Refresh data (no full screen loader)
+    await fetchPostAndRemixes(false)
   }
 
   const deleteRemix = async (remixId: string) => {
@@ -192,6 +162,33 @@ export default function RemixPage({ params }: RemixPageProps) {
       const errorMessage = 'Failed to delete remix'
       setError(errorMessage)
       toast.error(errorMessage)
+      // Refresh on error to restore state
+      await fetchPostAndRemixes(false)
+    }
+  }
+
+  const toggleBookmark = async (remixId: string) => {
+    try {
+      const response = await fetch(`/api/remixes/${remixId}/bookmark`, {
+        method: 'PATCH'
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to toggle bookmark')
+      }
+
+      const data = await response.json()
+
+      // Optimistically update UI
+      setRemixes(prevRemixes =>
+        prevRemixes.map(r =>
+          r.id === remixId ? { ...r, bookmarked: data.bookmarked } : r
+        )
+      )
+      toast.success(data.bookmarked ? 'Bookmarked' : 'Bookmark removed')
+    } catch (error) {
+      console.error('Failed to toggle bookmark:', error)
+      toast.error('Failed to toggle bookmark')
       // Refresh on error to restore state
       await fetchPostAndRemixes(false)
     }
@@ -410,21 +407,12 @@ export default function RemixPage({ params }: RemixPageProps) {
                     </span>
                   </Button>
                   <Button
-                    onClick={createRemix}
-                    disabled={!canCreateRemix || isCreatingRemix}
+                    onClick={() => setIsRemixDialogOpen(true)}
+                    disabled={!canCreateRemix}
                     size="sm"
                   >
-                    {isCreatingRemix ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Creating...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-4 w-4 mr-2" />
-                        Create Remix
-                      </>
-                    )}
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    Create Remix
                   </Button>
                 </>
               )}
@@ -459,22 +447,12 @@ export default function RemixPage({ params }: RemixPageProps) {
                 <div className="space-y-2">
                   {canCreateRemix && (
                     <Button
-                      onClick={createRemix}
-                      disabled={isCreatingRemix}
+                      onClick={() => setIsRemixDialogOpen(true)}
                       size="sm"
                       className="w-full"
                     >
-                      {isCreatingRemix ? (
-                        <>
-                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-2"></div>
-                          Creating...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="h-3 w-3 mr-2" />
-                          Create Remix
-                        </>
-                      )}
+                      <Sparkles className="h-3 w-3 mr-2" />
+                      Create Remix
                     </Button>
                   )}
 
@@ -610,12 +588,19 @@ export default function RemixPage({ params }: RemixPageProps) {
                     <Sparkles className="h-4 w-4 text-purple-500" />
                     <h3 className="font-semibold text-sm">{remixRow.remix.name}</h3>
                   </div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-xs text-muted-foreground space-y-1">
                     <p>{remixRow.slides.length} slides</p>
                     <p>{new Date(remixRow.remix.createdAt).toLocaleDateString()}</p>
-                    <Badge variant="outline" className="text-xs mt-1">
-                      {remixRow.remix.generationType}
-                    </Badge>
+                    <div className="flex flex-wrap gap-1">
+                      <Badge variant="outline" className="text-xs">
+                        {remixRow.remix.generationType}
+                      </Badge>
+                      {remixRow.remix.productContext && (
+                        <Badge variant="secondary" className="text-xs">
+                          {remixRow.remix.productContext.title}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -657,6 +642,16 @@ export default function RemixPage({ params }: RemixPageProps) {
                 <div className="w-48 p-4 flex-shrink-0 sticky right-0 bg-background">
                   <div className="space-y-2">
                     <Button
+                      onClick={() => toggleBookmark(remixRow.remix.id)}
+                      size="sm"
+                      variant={remixRow.remix.bookmarked ? "default" : "outline"}
+                      className="w-full"
+                      title={remixRow.remix.bookmarked ? "Remove bookmark" : "Bookmark"}
+                    >
+                      <Bookmark className={`h-3 w-3 mr-1 ${remixRow.remix.bookmarked ? 'fill-current' : ''}`} />
+                      {remixRow.remix.bookmarked ? 'Bookmarked' : 'Bookmark'}
+                    </Button>
+                    <Button
                       onClick={() => router.push(`/remix/${remixRow.remix.id}/edit`)}
                       size="sm"
                       variant="outline"
@@ -688,37 +683,8 @@ export default function RemixPage({ params }: RemixPageProps) {
               </div>
             ))}
 
-            {/* Loading Row for Creating Remix */}
-            {isCreatingRemix && (
-              <div className="flex border-b bg-yellow-50/30">
-                <div className="w-80 border-r p-4 bg-background flex-shrink-0 sticky left-0 z-100">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500" />
-                    <h3 className="font-semibold text-sm">Creating New Remix...</h3>
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    <p>Generating slides...</p>
-                  </div>
-                </div>
-                <div className="flex">
-                  {Array.from({ length: maxSlidesCount }).map((_, index) => (
-                    <div key={index} className="w-72 border-r p-4">
-                      <div className="h-full flex items-center justify-center">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="w-48 p-4 flex-shrink-0 sticky right-0 bg-background">
-                  <div className="text-xs text-muted-foreground">
-                    Processing...
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Empty State */}
-            {originalSlides.length === 0 && remixes.length === 0 && !isCreatingRemix && (
+            {originalSlides.length === 0 && remixes.length === 0 && (
               <div className="flex items-center justify-center h-64 text-center">
                 <div>
                   <div className="rounded-full bg-muted/50 w-16 h-16 flex items-center justify-center mx-auto mb-4">
@@ -738,6 +704,14 @@ export default function RemixPage({ params }: RemixPageProps) {
           </div>
         </div>
       </div>
+
+      {/* Create Remix Dialog */}
+      <CreateRemixDialog
+        open={isRemixDialogOpen}
+        onOpenChange={setIsRemixDialogOpen}
+        postId={resolvedParams.id}
+        onRemixCreated={handleRemixCreated}
+      />
     </div>
   )
 }

@@ -1,32 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server'
 import heicConvert from 'heic-convert'
+import { PrismaClient } from '@/generated/prisma'
+import { cacheAssetService } from '@/lib/cache-asset-service'
+
+const prisma = new PrismaClient()
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const imageUrl = searchParams.get('url')
+    const cacheAssetId = searchParams.get('id')
 
-    if (!imageUrl) {
+    // Support both URL-based and ID-based proxy
+    let finalImageUrl: string
+
+    if (cacheAssetId) {
+      // ID-based proxy: Look up cache asset and get the best URL
+      try {
+        const resolvedUrl = await cacheAssetService.getUrl(cacheAssetId)
+        if (!resolvedUrl) {
+          return NextResponse.json(
+            { error: 'Cache asset not found' },
+            { status: 404 }
+          )
+        }
+        finalImageUrl = resolvedUrl
+      } catch (error) {
+        console.error('Failed to resolve cache asset:', error)
+        return NextResponse.json(
+          { error: 'Failed to resolve cache asset' },
+          { status: 500 }
+        )
+      }
+    } else if (imageUrl) {
+      // Legacy URL-based proxy
+      finalImageUrl = imageUrl
+    } else {
       return NextResponse.json(
-        { error: 'Missing url parameter' },
+        { error: 'Missing url or id parameter' },
         { status: 400 }
       )
     }
 
-    // Validate that it's a TikTok CDN URL or presigned TikTok URL for security
+    // Validate that it's a TikTok CDN URL, R2 URL, or presigned URL for security
     const allowedDomains = [
       'tiktokcdn.com',
       'tiktokcdn-us.com',
-      'bytedance.com'
+      'bytedance.com',
+      'r2.dev',
+      'r2.cloudflarestorage.com'
     ]
 
-    const urlObj = new URL(imageUrl)
+    const urlObj = new URL(finalImageUrl)
     const isAllowedDomain = allowedDomains.some(domain =>
       urlObj.hostname.includes(domain)
     )
 
-    // Also check if it's a presigned URL from TikTok (has signature params)
-    const isPresignedUrl = imageUrl.includes('X-Amz-Signature') || imageUrl.includes('x-amz-signature')
+    // Also check if it's a presigned URL (has signature params)
+    const isPresignedUrl = finalImageUrl.includes('X-Amz-Signature') ||
+                           finalImageUrl.includes('x-amz-signature') ||
+                           finalImageUrl.includes('Signature=')
 
     if (!isAllowedDomain && !isPresignedUrl) {
       return NextResponse.json(
@@ -35,8 +68,19 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // If it's a presigned R2 URL, redirect to it (browser will cache with our headers)
+    // This is more efficient than proxying the bytes through our server
+    if (isPresignedUrl && (urlObj.hostname.includes('r2.dev') || urlObj.hostname.includes('r2.cloudflarestorage.com'))) {
+      return NextResponse.redirect(finalImageUrl, {
+        status: 307, // Temporary redirect (preserves cache headers from R2)
+        headers: {
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        }
+      })
+    }
+
     // Fetch the image with user agent to avoid blocks
-    const response = await fetch(imageUrl, {
+    const response = await fetch(finalImageUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
         'Referer': 'https://www.tiktok.com/',

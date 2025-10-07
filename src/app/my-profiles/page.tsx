@@ -3,34 +3,20 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { RefreshCw, Users, Star, Eye, Heart, Video, CheckCircle, User, ArrowRight, MessageCircle, Share2, Bookmark } from 'lucide-react'
+import { ProfilesTable } from '@/components/ProfilesTable'
+import { RefreshCw, Users, Star, Eye, Heart, Video, MessageCircle, Share2, Bookmark } from 'lucide-react'
 import Link from 'next/link'
 import { PageLayout } from '@/components/PageLayout'
-
-interface OwnProfile {
-  id: string
-  handle: string
-  nickname: string | null
-  avatar: string | null
-  bio: string | null
-  verified: boolean
-  totalPosts: number
-  totalViews: string
-  totalLikes: string
-  totalShares: string
-  totalComments: string
-  totalSaves: string
-  monitoringEnabled: boolean
-  lastMonitoringRun: string | null
-  createdAt: string
-  updatedAt: string
-}
+import { TikTokProfile } from '@/components/profiles-table-columns'
+import { PostingActivityHeatmap } from '@/components/PostingActivityHeatmap'
 
 export default function MyProfilesPage() {
-  const [profiles, setProfiles] = useState<OwnProfile[]>([])
+  const [profiles, setProfiles] = useState<TikTokProfile[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [activityData, setActivityData] = useState<Array<{ date: string; count: number }>>([])
+  const [firstPostDate, setFirstPostDate] = useState<string | null>(null)
+  const [activityLoading, setActivityLoading] = useState(false)
 
   const fetchOwnProfiles = useCallback(async () => {
     setLoading(true)
@@ -53,13 +39,69 @@ export default function MyProfilesPage() {
     }
   }, [])
 
+  const fetchAggregatedActivity = useCallback(async () => {
+    if (profiles.length === 0) return
+
+    setActivityLoading(true)
+    try {
+      // Fetch activity data for all profiles
+      const activityPromises = profiles.map(profile =>
+        fetch(`/api/tiktok/profiles/${profile.id}/activity`)
+          .then(res => res.json())
+          .catch(() => ({ data: [], firstPostDate: null }))
+      )
+
+      const results = await Promise.all(activityPromises)
+
+      // Aggregate activity data by date
+      const aggregatedMap = new Map<string, number>()
+      let earliestDate: string | null = null
+
+      results.forEach(result => {
+        if (result.data && Array.isArray(result.data)) {
+          result.data.forEach((item: { date: string; count: number }) => {
+            const currentCount = aggregatedMap.get(item.date) || 0
+            aggregatedMap.set(item.date, currentCount + item.count)
+          })
+        }
+
+        // Track earliest post date
+        if (result.firstPostDate) {
+          if (!earliestDate || result.firstPostDate < earliestDate) {
+            earliestDate = result.firstPostDate
+          }
+        }
+      })
+
+      // Convert map to array
+      const aggregatedData = Array.from(aggregatedMap.entries()).map(([date, count]) => ({
+        date,
+        count
+      }))
+
+      setActivityData(aggregatedData)
+      setFirstPostDate(earliestDate)
+    } catch (err) {
+      console.error('Failed to fetch aggregated activity data:', err)
+      setActivityData([])
+      setFirstPostDate(null)
+    } finally {
+      setActivityLoading(false)
+    }
+  }, [profiles])
+
   const handleRefresh = useCallback(() => {
     fetchOwnProfiles()
-  }, [fetchOwnProfiles])
+    fetchAggregatedActivity()
+  }, [fetchOwnProfiles, fetchAggregatedActivity])
 
   useEffect(() => {
     fetchOwnProfiles()
   }, [fetchOwnProfiles])
+
+  useEffect(() => {
+    fetchAggregatedActivity()
+  }, [fetchAggregatedActivity])
 
   const formatNumber = (num: string | number): string => {
     const value = typeof num === 'string' ? parseInt(num) : num
@@ -71,28 +113,15 @@ export default function MyProfilesPage() {
     return value.toString()
   }
 
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60))
-
-    if (diffInHours < 1) return 'Just now'
-    if (diffInHours < 24) return `${diffInHours}h ago`
-    if (diffInHours < 48) return 'Yesterday'
-    const diffInDays = Math.floor(diffInHours / 24)
-    if (diffInDays < 7) return `${diffInDays}d ago`
-    if (diffInDays < 30) return `${Math.floor(diffInDays / 7)}w ago`
-    return `${Math.floor(diffInDays / 30)}mo ago`
-  }
-
   // Calculate aggregated stats
   const totalStats = profiles.reduce((acc, profile) => ({
     posts: acc.posts + profile.totalPosts,
-    views: acc.views + parseInt(profile.totalViews || '0'),
-    likes: acc.likes + parseInt(profile.totalLikes || '0'),
-    shares: acc.shares + parseInt(profile.totalShares || '0'),
-    comments: acc.comments + parseInt(profile.totalComments || '0'),
-  }), { posts: 0, views: 0, likes: 0, shares: 0, comments: 0 })
+    views: acc.views + Number(profile.totalViews || 0),
+    likes: acc.likes + Number(profile.totalLikes || 0),
+    shares: acc.shares + Number(profile.totalShares || 0),
+    comments: acc.comments + Number(profile.totalComments || 0),
+    saves: acc.saves + Number(profile.totalSaves || 0),
+  }), { posts: 0, views: 0, likes: 0, shares: 0, comments: 0, saves: 0 })
 
   return (
     <PageLayout
@@ -118,68 +147,87 @@ export default function MyProfilesPage() {
         </div>
       }
     >
-      {/* Hero Stats Section */}
+      {/* Profile Metrics and Activity */}
       {profiles.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-3">
+        <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-4 mb-6">
+          {/* Metrics Grid - 2x3 */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="rounded-lg border border-border bg-card p-3">
+              <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
                   <Video className="w-4 h-4 text-purple-500" />
                 </div>
-                <span className="text-sm text-muted-foreground">Total Posts</span>
+                <span className="text-sm text-muted-foreground">Posts</span>
               </div>
               <div className="text-2xl font-bold">{formatNumber(totalStats.posts)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-3">
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3">
+              <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
                   <Eye className="w-4 h-4 text-blue-500" />
                 </div>
-                <span className="text-sm text-muted-foreground">Total Views</span>
+                <span className="text-sm text-muted-foreground">Views</span>
               </div>
               <div className="text-2xl font-bold">{formatNumber(totalStats.views)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-3">
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3">
+              <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center">
                   <Heart className="w-4 h-4 text-red-500" />
                 </div>
-                <span className="text-sm text-muted-foreground">Total Likes</span>
+                <span className="text-sm text-muted-foreground">Likes</span>
               </div>
               <div className="text-2xl font-bold">{formatNumber(totalStats.likes)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-3">
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3">
+              <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
                   <Share2 className="w-4 h-4 text-green-500" />
                 </div>
-                <span className="text-sm text-muted-foreground">Total Shares</span>
+                <span className="text-sm text-muted-foreground">Shares</span>
               </div>
               <div className="text-2xl font-bold">{formatNumber(totalStats.shares)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-3">
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3">
+              <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center">
                   <MessageCircle className="w-4 h-4 text-orange-500" />
                 </div>
-                <span className="text-sm text-muted-foreground">Total Comments</span>
+                <span className="text-sm text-muted-foreground">Comments</span>
               </div>
               <div className="text-2xl font-bold">{formatNumber(totalStats.comments)}</div>
-            </CardContent>
-          </Card>
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-yellow-500/10 flex items-center justify-center">
+                  <Bookmark className="w-4 h-4 text-yellow-500" />
+                </div>
+                <span className="text-sm text-muted-foreground">Saves</span>
+              </div>
+              <div className="text-2xl font-bold">{formatNumber(totalStats.saves)}</div>
+            </div>
+          </div>
+
+          {/* Posting Activity Heatmap */}
+          {activityLoading ? (
+            <div className="h-full rounded-lg border border-border bg-card">
+              <div className="p-4 pb-3">
+                <div className="h-6 w-32 bg-muted animate-pulse rounded" />
+              </div>
+              <div className="p-4 pt-0">
+                <div className="space-y-2">
+                  <div className="h-4 w-full bg-muted animate-pulse rounded" />
+                  <div className="h-24 w-full bg-muted animate-pulse rounded" />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <PostingActivityHeatmap data={activityData} firstPostDate={firstPostDate} />
+          )}
         </div>
       )}
 
-      {/* Profiles Grid */}
+      {/* Profiles Table */}
       {error ? (
         <Card className="border-red-200 bg-red-50">
           <CardContent className="p-6">
@@ -187,84 +235,7 @@ export default function MyProfilesPage() {
           </CardContent>
         </Card>
       ) : profiles.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {profiles.map((profile) => (
-            <Card key={profile.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
-                {/* Profile Header */}
-                <div className="flex items-start gap-4 mb-4">
-                  {profile.avatar ? (
-                    <img
-                      src={profile.avatar}
-                      alt={`${profile.handle} avatar`}
-                      className="w-16 h-16 rounded-full object-cover flex-shrink-0"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                      <User className="w-8 h-8 text-muted-foreground" />
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-semibold text-lg truncate">@{profile.handle}</h3>
-                      {profile.verified && (
-                        <CheckCircle className="w-5 h-5 text-blue-500 flex-shrink-0" />
-                      )}
-                    </div>
-                    {profile.nickname && (
-                      <p className="text-sm text-muted-foreground truncate">{profile.nickname}</p>
-                    )}
-                    <div className="flex items-center gap-2 mt-2">
-                      <Badge variant="secondary" className="text-xs">
-                        {profile.monitoringEnabled ? (
-                          <><CheckCircle className="w-3 h-3 mr-1" /> Monitoring</>
-                        ) : (
-                          <>Monitoring Off</>
-                        )}
-                      </Badge>
-                      {profile.lastMonitoringRun && (
-                        <span className="text-xs text-muted-foreground">
-                          Updated {formatDate(profile.lastMonitoringRun)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Profile Bio */}
-                {profile.bio && (
-                  <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{profile.bio}</p>
-                )}
-
-                {/* Stats Grid */}
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  <div className="text-center">
-                    <div className="text-lg font-bold">{formatNumber(profile.totalPosts)}</div>
-                    <div className="text-xs text-muted-foreground">Posts</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-lg font-bold">{formatNumber(profile.totalViews)}</div>
-                    <div className="text-xs text-muted-foreground">Views</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-lg font-bold">{formatNumber(profile.totalLikes)}</div>
-                    <div className="text-xs text-muted-foreground">Likes</div>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-2">
-                  <Link href={`/profiles/${profile.handle}`} className="flex-1">
-                    <Button variant="default" className="w-full" size="sm">
-                      View Details
-                      <ArrowRight className="w-4 h-4 ml-2" />
-                    </Button>
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <ProfilesTable profiles={profiles} onProfilesChange={handleRefresh} />
       ) : loading ? (
         <Card>
           <CardContent className="flex items-center justify-center py-12">

@@ -178,22 +178,28 @@ model CollectionPost {
 // Remix system for TikTok posts - Simplified JSON structure
 
 model RemixPost {
-  id              String   @id @default(cuid())
-  originalPostId  String   // Reference to TikTokPost
-  name            String
-  description     String?
-  generationType  String   @default("manual") // 'manual', 'ai_paraphrase'
+  id                 String   @id @default(cuid())
+  originalPostId     String   // Reference to TikTokPost
+  productContextId   String?  // Reference to ProductContext (optional)
+  name               String
+  description        String?
+  generationType     String   @default("manual") // 'manual', 'ai_paraphrase'
+  additionalPrompt   String?  // Optional additional prompt used during paraphrasing
+  bookmarked         Boolean  @default(false) // Track if remix is bookmarked for content use
 
   // Complete slide structure with canvas, backgrounds, and text boxes in JSON
-  slides          Json     @default("[]") // Array of RemixSlide objects with full structure
+  slides             Json     @default("[]") // Array of RemixSlide objects with full structure
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  originalPost    TiktokPost @relation(fields: [originalPostId], references: [id], onDelete: Cascade)
+  originalPost       TiktokPost @relation(fields: [originalPostId], references: [id], onDelete: Cascade)
+  productContext     ProductContext? @relation(fields: [productContextId], references: [id], onDelete: SetNull)
 
   @@map("remix_posts")
   @@index([originalPostId])
+  @@index([productContextId])
+  @@index([bookmarked])
 }
 
 // Product Context for storing product information and prompts
@@ -204,6 +210,8 @@ model ProductContext {
   description String   // Prompt description for the product
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  remixes     RemixPost[]
 
   @@map("product_contexts")
   @@index([title])

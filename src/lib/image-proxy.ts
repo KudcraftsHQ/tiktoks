@@ -42,8 +42,23 @@ export async function getImageUrl(originalUrl: string): Promise<string> {
 }
 
 /**
+ * Get stable proxy URL using cache asset ID
+ * This ensures the URL never changes, even when the underlying source changes from TikTok CDN → R2
+ */
+export function getProxiedImageUrlById(cacheAssetId: string | null | undefined): string {
+  if (!cacheAssetId) return ''
+
+  const baseUrl = typeof window !== 'undefined'
+    ? window.location.origin
+    : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+
+  return `${baseUrl}/api/images/proxy?id=${encodeURIComponent(cacheAssetId)}`
+}
+
+/**
  * Synchronous version for client-side components (uses proxy by default)
  * This handles HEIC conversion and Content-Disposition issues
+ * @deprecated Use getProxiedImageUrlById for stable caching
  */
 export function getProxiedImageUrl(originalUrl: string): string {
   if (!originalUrl) return ''

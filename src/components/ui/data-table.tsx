@@ -6,6 +6,8 @@ import {
   ColumnFiltersState,
   SortingState,
   VisibilityState,
+  ColumnPinningState,
+  Column,
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
@@ -14,6 +16,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table'
 import { ArrowUpDown, ChevronDown } from 'lucide-react'
+import { CSSProperties } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -45,8 +48,14 @@ interface DataTableProps<TData, TValue> {
     onChange: (value: 'all' | 'video' | 'photo') => void
   }
   onPageChange?: (pageIndex: number, pageSize: number) => void
+  onSortingChange?: (sorting: SortingState) => void
+  sorting?: SortingState
+  manualSorting?: boolean
   isLoading?: boolean
   onRowClick?: (row: TData) => void
+  enableColumnPinning?: boolean
+  getRowId?: (row: TData) => string
+  hiddenColumns?: string[]
 }
 
 export function DataTable<TData, TValue>({
@@ -58,28 +67,100 @@ export function DataTable<TData, TValue>({
   globalFilterFn,
   contentTypeFilter,
   onPageChange,
+  onSortingChange,
+  sorting: externalSorting,
+  manualSorting = false,
   isLoading,
-  onRowClick
+  onRowClick,
+  enableColumnPinning = false,
+  getRowId,
+  hiddenColumns = []
 }: DataTableProps<TData, TValue>) {
-  const [sorting, setSorting] = React.useState<SortingState>([])
+  const [internalSorting, setInternalSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
+
+  // Initialize column visibility with hidden columns
+  const initialColumnVisibility = React.useMemo(() => {
+    const visibility: VisibilityState = {}
+    hiddenColumns.forEach(columnId => {
+      visibility[columnId] = false
+    })
+    return visibility
+  }, [hiddenColumns])
+
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(initialColumnVisibility)
   const [rowSelection, setRowSelection] = React.useState({})
   const [globalFilter, setGlobalFilter] = React.useState('')
+  const [shadowOpacity, setShadowOpacity] = React.useState({ left: 0, right: 0 })
+
+  const tableWrapperRef = React.useRef<HTMLDivElement>(null)
+
+  // Extract column pinning configuration from column meta
+  const initialColumnPinning = React.useMemo(() => {
+    if (!enableColumnPinning) return { left: [], right: [] }
+
+    const left: string[] = []
+    const right: string[] = []
+
+    columns.forEach((col: any) => {
+      if (col.meta?.pinned === 'left' && col.accessorKey) {
+        left.push(col.accessorKey as string)
+      } else if (col.meta?.pinned === 'left' && col.id) {
+        left.push(col.id)
+      } else if (col.meta?.pinned === 'right' && col.accessorKey) {
+        right.push(col.accessorKey as string)
+      } else if (col.meta?.pinned === 'right' && col.id) {
+        right.push(col.id)
+      }
+    })
+
+    return { left, right }
+  }, [columns, enableColumnPinning])
+
+  const [columnPinning, setColumnPinning] = React.useState<ColumnPinningState>(initialColumnPinning)
+
+  // Use external sorting if provided, otherwise use internal
+  const sorting = manualSorting && externalSorting !== undefined ? externalSorting : internalSorting
+  const setSorting = manualSorting && onSortingChange ? onSortingChange : setInternalSorting
+
+  // Function to get pinning styles for columns
+  const getCommonPinningStyles = (column: Column<any>): CSSProperties => {
+    const isPinned = column.getIsPinned()
+    const isLastLeftPinnedColumn = isPinned === 'left' && column.getIsLastColumn('left')
+    const isFirstRightPinnedColumn = isPinned === 'right' && column.getIsFirstColumn('right')
+
+    const leftShadow = `-2px 0 3px -2px rgba(0,0,0,${0.3 * shadowOpacity.left}) inset`
+    const rightShadow = `2px 0 3px -2px rgba(0,0,0,${0.3 * shadowOpacity.right}) inset`
+
+    return {
+      boxShadow: isLastLeftPinnedColumn ? leftShadow
+                : isFirstRightPinnedColumn ? rightShadow
+                : 'none',
+      transition: 'box-shadow 0.1s linear',
+      left: isPinned === 'left' ? `${column.getStart('left')}px` : undefined,
+      right: isPinned === 'right' ? `${column.getAfter('right')}px` : undefined,
+      position: isPinned ? 'sticky' : 'relative',
+      width: column.getSize(),
+      zIndex: isPinned ? 1 : 0,
+    }
+  }
 
   const table = useReactTable({
     data,
     columns,
+    getRowId,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
+    getSortedRowModel: manualSorting ? undefined : getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
     onGlobalFilterChange: setGlobalFilter,
-    globalFilterFn: globalFilterFn ? (row, columnId, filterValue) => {
+    onColumnPinningChange: setColumnPinning,
+    manualSorting,
+    globalFilterFn: globalFilterFn ? (row, _columnId, filterValue) => {
       return globalFilterFn(row.original, filterValue)
     } : undefined,
     state: {
@@ -88,6 +169,7 @@ export function DataTable<TData, TValue>({
       columnVisibility,
       rowSelection,
       globalFilter,
+      columnPinning: enableColumnPinning ? columnPinning : { left: [], right: [] },
     },
     initialState: {
       pagination: {
@@ -95,6 +177,35 @@ export function DataTable<TData, TValue>({
       },
     },
   })
+
+  // Scroll event listener for shadow fade effect
+  React.useEffect(() => {
+    if (!enableColumnPinning || !tableWrapperRef.current) return
+
+    const handleScroll = () => {
+      const el = tableWrapperRef.current
+      if (!el) return
+
+      const scrollLeft = el.scrollLeft
+      const maxScroll = el.scrollWidth - el.clientWidth
+      const threshold = 10 // 10px threshold for fade effect
+
+      const leftOpacity = Math.min(scrollLeft / threshold, 1)
+      const rightOpacity = Math.min((maxScroll - scrollLeft) / threshold, 1)
+
+      setShadowOpacity({ left: leftOpacity, right: rightOpacity })
+    }
+
+    const el = tableWrapperRef.current
+    el.addEventListener('scroll', handleScroll)
+
+    // Initial check
+    handleScroll()
+
+    return () => {
+      el.removeEventListener('scroll', handleScroll)
+    }
+  }, [enableColumnPinning])
 
   return (
     <div className="w-full h-full grid grid-rows-[auto_1fr_auto] min-h-0">
@@ -155,14 +266,22 @@ export function DataTable<TData, TValue>({
       </div>
 
       {/* Scrollable table container - Critical: min-h-0 for flex scrolling */}
-      <div className="overflow-auto min-h-0">
+      <div ref={tableWrapperRef} className="overflow-auto min-h-0">
         <Table className="relative">
           <TableHeader className="sticky top-0 z-10">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className="border-b">
                 {headerGroup.headers.map((header) => {
+                  const pinningStyles = enableColumnPinning
+                    ? getCommonPinningStyles(header.column)
+                    : {}
+
                   return (
-                    <TableHead key={header.id} className="bg-background">
+                    <TableHead
+                      key={header.id}
+                      className="bg-background"
+                      style={pinningStyles}
+                    >
                       {header.isPlaceholder
                         ? null
                         : flexRender(
@@ -196,14 +315,24 @@ export function DataTable<TData, TValue>({
                   onClick={() => onRowClick?.(row.original)}
                   className={onRowClick ? 'cursor-pointer hover:bg-muted/50' : ''}
                 >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
-                  ))}
+                  {row.getVisibleCells().map((cell) => {
+                    const pinningStyles = enableColumnPinning
+                      ? getCommonPinningStyles(cell.column)
+                      : {}
+
+                    return (
+                      <TableCell
+                        key={cell.id}
+                        style={pinningStyles}
+                        className={cell.column.getIsPinned() ? 'bg-background' : ''}
+                      >
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </TableCell>
+                    )
+                  })}
                 </TableRow>
               ))
             ) : (

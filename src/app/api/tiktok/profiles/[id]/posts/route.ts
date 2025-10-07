@@ -15,7 +15,9 @@ export async function GET(
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100)
     const contentType = searchParams.get('contentType')
     const search = searchParams.get('search') || ''
-    const includeHistory = searchParams.get('includeHistory') === 'true'
+    const includeHistory = searchParams.get('includeHistory') !== 'false' // Default to true
+    const sortBy = searchParams.get('sortBy') || 'publishedAt'
+    const sortOrder = searchParams.get('sortOrder') || 'desc'
 
     const skip = (page - 1) * limit
 
@@ -43,6 +45,11 @@ export async function GET(
       ]
     }
 
+    // Build orderBy clause based on sortBy parameter
+    const allowedSortFields = ['publishedAt', 'viewCount', 'likeCount', 'commentCount', 'shareCount', 'saveCount', 'authorHandle', 'title', 'contentType']
+    const orderByField = allowedSortFields.includes(sortBy) ? sortBy : 'publishedAt'
+    const orderByDirection = sortOrder === 'asc' ? 'asc' : 'desc'
+
     const [posts, total] = await Promise.all([
       prisma.tiktokPost.findMany({
         where,
@@ -55,7 +62,7 @@ export async function GET(
           }
         } : undefined,
         orderBy: {
-          publishedAt: 'desc'
+          [orderByField]: orderByDirection
         },
         skip,
         take: limit
