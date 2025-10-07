@@ -7,6 +7,7 @@
 import { Worker, Job } from 'bullmq'
 import { PrismaClient } from '@/generated/prisma'
 import { scrapeProfileVideos } from '../tiktok-scraping'
+import { TikTokBulkUpsertService } from '../tiktok-bulk-upsert-service'
 import {
   QUEUE_NAMES,
   defaultWorkerOptions,
@@ -17,6 +18,7 @@ import {
 class ProfileMonitorWorker {
   private worker: Worker<ProfileMonitorJobData, ProfileMonitorJobResult>
   private prisma: PrismaClient
+  private bulkUpsertService: TikTokBulkUpsertService
 
   constructor() {
     console.log('🏗️ [ProfileMonitorWorker] Initializing worker...')
@@ -27,6 +29,7 @@ class ProfileMonitorWorker {
     })
 
     this.prisma = new PrismaClient()
+    this.bulkUpsertService = new TikTokBulkUpsertService(this.prisma)
     this.worker = new Worker(
       QUEUE_NAMES.PROFILE_MONITOR,
       this.processJob.bind(this),
@@ -198,50 +201,24 @@ class ProfileMonitorWorker {
             publishedAt: post.publishedAt instanceof Date ? post.publishedAt.toISOString() : post.publishedAt
           }))
 
-          // Call bulk upsert API (internal call)
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-          console.log(`🔗 [ProfileMonitorWorker] Calling bulk upsert API:`, {
-            url: `${baseUrl}/api/tiktok/posts/bulk`,
+          console.log(`🔗 [ProfileMonitorWorker] Calling bulk upsert service:`, {
             profileHandle: profileData.handle,
             postsCount: postsForUpsert.length
           })
 
           try {
-            const upsertResponse = await fetch(`${baseUrl}/api/tiktok/posts/bulk`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                profile: profileData,
-                posts: postsForUpsert
-              })
-            })
-
-            console.log(`📡 [ProfileMonitorWorker] Bulk upsert response status:`, {
-              status: upsertResponse.status,
-              statusText: upsertResponse.statusText,
-              ok: upsertResponse.ok
-            })
-
-            if (!upsertResponse.ok) {
-              const errorText = await upsertResponse.text()
-              console.error(`❌ [ProfileMonitorWorker] Bulk upsert failed with status ${upsertResponse.status}:`, errorText)
-              throw new Error(`Bulk upsert failed (${upsertResponse.status}): ${errorText}`)
-            }
-
-            const upsertResult = await upsertResponse.json()
+            const upsertResult = await this.bulkUpsertService.bulkUpsert(profileData, postsForUpsert)
             totalPostsScraped += upsertResult.stats.totalPosts
             console.log(`✅ [ProfileMonitorWorker] Upserted ${upsertResult.stats.totalPosts} posts from page ${pagesScraped}`, {
               stats: upsertResult.stats
             })
-          } catch (fetchError) {
-            console.error(`❌ [ProfileMonitorWorker] Fetch error during bulk upsert:`, {
-              error: fetchError instanceof Error ? fetchError.message : String(fetchError),
-              errorType: fetchError?.constructor?.name,
-              stack: fetchError instanceof Error ? fetchError.stack : undefined
+          } catch (upsertError) {
+            console.error(`❌ [ProfileMonitorWorker] Bulk upsert error:`, {
+              error: upsertError instanceof Error ? upsertError.message : String(upsertError),
+              errorType: upsertError?.constructor?.name,
+              stack: upsertError instanceof Error ? upsertError.stack : undefined
             })
-            throw new Error(`Bulk upsert fetch failed: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`)
+            throw new Error(`Bulk upsert failed: ${upsertError instanceof Error ? upsertError.message : String(upsertError)}`)
           }
         }
 
