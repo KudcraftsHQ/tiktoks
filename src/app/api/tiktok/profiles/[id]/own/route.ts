@@ -23,8 +23,18 @@ export async function PATCH(
       data: { isOwnProfile }
     })
 
+    // Convert BigInt fields to strings for JSON serialization
+    const serializedProfile = {
+      ...profile,
+      totalViews: profile.totalViews?.toString() || '0',
+      totalLikes: profile.totalLikes?.toString() || '0',
+      totalShares: profile.totalShares?.toString() || '0',
+      totalComments: profile.totalComments?.toString() || '0',
+      totalSaves: profile.totalSaves?.toString() || '0'
+    }
+
     return NextResponse.json({
-      profile,
+      profile: serializedProfile,
       message: isOwnProfile ? 'Profile marked as own' : 'Profile unmarked as own'
     })
   } catch (error) {

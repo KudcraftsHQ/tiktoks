@@ -7,13 +7,27 @@
 import { z } from 'zod'
 
 // Text Box Schema with advanced styling support
+const TransformSchema = z.object({
+  rotation: z.number().min(-360).max(360).default(0),
+  scaleX: z.number().min(0.05).max(10).default(1),
+  scaleY: z.number().min(0.05).max(10).default(1),
+  skewX: z.number().min(-89).max(89).default(0),
+  skewY: z.number().min(-89).max(89).default(0)
+})
+
+const ViewportSchema = z.object({
+  zoom: z.number().min(0.05).max(8).default(1),
+  offsetX: z.number().min(-5000).max(5000).default(0),
+  offsetY: z.number().min(-5000).max(5000).default(0)
+})
+
 const RemixTextBoxSchema = z.object({
   id: z.string().optional(),
   text: z.string().min(1).max(2000),
-  x: z.number().min(0).max(1),
-  y: z.number().min(0).max(1),
-  width: z.number().min(0.01).max(1),
-  height: z.number().min(0.01).max(1),
+  x: z.number().min(-1).max(2),
+  y: z.number().min(-1).max(2),
+  width: z.number().min(0.01).max(2),
+  height: z.number().min(0.01).max(2),
   fontSize: z.number().min(8).max(200),
   fontFamily: z.string().min(1).max(100),
   fontWeight: z.enum(['normal', 'bold', 'bolder', 'lighter', '100', '200', '300', '400', '500', '600', '700', '800', '900']),
@@ -56,7 +70,11 @@ const RemixTextBoxSchema = z.object({
 
   // Line height and letter spacing
   lineHeight: z.number().min(0.5).max(3).default(1.2),
-  letterSpacing: z.number().min(-5).max(20).default(0)
+  letterSpacing: z.number().min(-5).max(20).default(0),
+
+  // Transform metadata for resizing/rotating
+  transform: TransformSchema.default({ rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 }),
+  lockAspectRatio: z.boolean().default(false)
 })
 
 // Canvas Size Schema
@@ -81,13 +99,15 @@ const BackgroundLayerSchema = z.object({
   type: z.enum(['image', 'color', 'gradient']),
 
   // For image backgrounds
-  imageId: z.string().uuid().optional(),
+  imageId: z.string().min(1).optional(),
 
   // Position and scaling (relative to canvas)
-  x: z.number().min(0).max(1).default(0), // Position X (0-1 relative to canvas)
-  y: z.number().min(0).max(1).default(0), // Position Y (0-1 relative to canvas)
-  width: z.number().min(0.01).max(5).default(1), // Width scale factor
-  height: z.number().min(0.01).max(5).default(1), // Height scale factor
+  x: z.number().min(-5).max(5).default(0),
+  y: z.number().min(-5).max(5).default(0),
+  width: z.number().min(0.01).max(10).default(1),
+  height: z.number().min(0.01).max(10).default(1),
+  rotation: z.number().min(-360).max(360).default(0),
+  fitMode: z.enum(['cover', 'contain', 'fill', 'fit-width', 'fit-height']).default('cover'),
 
   // For color/gradient backgrounds
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
@@ -126,6 +146,8 @@ const RemixSlideSchema = z.object({
     height: 1920,
     unit: 'px'
   }),
+
+  viewport: ViewportSchema.default({ zoom: 1, offsetX: 0, offsetY: 0 }),
 
   // Background layers (stacked from bottom to top)
   backgroundLayers: z.array(BackgroundLayerSchema).default([
@@ -195,6 +217,8 @@ export type RemixSlideType = z.infer<typeof RemixSlideSchema>
 export type RemixTextBoxType = z.infer<typeof RemixTextBoxSchema>
 export type CanvasSizeType = z.infer<typeof CanvasSizeSchema>
 export type BackgroundLayerType = z.infer<typeof BackgroundLayerSchema>
+export type ViewportType = z.infer<typeof ViewportSchema>
+export type TransformType = z.infer<typeof TransformSchema>
 export type GradientType = z.infer<typeof GradientSchema>
 
 // Export validation schemas
@@ -232,6 +256,8 @@ export function createDefaultBackgroundLayers(overrides?: Partial<BackgroundLaye
       y: 0,
       width: 1,
       height: 1,
+      rotation: 0,
+      fitMode: 'cover',
       opacity: 1,
       blendMode: 'normal',
       zIndex: 1,
@@ -253,6 +279,8 @@ export function createImageBackgroundLayer(
     y: 0,
     width: 1,
     height: 1,
+    rotation: 0,
+    fitMode: 'cover',
     opacity: 1,
     blendMode: 'normal',
     zIndex: 2,
@@ -273,6 +301,8 @@ export function createGradientBackgroundLayer(
     y: 0,
     width: 1,
     height: 1,
+    rotation: 0,
+    fitMode: 'cover',
     opacity: 1,
     blendMode: 'normal',
     zIndex: 1,
