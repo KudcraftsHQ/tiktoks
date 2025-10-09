@@ -33,6 +33,21 @@ export default function RootLayout({
           name="viewport"
           content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
         />
+        <style dangerouslySetInnerHTML={{__html: `
+          /* Prevent pinch-to-zoom globally */
+          html, body {
+            touch-action: pan-x pan-y;
+            -webkit-user-select: none;
+            user-select: none;
+          }
+          
+          /* Allow pinch-to-zoom only on canvas editor area */
+          .canvas-editor-area {
+            touch-action: none;
+            -webkit-user-select: none;
+            user-select: none;
+          }
+        `}} />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased dark`}

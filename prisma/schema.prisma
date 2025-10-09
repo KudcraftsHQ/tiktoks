@@ -195,11 +195,104 @@ model RemixPost {
 
   originalPost       TiktokPost @relation(fields: [originalPostId], references: [id], onDelete: Cascade)
   productContext     ProductContext? @relation(fields: [productContextId], references: [id], onDelete: SetNull)
+  textStyles         RemixTextStyle[]
+  assetFolders       RemixAssetFolder[]
+  assets             RemixAsset[]
 
   @@map("remix_posts")
   @@index([originalPostId])
   @@index([productContextId])
   @@index([bookmarked])
+}
+
+// Text styles for Remix posts - reusable text styling templates
+
+model RemixTextStyle {
+  id              String   @id @default(cuid())
+  remixId         String
+  name            String
+  isDefault       Boolean  @default(false) // Whether this is the default style for new text boxes
+  
+  // Text styling properties (matching RemixTextBoxType schema)
+  fontSize        Int      @default(24)
+  fontFamily      String   @default("Poppins")
+  fontWeight      String   @default("normal")
+  fontStyle       String   @default("normal")
+  textDecoration  String   @default("none")
+  color           String   @default("#000000")
+  textAlign       String   @default("center")
+  
+  // Text effects
+  enableShadow    Boolean  @default(false)
+  shadowColor     String?
+  shadowBlur      Int?
+  shadowOffsetX   Int?
+  shadowOffsetY   Int?
+  outlineWidth    Int      @default(0)
+  outlineColor    String?
+  
+  // Background styling
+  backgroundColor String   @default("#ffffff")
+  backgroundOpacity Float  @default(1)
+  borderRadius    Int      @default(0)
+  borderWidth     Int      @default(0)
+  borderColor     String?
+  
+  // Padding and spacing
+  paddingTop      Int      @default(8)
+  paddingRight    Int      @default(12)
+  paddingBottom   Int      @default(8)
+  paddingLeft     Int      @default(12)
+  lineHeight      Float    @default(1.2)
+  letterSpacing   Int      @default(0)
+  wordSpacing     Int      @default(0)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  remix           RemixPost @relation(fields: [remixId], references: [id], onDelete: Cascade)
+  
+  @@map("remix_text_styles")
+  @@index([remixId])
+  @@index([remixId, isDefault])
+}
+
+// Folders for organizing remix assets
+
+model RemixAssetFolder {
+  id          String   @id @default(cuid())
+  remixId     String
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  remix       RemixPost @relation(fields: [remixId], references: [id], onDelete: Cascade)
+  assets      RemixAsset[]
+  
+  @@map("remix_asset_folders")
+  @@index([remixId])
+}
+
+// Assets for Remix posts - uploaded images with folder organization
+
+model RemixAsset {
+  id              String   @id @default(cuid())
+  remixId         String
+  folderId        String?  // Optional folder
+  cacheAssetId    String   @db.Uuid // Reference to CacheAsset
+  name            String?  // Optional custom name
+  width           Int?
+  height          Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  remix           RemixPost @relation(fields: [remixId], references: [id], onDelete: Cascade)
+  folder          RemixAssetFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  
+  @@map("remix_assets")
+  @@index([remixId])
+  @@index([folderId])
+  @@index([cacheAssetId])
 }
 
 // Product Context for storing product information and prompts

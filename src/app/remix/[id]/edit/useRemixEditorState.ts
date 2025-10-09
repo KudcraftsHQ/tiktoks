@@ -1,8 +1,19 @@
 import { useCallback, useMemo, useReducer } from 'react'
 import type { RemixPostType, RemixSlideType, RemixTextBoxType, BackgroundLayerType } from '@/lib/validations/remix-schema'
 
+export interface RemixEditorPost extends RemixPostType {
+  originalPost?: {
+    id: string
+    tiktokUrl?: string
+    authorNickname?: string | null
+    authorHandle?: string | null
+    description?: string | null
+    images?: Array<{ cacheAssetId: string; width: number; height: number; url?: string }>
+  }
+}
+
 interface EditorState {
-  remix: RemixPostType | null
+  remix: RemixEditorPost | null
   currentSlideIndex: number
   selectedTextBoxId: string | null
   selectedBackgroundLayerId: string | null
@@ -10,12 +21,12 @@ interface EditorState {
 }
 
 type EditorAction =
-  | { type: 'setRemix'; remix: RemixPostType | null }
+  | { type: 'setRemix'; remix: RemixEditorPost | null }
   | { type: 'setCurrentSlideIndex'; index: number }
   | { type: 'selectTextBox'; textBoxId: string | null }
   | { type: 'selectBackground'; layerId: string | null }
   | { type: 'markDirty'; dirty: boolean }
-  | { type: 'updateSlides'; slides: RemixSlideType[] }
+  | { type: 'updateSlides'; slides: RemixSlideType[]; dirty?: boolean }
 
 const initialState: EditorState = {
   remix: null,
@@ -65,7 +76,7 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
       return {
         ...state,
         remix: { ...state.remix, slides: action.slides },
-        hasUnsavedChanges: true
+        hasUnsavedChanges: action.dirty === false ? state.hasUnsavedChanges : true
       }
     default:
       return state
@@ -75,7 +86,7 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
 export function useRemixEditorState() {
   const [state, dispatch] = useReducer(editorReducer, initialState)
 
-  const setRemix = useCallback((remix: RemixPostType | null) => {
+  const setRemix = useCallback((remix: RemixEditorPost | null) => {
     dispatch({ type: 'setRemix', remix })
   }, [])
 
@@ -96,43 +107,49 @@ export function useRemixEditorState() {
   }, [])
 
   const updateSlide = useCallback(
-    (mutator: (slide: RemixSlideType) => RemixSlideType)
-  ) => {
-    const { remix, currentSlideIndex } = state
-    if (!remix || currentSlideIndex >= remix.slides.length) return
+    (mutator: (slide: RemixSlideType) => RemixSlideType, options?: { dirty?: boolean }) => {
+      const { remix, currentSlideIndex } = state
+      if (!remix || currentSlideIndex >= remix.slides.length) return
 
-    const slides = remix.slides.map((slide, idx) =>
-      idx === currentSlideIndex ? mutator(slide) : slide
-    )
+      const slides = remix.slides.map((slide, idx) =>
+        idx === currentSlideIndex ? mutator(slide) : slide
+      )
 
-    dispatch({ type: 'updateSlides', slides })
-  }, [state])
+      dispatch({ type: 'updateSlides', slides, dirty: options?.dirty })
+    },
+    [state]
+  )
 
-  const updateSlideCollection = useCallback((slides: RemixSlideType[]) => {
-    dispatch({ type: 'updateSlides', slides })
-  }, [])
+  const updateSlideCollection = useCallback(
+    (slides: RemixSlideType[], options?: { dirty?: boolean }) => {
+      dispatch({ type: 'updateSlides', slides, dirty: options?.dirty })
+    },
+    []
+  )
 
   const updateSelectedTextBox = useCallback(
-    (textBoxId: string, mutator: (textBox: RemixTextBoxType) => RemixTextBoxType)
-  ) => {
-    updateSlide((slide) => {
-      const nextTextBoxes = slide.textBoxes.map((tb) =>
-        tb.id === textBoxId ? mutator(tb) : tb
-      )
-      return { ...slide, textBoxes: nextTextBoxes }
-    })
-  }, [updateSlide]
+    (textBoxId: string, mutator: (textBox: RemixTextBoxType) => RemixTextBoxType, options?: { dirty?: boolean }) => {
+      updateSlide((slide) => {
+        const nextTextBoxes = slide.textBoxes.map((tb) =>
+          tb.id === textBoxId ? mutator(tb) : tb
+        )
+        return { ...slide, textBoxes: nextTextBoxes }
+      }, options)
+    },
+    [updateSlide]
+  )
 
   const updateSelectedBackground = useCallback(
-    (layerId: string, mutator: (layer: BackgroundLayerType) => BackgroundLayerType)
-  ) => {
-    updateSlide((slide) => {
-      const nextLayers = (slide.backgroundLayers || []).map((layer) =>
-        layer.id === layerId ? mutator(layer) : layer
-      )
-      return { ...slide, backgroundLayers: nextLayers }
-    })
-  }, [updateSlide]
+    (layerId: string, mutator: (layer: BackgroundLayerType) => BackgroundLayerType, options?: { dirty?: boolean }) => {
+      updateSlide((slide) => {
+        const nextLayers = (slide.backgroundLayers || []).map((layer) =>
+          layer.id === layerId ? mutator(layer) : layer
+        )
+        return { ...slide, backgroundLayers: nextLayers }
+      }, options)
+    },
+    [updateSlide]
+  )
 
   return useMemo(() => ({
     state,

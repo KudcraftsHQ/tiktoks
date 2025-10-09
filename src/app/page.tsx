@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import React, { useState, useEffect, useCallback, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -24,6 +24,7 @@ import { TikTokPost } from '@/components/posts-table-columns'
 import { PageLayout } from '@/components/PageLayout'
 import { designTokens } from '@/lib/design-tokens'
 import { toast } from 'sonner'
+import { SortingState } from '@tanstack/react-table'
 
 interface PostsResponse {
   posts: TikTokPost[]
@@ -32,23 +33,62 @@ interface PostsResponse {
   error?: string
 }
 
-export default function PostsPage() {
+function PostsPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Initialize state from URL params
+  const initialPage = parseInt(searchParams.get('page') || '1', 10)
+
+  // Parse sorting from URL
+  const sortBy = searchParams.get('sortBy')
+  const sortOrder = searchParams.get('sortOrder')
+  const initialSorting: SortingState = sortBy && sortOrder
+    ? [{ id: sortBy, desc: sortOrder === 'desc' }]
+    : []
+
   const [posts, setPosts] = useState<TikTokPost[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [currentPage, setCurrentPage] = useState(1)
+  const [currentPage, setCurrentPage] = useState(initialPage)
   const [pageSize, setPageSize] = useState(25)
+  const [sorting, setSorting] = useState<SortingState>(initialSorting)
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [newPostUrl, setNewPostUrl] = useState('')
   const [isAddingPost, setIsAddingPost] = useState(false)
 
-  const fetchPosts = async (page: number, limit: number) => {
+  // Update URL with current state
+  const updateURL = useCallback((page: number, sort: SortingState) => {
+    const params = new URLSearchParams()
+
+    if (page > 1) {
+      params.set('page', page.toString())
+    }
+
+    if (sort.length > 0 && sort[0]?.id) {
+      params.set('sortBy', sort[0].id)
+      params.set('sortOrder', sort[0].desc ? 'desc' : 'asc')
+    }
+
+    const queryString = params.toString()
+    const newUrl = queryString ? `?${queryString}` : '/'
+
+    // Use shallow routing to avoid full page reload
+    router.push(newUrl, { scroll: false })
+  }, [router])
+
+  const fetchPosts = useCallback(async (page: number, limit: number, sort: SortingState) => {
     setIsLoading(true)
     try {
       const params = new URLSearchParams({
         page: page.toString(),
         limit: limit.toString()
       })
+
+      // Add sorting parameters
+      if (sort.length > 0 && sort[0]?.id) {
+        params.append('sortBy', sort[0].id)
+        params.append('sortOrder', sort[0].desc ? 'desc' : 'asc')
+      }
 
       const response = await fetch(`/api/tiktok/posts?${params}`)
       const data: PostsResponse = await response.json()
@@ -65,14 +105,35 @@ export default function PostsPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
 
-  const handlePageChange = (pageIndex: number, newPageSize: number) => {
+  // Handle sorting change with URL update
+  const handleSortingChange = useCallback((updaterOrValue: SortingState | ((old: SortingState) => SortingState)) => {
+    setSorting(prevSorting => {
+      const newSorting = typeof updaterOrValue === 'function'
+        ? updaterOrValue(prevSorting)
+        : updaterOrValue
+
+      // Update URL and fetch with new sorting
+      updateURL(currentPage, newSorting)
+      fetchPosts(currentPage, pageSize, newSorting)
+
+      return newSorting
+    })
+  }, [currentPage, pageSize, updateURL, fetchPosts])
+
+  // Handle page change with URL update
+  const handlePageChange = useCallback((pageIndex: number, newPageSize: number) => {
     const newPage = pageIndex + 1 // Convert 0-based to 1-based
     setCurrentPage(newPage)
     setPageSize(newPageSize)
-    fetchPosts(newPage, newPageSize)
-  }
+
+    setSorting(currentSorting => {
+      updateURL(newPage, currentSorting)
+      fetchPosts(newPage, newPageSize, currentSorting)
+      return currentSorting
+    })
+  }, [updateURL, fetchPosts])
 
   const handleAddPost = async () => {
     if (!newPostUrl.trim()) return
@@ -91,7 +152,7 @@ export default function PostsPage() {
         setShowAddDialog(false)
         setNewPostUrl('')
         setCurrentPage(1)
-        fetchPosts(1, pageSize)
+        fetchPosts(1, pageSize, sorting)
         toast.success('Post imported successfully')
       } else {
         const error = await response.json()
@@ -106,8 +167,26 @@ export default function PostsPage() {
   }
 
 
+  // Sync state from URL params (for browser back/forward)
   useEffect(() => {
-    fetchPosts(1, pageSize)
+    const sortBy = searchParams.get('sortBy')
+    const sortOrder = searchParams.get('sortOrder')
+    const urlSorting: SortingState = sortBy && sortOrder
+      ? [{ id: sortBy, desc: sortOrder === 'desc' }]
+      : []
+
+    // Check if URL sorting is different from current state
+    const isDifferent = JSON.stringify(urlSorting) !== JSON.stringify(sorting)
+
+    if (isDifferent) {
+      setSorting(urlSorting)
+      fetchPosts(currentPage, pageSize, urlSorting)
+    }
+  }, [searchParams])
+
+  // Initial fetch
+  useEffect(() => {
+    fetchPosts(initialPage, pageSize, initialSorting)
   }, [])
 
   return (
@@ -169,8 +248,25 @@ export default function PostsPage() {
       <PostsTable
         posts={posts}
         onPageChange={handlePageChange}
+        onSortingChange={handleSortingChange}
+        sorting={sorting}
+        enableServerSideSorting={true}
         isLoading={isLoading}
       />
     </PageLayout>
+  )
+}
+
+export default function PostsPage() {
+  return (
+    <Suspense fallback={
+      <PageLayout title="TikTok Posts" description="Loading...">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </PageLayout>
+    }>
+      <PostsPageContent />
+    </Suspense>
   )
 }

@@ -77,20 +77,25 @@ export function SortableThumbnail({
       <ContextMenuTrigger>
         <div
           ref={setNodeRef}
-          style={style}
           {...attributes}
           {...listeners}
           onClick={onClick}
-          className={`flex-shrink-0 w-18 h-28 rounded-2xl border-3 box-border relative overflow-hidden select-none group sortable-item ${
+          className={`flex-shrink-0 rounded-2xl border-3 box-border relative select-none group sortable-item ${
             isActive
               ? 'border-primary shadow-xl' 
               : 'border-border hover:border-primary/50 thumbnail-hover'
           } ${
             isDragging ? 'dragging scale-95 opacity-40' : 'cursor-grab hover:cursor-grab active:cursor-grabbing'
           }`}
+          style={{
+            ...style,
+            width: 'auto',
+            height: '112px', // 28 * 4px = 112px (h-28)
+            aspectRatio: `${(slide as any).canvas?.width || 1080} / ${(slide as any).canvas?.height || 1920}`
+          }}
         >
           {/* Thumbnail with background */}
-          <div className="w-full h-full relative rounded-xl overflow-hidden bg-white">
+          <div className="w-full h-full relative rounded-xl bg-white" style={{ overflow: 'hidden' }}>
             {slide.backgroundImageUrl ? (
               <img
                 src={slide.backgroundImageUrl}
@@ -102,39 +107,72 @@ export function SortableThumbnail({
                 }}
               />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+              <div className="w-full h-full bg-white flex items-center justify-center">
                 <ImageIcon className="h-5 w-5 text-gray-400" />
               </div>
             )}
             
             {/* Text overlay preview - Show actual text content */}
-            <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute inset-0 pointer-events-none" style={{ overflow: 'hidden' }}>
               {slide.textBoxes.map((textBox) => {
-                // Calculate responsive font size for thumbnail
-                const thumbnailFontSize = Math.max(2, Math.min(8, textBox.fontSize * 0.12))
+                // Calculate proportional font size based on canvas height
+                const canvasHeight = (slide as any).canvas?.height || 1920
+                const thumbnailHeight = 112 // Fixed thumbnail height in pixels
+                const scaleFactor = thumbnailHeight / canvasHeight
+                const thumbnailFontSize = Math.max(1, textBox.fontSize * scaleFactor)
                 const isLightText = textBox.color === '#ffffff' || textBox.color === '#fff' || textBox.color.toLowerCase() === 'white'
+                
+                // Parse background color if exists
+                let backgroundColor = 'transparent'
+                if ((textBox as any).backgroundColor) {
+                  const bgColor = (textBox as any).backgroundColor
+                  const opacity = (textBox as any).backgroundOpacity || 1
+                  const r = parseInt(bgColor.slice(1, 3), 16)
+                  const g = parseInt(bgColor.slice(3, 5), 16)
+                  const b = parseInt(bgColor.slice(5, 7), 16)
+                  backgroundColor = `rgba(${r}, ${g}, ${b}, ${opacity})`
+                }
                 
                 return (
                   <div
                     key={textBox.id}
-                    className="absolute font-medium leading-tight overflow-hidden flex items-center justify-center"
+                    className="absolute font-medium leading-tight"
                     style={{
                       left: `${textBox.x * 100}%`,
                       top: `${textBox.y * 100}%`,
                       width: `${textBox.width * 100}%`,
                       height: `${textBox.height * 100}%`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: textBox.textAlign === 'center' ? 'center' : textBox.textAlign === 'right' ? 'flex-end' : 'flex-start',
                       color: textBox.color,
                       fontWeight: textBox.fontWeight === 'bold' ? '700' : '500',
                       fontStyle: textBox.fontStyle,
                       textAlign: textBox.textAlign as any,
                       fontSize: `${thumbnailFontSize}px`,
                       zIndex: textBox.zIndex,
-                      textShadow: isLightText ? '0 0 2px rgba(0,0,0,0.8), 0 0 4px rgba(0,0,0,0.5)' : '0 0 2px rgba(255,255,255,0.8)',
+                      textShadow: (textBox as any).enableShadow 
+                        ? `${(textBox as any).shadowOffsetX * scaleFactor}px ${(textBox as any).shadowOffsetY * scaleFactor}px ${(textBox as any).shadowBlur * scaleFactor}px ${(textBox as any).shadowColor}`
+                        : isLightText ? `0 0 ${2 * scaleFactor}px rgba(0,0,0,0.8), 0 0 ${4 * scaleFactor}px rgba(0,0,0,0.5)` : `0 0 ${2 * scaleFactor}px rgba(255,255,255,0.8)`,
                       wordWrap: 'break-word',
-                      hyphens: 'auto'
+                      hyphens: 'auto',
+                      overflow: 'hidden',
                     }}
                   >
-                    <span className="block max-w-full">{textBox.text}</span>
+                    <span 
+                      className="block"
+                      style={{
+                        display: 'inline',
+                        backgroundColor: backgroundColor,
+                        padding: `${((textBox as any).paddingTop || 0) * scaleFactor}px ${((textBox as any).paddingRight || 0) * scaleFactor}px ${((textBox as any).paddingBottom || 0) * scaleFactor}px ${((textBox as any).paddingLeft || 0) * scaleFactor}px`,
+                        borderRadius: `${((textBox as any).borderRadius || 0) * scaleFactor}px`,
+                        boxDecorationBreak: 'clone',
+                        WebkitBoxDecorationBreak: 'clone',
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {textBox.text}
+                    </span>
                   </div>
                 )
               })}

@@ -15,7 +15,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { ArrowUpDown, ChevronDown } from 'lucide-react'
+import { ArrowUpDown, ChevronDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { CSSProperties } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -266,7 +266,17 @@ export function DataTable<TData, TValue>({
       </div>
 
       {/* Scrollable table container - Critical: min-h-0 for flex scrolling */}
-      <div ref={tableWrapperRef} className="overflow-auto min-h-0">
+      <div ref={tableWrapperRef} className="overflow-auto min-h-0 relative">
+        {/* Loading overlay - full screen centered spinner */}
+        {isLoading && (
+          <div className="absolute inset-0 z-20 bg-black/50 flex items-center justify-center">
+            <div className="flex items-center gap-3 bg-background/95 px-6 py-4 rounded-lg shadow-lg border">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+              <span className="text-sm font-medium">Loading...</span>
+            </div>
+          </div>
+        )}
+
         <Table className="relative">
           <TableHeader className="sticky top-0 z-10">
             {table.getHeaderGroups().map((headerGroup) => (
@@ -295,25 +305,13 @@ export function DataTable<TData, TValue>({
             ))}
           </TableHeader>
           <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
-                    <span>Loading...</span>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : table.getRowModel().rows?.length ? (
+            {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && 'selected'}
                   onClick={() => onRowClick?.(row.original)}
-                  className={onRowClick ? 'cursor-pointer hover:bg-muted/50' : ''}
+                  className={onRowClick ? 'cursor-pointer hover:bg-muted/50 group' : ''}
                 >
                   {row.getVisibleCells().map((cell) => {
                     const pinningStyles = enableColumnPinning
@@ -324,7 +322,7 @@ export function DataTable<TData, TValue>({
                       <TableCell
                         key={cell.id}
                         style={pinningStyles}
-                        className={cell.column.getIsPinned() ? 'bg-background' : ''}
+                        className={cell.column.getIsPinned() ? 'bg-background group-hover:bg-muted/50' : ''}
                       >
                         {flexRender(
                           cell.column.columnDef.cell,
@@ -335,7 +333,7 @@ export function DataTable<TData, TValue>({
                   })}
                 </TableRow>
               ))
-            ) : (
+            ) : !isLoading ? (
               <TableRow>
                 <TableCell
                   colSpan={columns.length}
@@ -344,7 +342,7 @@ export function DataTable<TData, TValue>({
                   No results.
                 </TableCell>
               </TableRow>
-            )}
+            ) : null}
           </TableBody>
         </Table>
       </div>
@@ -421,14 +419,18 @@ export function DataTable<TData, TValue>({
 // Helper function to create sortable column headers
 export function createSortableHeader(title: string) {
   return ({ column }: { column: any }) => {
+    const isSorted = column.getIsSorted()
+
     return (
       <Button
         variant="ghost"
         onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-        className="h-auto p-0 hover:bg-transparent"
+        className={`h-auto p-0 hover:bg-transparent group ${isSorted ? 'font-bold' : ''}`}
       >
         {title}
-        <ArrowUpDown className="h-2 w-2" />
+        {isSorted === 'desc' && <ArrowDown className="h-3 w-3 ml-1" />}
+        {isSorted === 'asc' && <ArrowUp className="h-3 w-3 ml-1" />}
+        {!isSorted && <ArrowUpDown className="h-3 w-3 ml-1 opacity-0 group-hover:opacity-50" />}
       </Button>
     )
   }

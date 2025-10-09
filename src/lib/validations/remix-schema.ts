@@ -35,10 +35,10 @@ const RemixTextBoxSchema = z.object({
   textDecoration: z.enum(['none', 'underline', 'overline', 'line-through']),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
   textAlign: z.enum(['left', 'center', 'right', 'justify']),
-  zIndex: z.number().min(1).max(1000),
+  zIndex: z.number().min(1).max(10000),
 
   // Text wrapping behavior
-  textWrap: z.enum(['none', 'wrap', 'ellipsis']).default('none'),
+  textWrap: z.enum(['none', 'wrap', 'ellipsis']).default('wrap'),
 
   // Advanced text styling
   textStroke: z.string().optional(),
@@ -49,16 +49,16 @@ const RemixTextBoxSchema = z.object({
   // Text shadow effects
   enableShadow: z.boolean().default(false),
   shadowColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).default('#000000'),
-  shadowBlur: z.number().min(0).max(20).default(4),
-  shadowOffsetX: z.number().min(-20).max(20).default(2),
-  shadowOffsetY: z.number().min(-20).max(20).default(2),
+  shadowBlur: z.number().min(0).max(20).default(0),
+  shadowOffsetX: z.number().min(-20).max(20).default(0),
+  shadowOffsetY: z.number().min(-20).max(20).default(0),
 
   // Text outline effects
   outlineWidth: z.number().min(0).max(10).default(0),
   outlineColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).default('#000000'),
 
   // Text background styling
-  backgroundColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  backgroundColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).default('#ffffff'),
   backgroundOpacity: z.number().min(0).max(1).default(1),
   borderRadius: z.number().min(0).max(50).default(0),
 
@@ -71,6 +71,7 @@ const RemixTextBoxSchema = z.object({
   // Line height and letter spacing
   lineHeight: z.number().min(0.5).max(3).default(1.2),
   letterSpacing: z.number().min(-5).max(20).default(0),
+  wordSpacing: z.number().min(-10).max(50).default(0),
 
   // Transform metadata for resizing/rotating
   transform: TransformSchema.default({ rotation: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 }),
@@ -158,6 +159,8 @@ const RemixSlideSchema = z.object({
       y: 0,
       width: 1,
       height: 1,
+      rotation: 0,
+      fitMode: 'cover',
       opacity: 1,
       blendMode: 'normal',
       zIndex: 1

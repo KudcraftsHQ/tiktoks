@@ -181,6 +181,11 @@ export async function GET(request: NextRequest) {
     const authorHandle = searchParams.get('authorHandle')
     const search = searchParams.get('search') || ''
 
+    // Parse sorting from URL
+    const sortBy = searchParams.get('sortBy') || 'publishedAt'
+    const sortOrder = searchParams.get('sortOrder') || 'desc'
+    const orderBy: any = { [sortBy]: sortOrder }
+
     const skip = (page - 1) * limit
 
     // Build where clause
@@ -240,9 +245,7 @@ export async function GET(request: NextRequest) {
             }
           }
         },
-        orderBy: {
-          publishedAt: 'desc'
-        },
+        orderBy,
         skip,
         take: limit
       }),
@@ -259,51 +262,63 @@ export async function GET(request: NextRequest) {
     const musicIds = posts.map(post => post.musicId)
     const avatarIds = posts.map(post => post.authorAvatarId)
 
-    const [presignedVideoUrls, presignedCoverUrls, presignedMusicUrls, presignedAvatarUrls] = await Promise.all([
+    // Parse all images from all posts and collect all image IDs for bulk fetching
+    const parsedPostImages: Array<{ postIndex: number; images: any[] }> = []
+    const allImageIds: Array<string | null> = []
+
+    posts.forEach((post, index) => {
+      try {
+        const parsedImages = typeof post.images === 'string'
+          ? JSON.parse(post.images || '[]')
+          : Array.isArray(post.images) ? post.images : []
+
+        parsedPostImages.push({ postIndex: index, images: parsedImages })
+
+        // Collect all image IDs for bulk fetching
+        parsedImages.forEach((img: any) => {
+          allImageIds.push(img.cacheAssetId || null)
+        })
+      } catch (error) {
+        console.warn('Failed to parse images for post:', post.id, error)
+        parsedPostImages.push({ postIndex: index, images: [] })
+      }
+    })
+
+    // Fetch all presigned URLs in bulk (one query for all images across all posts)
+    const [presignedVideoUrls, presignedCoverUrls, presignedMusicUrls, presignedAvatarUrls, allPresignedImageUrls] = await Promise.all([
       cacheAssetService.getUrls(videoIds),
       cacheAssetService.getUrls(coverIds),
       cacheAssetService.getUrls(musicIds),
-      cacheAssetService.getUrls(avatarIds)
+      cacheAssetService.getUrls(avatarIds),
+      cacheAssetService.getUrls(allImageIds)
     ])
 
     // Convert BigInt to string for JSON serialization and add presigned URLs
-    const responsePosts = await Promise.all(
-      posts.map(async (post, index) => {
-        // Parse images JSON and generate presigned URLs for each image
-        let images = []
-        try {
-          const parsedImages = typeof post.images === 'string'
-            ? JSON.parse(post.images || '[]')
-            : Array.isArray(post.images) ? post.images : []
-          if (parsedImages.length > 0) {
-            const imageIds = parsedImages.map((img: any) => img.cacheAssetId)
-            const presignedImageUrls = await cacheAssetService.getUrls(imageIds)
+    let imageUrlIndex = 0
+    const responsePosts = posts.map((post, index) => {
+      const postImages = parsedPostImages.find(p => p.postIndex === index)
+      let images = []
 
-            images = parsedImages.map((img: any, imgIndex: number) => ({
-              ...img,
-              url: presignedImageUrls[imgIndex]
-            }))
-          } else {
-            images = parsedImages
+      if (postImages && postImages.images.length > 0) {
+        images = postImages.images.map((img: any) => {
+          const url = allPresignedImageUrls[imageUrlIndex++]
+          return {
+            ...img,
+            url
           }
-        } catch (error) {
-          console.warn('Failed to parse images for post:', post.id, error)
-          images = typeof post.images === 'string'
-            ? JSON.parse(post.images || '[]')
-            : Array.isArray(post.images) ? post.images : []
-        }
+        })
+      }
 
-        return {
-          ...post,
-          viewCount: post.viewCount?.toString() || '0',
-          videoUrl: presignedVideoUrls[index],
-          coverUrl: presignedCoverUrls[index],
-          musicUrl: presignedMusicUrls[index],
-          authorAvatar: presignedAvatarUrls[index],
-          images: images
-        }
-      })
-    )
+      return {
+        ...post,
+        viewCount: post.viewCount?.toString() || '0',
+        videoUrl: presignedVideoUrls[index],
+        coverUrl: presignedCoverUrls[index],
+        musicUrl: presignedMusicUrls[index],
+        authorAvatar: presignedAvatarUrls[index],
+        images: images
+      }
+    })
 
     return NextResponse.json({
       posts: responsePosts,

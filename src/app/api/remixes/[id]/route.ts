@@ -141,6 +141,11 @@ export async function GET(
         authorAvatar: authorAvatarUrl,
         profile: {
           ...remix.originalPost.profile,
+          totalViews: remix.originalPost.profile.totalViews?.toString() || '0',
+          totalLikes: remix.originalPost.profile.totalLikes?.toString() || '0',
+          totalShares: remix.originalPost.profile.totalShares?.toString() || '0',
+          totalComments: remix.originalPost.profile.totalComments?.toString() || '0',
+          totalSaves: remix.originalPost.profile.totalSaves?.toString() || '0',
           // Generate avatar URL for profile if needed
           avatarUrl: remix.originalPost.profile.avatarId
             ? await cacheAssetService.getUrl(remix.originalPost.profile.avatarId)
@@ -267,6 +272,11 @@ export async function PUT(
         authorAvatar: authorAvatarUrl,
         profile: {
           ...updatedRemix.originalPost.profile,
+          totalViews: updatedRemix.originalPost.profile.totalViews?.toString() || '0',
+          totalLikes: updatedRemix.originalPost.profile.totalLikes?.toString() || '0',
+          totalShares: updatedRemix.originalPost.profile.totalShares?.toString() || '0',
+          totalComments: updatedRemix.originalPost.profile.totalComments?.toString() || '0',
+          totalSaves: updatedRemix.originalPost.profile.totalSaves?.toString() || '0',
           // Generate avatar URL for profile if needed
           avatarUrl: updatedRemix.originalPost.profile.avatarId
             ? await cacheAssetService.getUrl(updatedRemix.originalPost.profile.avatarId)

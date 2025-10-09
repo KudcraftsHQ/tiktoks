@@ -31,15 +31,42 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  serverExternalPackages: [
+    '@napi-rs/canvas',
+    // Platform-specific packages will be externalized automatically
+  ],
   experimental: {
+    serverComponentsExternalPackages: [
+      '@napi-rs/canvas',
+    ],
     turbo: {
       resolveAlias: {
-        canvas: './empty.js',
+        // Don't alias canvas - we need @napi-rs/canvas to work
+        // canvas: './empty.js',
       },
     },
   },
-  webpack: (config) => {
-    config.externals = [...config.externals, { canvas: 'canvas' }];
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      // Externalize @napi-rs/canvas and all its platform-specific packages
+      // This prevents webpack from trying to bundle native modules
+      config.externals = config.externals || [];
+      
+      // Add canvas packages to externals
+      if (Array.isArray(config.externals)) {
+        config.externals.push(
+          '@napi-rs/canvas',
+          /@napi-rs\/canvas-.*/,  // All platform-specific packages
+        );
+      }
+    } else {
+      // On client-side, stub out canvas-related imports
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        canvas: false,
+        '@napi-rs/canvas': false,
+      };
+    }
     return config;
   },
 };

@@ -111,7 +111,7 @@ export function PostsTable({
   }
 
   const handleRemixPost = (post: TikTokPost) => {
-    router.push(`/posts/${post.id}/remix`)
+    window.open(`/posts/${post.id}/remix`, '_blank')
   }
 
   const handleRowClick = (post: TikTokPost) => {

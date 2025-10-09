@@ -4,6 +4,7 @@ import React from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   AlignLeft,
   AlignCenter,
@@ -14,14 +15,46 @@ import {
   Underline,
   Type,
   Palette,
-  Move,
-  MoreHorizontal,
-  WrapText,
   Hash,
   Square,
   Settings
 } from 'lucide-react'
 import type { RemixTextBoxType } from '@/lib/validations/remix-schema'
+
+const FONT_FAMILIES = [
+  'Arial',
+  'Helvetica',
+  'Times New Roman',
+  'Georgia',
+  'Verdana',
+  'Tahoma',
+  'Trebuchet MS',
+  'Impact',
+  'Comic Sans MS',
+  'Courier New',
+  'Poppins',
+  'Inter',
+  'Roboto',
+  'Open Sans',
+  'Lato',
+  'Montserrat',
+  'Source Sans Pro',
+  'Oswald',
+  'Raleway',
+  'PT Sans'
+]
+
+const FONT_WEIGHTS = [
+  { value: '100', label: 'Thin' },
+  { value: '200', label: 'XLight' },
+  { value: '300', label: 'Light' },
+  { value: '400', label: 'Normal' },
+  { value: '500', label: 'Medium' },
+  { value: '600', label: 'SemiBold' },
+  { value: '700', label: 'Bold' },
+  { value: '800', label: 'XBold' },
+  { value: '900', label: 'Black' }
+]
 
 interface FloatingSettingsPanelProps {
   selectedTextBox: RemixTextBoxType | null
@@ -74,9 +107,47 @@ export function FloatingSettingsPanel({
     <>
       <div
         style={panelStyle as any}
-        className="bg-background rounded-lg shadow-lg p-2 flex items-center gap-1 pointer-events-auto"
+        className="bg-background rounded-lg shadow-lg border border-white/20 p-2 flex items-center gap-1 pointer-events-auto"
         onClick={(e) => e.stopPropagation()}
       >
+      {/* Font Family */}
+      <Select
+        value={selectedTextBox.fontFamily}
+        onValueChange={(value) => onUpdateTextBox({ fontFamily: value })}
+      >
+        <SelectTrigger className="w-32 h-8 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {FONT_FAMILIES.map((font) => (
+            <SelectItem key={font} value={font}>
+              {font}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Separator orientation="vertical" className="h-6" />
+
+      {/* Font Weight */}
+      <Select
+        value={selectedTextBox.fontWeight}
+        onValueChange={(value) => onUpdateTextBox({ fontWeight: value as any })}
+      >
+        <SelectTrigger className="w-24 h-8 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {FONT_WEIGHTS.map((weight) => (
+            <SelectItem key={weight.value} value={weight.value}>
+              {weight.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Separator orientation="vertical" className="h-6" />
+
       {/* Font Size */}
       <div className="flex items-center gap-1">
         <Type className="h-4 w-4 text-gray-500" />
@@ -95,22 +166,11 @@ export function FloatingSettingsPanel({
       {/* Text Formatting */}
       <div className="flex items-center gap-1">
         <Button
-          variant={
-            selectedTextBox.fontWeight === 'bold' ||
-            ['600', '700', '800', '900'].includes(selectedTextBox.fontWeight)
-              ? 'default' : 'ghost'
-          }
-          size="sm"
-          className="h-8 w-8 p-0"
-          onClick={toggleBold}
-        >
-          <Bold className="h-4 w-4" />
-        </Button>
-        <Button
           variant={selectedTextBox.fontStyle === 'italic' ? 'default' : 'ghost'}
           size="sm"
           className="h-8 w-8 p-0"
           onClick={toggleItalic}
+          title="Italic"
         >
           <Italic className="h-4 w-4" />
         </Button>
@@ -119,6 +179,7 @@ export function FloatingSettingsPanel({
           size="sm"
           className="h-8 w-8 p-0"
           onClick={toggleUnderline}
+          title="Underline"
         >
           <Underline className="h-4 w-4" />
         </Button>
@@ -133,6 +194,7 @@ export function FloatingSettingsPanel({
           size="sm"
           className="h-8 w-8 p-0"
           onClick={() => setTextAlign('left')}
+          title="Align Left"
         >
           <AlignLeft className="h-4 w-4" />
         </Button>
@@ -141,6 +203,7 @@ export function FloatingSettingsPanel({
           size="sm"
           className="h-8 w-8 p-0"
           onClick={() => setTextAlign('center')}
+          title="Align Center"
         >
           <AlignCenter className="h-4 w-4" />
         </Button>
@@ -149,6 +212,7 @@ export function FloatingSettingsPanel({
           size="sm"
           className="h-8 w-8 p-0"
           onClick={() => setTextAlign('right')}
+          title="Align Right"
         >
           <AlignRight className="h-4 w-4" />
         </Button>
@@ -157,6 +221,7 @@ export function FloatingSettingsPanel({
           size="sm"
           className="h-8 w-8 p-0"
           onClick={() => setTextAlign('justify')}
+          title="Align Justify"
         >
           <AlignJustify className="h-4 w-4" />
         </Button>
@@ -180,7 +245,7 @@ export function FloatingSettingsPanel({
 
       {/* Background Color */}
       <div className="flex items-center gap-1">
-        <div className="text-xs text-gray-500">BG</div>
+        <span className="text-xs text-gray-500">BG</span>
         <input
           type="color"
           value={selectedTextBox.backgroundColor || '#ffffff'}
@@ -188,61 +253,33 @@ export function FloatingSettingsPanel({
           className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
           title="Background Color"
         />
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0 text-xs"
-          onClick={() => onUpdateTextBox({ backgroundColor: undefined })}
-          title="Remove Background"
-        >
-          ×
-        </Button>
-      </div>
-
-      <Separator orientation="vertical" className="h-6" />
-
-      {/* Text Wrapping */}
-      <div className="flex items-center gap-1">
-        <Button
-          variant={selectedTextBox.textWrap !== 'none' ? 'default' : 'ghost'}
-          size="sm"
-          className="h-8 w-8 p-0"
-          onClick={() => onUpdateTextBox({ textWrap: selectedTextBox.textWrap === 'none' ? 'wrap' : 'none' })}
-          title="Text Wrapping"
-        >
-          <WrapText className="h-4 w-4" />
-        </Button>
       </div>
 
       <Separator orientation="vertical" className="h-6" />
 
       {/* Text Shadow */}
-      <div className="flex items-center gap-1">
-        <Button
-          variant={selectedTextBox.enableShadow ? 'default' : 'ghost'}
-          size="sm"
-          className="h-8 w-8 p-0"
-          onClick={() => onUpdateTextBox({ enableShadow: !selectedTextBox.enableShadow })}
-          title="Text Shadow"
-        >
-          <Hash className="h-4 w-4" />
-        </Button>
-      </div>
+      <Button
+        variant={selectedTextBox.enableShadow ? 'default' : 'ghost'}
+        size="sm"
+        className="h-8 w-8 p-0"
+        onClick={() => onUpdateTextBox({ enableShadow: !selectedTextBox.enableShadow })}
+        title="Text Shadow"
+      >
+        <Hash className="h-4 w-4" />
+      </Button>
 
       <Separator orientation="vertical" className="h-6" />
 
       {/* Text Outline */}
-      <div className="flex items-center gap-1">
-        <Button
-          variant={(selectedTextBox.outlineWidth || 0) > 0 ? 'default' : 'ghost'}
-          size="sm"
-          className="h-8 w-8 p-0"
-          onClick={() => onUpdateTextBox({ outlineWidth: (selectedTextBox.outlineWidth || 0) > 0 ? 0 : 2 })}
-          title="Text Outline"
-        >
-          <Square className="h-4 w-4" />
-        </Button>
-      </div>
+      <Button
+        variant={(selectedTextBox.outlineWidth || 0) > 0 ? 'default' : 'ghost'}
+        size="sm"
+        className="h-8 w-8 p-0"
+        onClick={() => onUpdateTextBox({ outlineWidth: (selectedTextBox.outlineWidth || 0) > 0 ? 0 : 2 })}
+        title="Text Outline"
+      >
+        <Square className="h-4 w-4" />
+      </Button>
 
       <Separator orientation="vertical" className="h-6" />
 
@@ -267,14 +304,90 @@ export function FloatingSettingsPanel({
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 9999,
-          minWidth: '300px'
+          minWidth: '350px'
         }}
-        className="bg-background rounded-lg shadow-lg p-4 border"
+        className="bg-background rounded-lg shadow-lg border border-white/20 p-4"
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="space-y-4">
+          {/* Line Height */}
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-muted-foreground">Line Height</div>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="0.5"
+                max="3"
+                step="0.1"
+                value={selectedTextBox.lineHeight || 1.2}
+                onChange={(e) => onUpdateTextBox({ lineHeight: parseFloat(e.target.value) })}
+                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              />
+              <Input
+                type="number"
+                min="0.5"
+                max="3"
+                step="0.1"
+                value={selectedTextBox.lineHeight || 1.2}
+                onChange={(e) => onUpdateTextBox({ lineHeight: parseFloat(e.target.value) })}
+                className="w-16 h-8 text-xs"
+              />
+            </div>
+          </div>
+
+          {/* Letter Spacing */}
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-muted-foreground">Letter Spacing</div>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="-5"
+                max="20"
+                step="0.5"
+                value={selectedTextBox.letterSpacing || 0}
+                onChange={(e) => onUpdateTextBox({ letterSpacing: parseFloat(e.target.value) })}
+                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              />
+              <Input
+                type="number"
+                min="-5"
+                max="20"
+                step="0.5"
+                value={selectedTextBox.letterSpacing || 0}
+                onChange={(e) => onUpdateTextBox({ letterSpacing: parseFloat(e.target.value) })}
+                className="w-16 h-8 text-xs"
+              />
+            </div>
+          </div>
+
+          {/* Word Spacing */}
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-muted-foreground">Word Spacing</div>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="-10"
+                max="50"
+                step="1"
+                value={(selectedTextBox as any).wordSpacing || 0}
+                onChange={(e) => onUpdateTextBox({ wordSpacing: parseFloat(e.target.value) } as any)}
+                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              />
+              <Input
+                type="number"
+                min="-10"
+                max="50"
+                step="1"
+                value={(selectedTextBox as any).wordSpacing || 0}
+                onChange={(e) => onUpdateTextBox({ wordSpacing: parseFloat(e.target.value) } as any)}
+                className="w-16 h-8 text-xs"
+              />
+            </div>
+          </div>
+
           {/* Quick Shadow Controls */}
           <div className="space-y-2">
-            <div className="text-xs font-medium text-muted-foreground">Quick Shadow</div>
+            <div className="text-xs font-medium text-muted-foreground">Shadow Blur</div>
             <div className="flex items-center gap-2">
               <input
                 type="color"
@@ -291,12 +404,20 @@ export function FloatingSettingsPanel({
                 onChange={(e) => onUpdateTextBox({ shadowBlur: parseInt(e.target.value), enableShadow: true })}
                 className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
               />
+              <Input
+                type="number"
+                min="0"
+                max="10"
+                value={selectedTextBox.shadowBlur}
+                onChange={(e) => onUpdateTextBox({ shadowBlur: parseInt(e.target.value), enableShadow: true })}
+                className="w-16 h-8 text-xs"
+              />
             </div>
           </div>
 
           {/* Quick Outline Controls */}
           <div className="space-y-2">
-            <div className="text-xs font-medium text-muted-foreground">Quick Outline</div>
+            <div className="text-xs font-medium text-muted-foreground">Outline Width</div>
             <div className="flex items-center gap-2">
               <input
                 type="color"
@@ -313,6 +434,15 @@ export function FloatingSettingsPanel({
                 value={selectedTextBox.outlineWidth}
                 onChange={(e) => onUpdateTextBox({ outlineWidth: parseFloat(e.target.value) })}
                 className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              />
+              <Input
+                type="number"
+                min="0"
+                max="5"
+                step="0.5"
+                value={selectedTextBox.outlineWidth}
+                onChange={(e) => onUpdateTextBox({ outlineWidth: parseFloat(e.target.value) })}
+                className="w-16 h-8 text-xs"
               />
             </div>
           </div>
@@ -345,6 +475,31 @@ export function FloatingSettingsPanel({
               >
                 Ellipsis
               </Button>
+            </div>
+          </div>
+
+          {/* Background Border Radius */}
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-muted-foreground">Background Border Radius</div>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="0"
+                max="50"
+                step="1"
+                value={selectedTextBox.borderRadius || 0}
+                onChange={(e) => onUpdateTextBox({ borderRadius: parseInt(e.target.value) })}
+                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              />
+              <Input
+                type="number"
+                min="0"
+                max="50"
+                step="1"
+                value={selectedTextBox.borderRadius || 0}
+                onChange={(e) => onUpdateTextBox({ borderRadius: parseInt(e.target.value) })}
+                className="w-16 h-8 text-xs"
+              />
             </div>
           </div>
         </div>

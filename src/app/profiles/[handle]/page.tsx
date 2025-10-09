@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, Suspense } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PostsTable } from '@/components/PostsTable'
 import { PostTypeFilter } from '@/components/PostTypeFilter'
@@ -26,7 +26,7 @@ import {
 import { TikTokPost } from '@/components/posts-table-columns'
 import { TikTokProfile } from '@/components/profiles-table-columns'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { designTokens } from '@/lib/design-tokens'
 import { PageLayout } from '@/components/PageLayout'
 import { PostingActivityHeatmap } from '@/components/PostingActivityHeatmap'
@@ -41,9 +41,21 @@ interface ProfilePostsResult {
   error?: string
 }
 
-export default function ProfileDetailPage() {
+function ProfileDetailPageContent() {
   const params = useParams()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const handle = params.handle as string
+
+  // Initialize state from URL params
+  const initialPage = parseInt(searchParams.get('page') || '1', 10)
+
+  // Parse sorting from URL
+  const sortBy = searchParams.get('sortBy')
+  const sortOrder = searchParams.get('sortOrder')
+  const initialSorting: SortingState = sortBy && sortOrder
+    ? [{ id: sortBy, desc: sortOrder === 'desc' }]
+    : []
 
   const [profile, setProfile] = useState<TikTokProfile | null>(null)
   const [posts, setPosts] = useState<TikTokPost[]>([])
@@ -51,16 +63,35 @@ export default function ProfileDetailPage() {
   const [profileLoading, setProfileLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [contentTypeFilter, setContentTypeFilter] = useState<'all' | 'video' | 'photo'>('all')
-  const [currentPage, setCurrentPage] = useState(1)
+  const [currentPage, setCurrentPage] = useState(initialPage)
   const [totalPosts, setTotalPosts] = useState(0)
   const [monitoringEnabled, setMonitoringEnabled] = useState(false)
   const [monitoringLoading, setMonitoringLoading] = useState(false)
   const [triggerLoading, setTriggerLoading] = useState(false)
   const [activityData, setActivityData] = useState<Array<{ date: string; count: number }>>([])
-  const [sorting, setSorting] = useState<SortingState>([])
+  const [sorting, setSorting] = useState<SortingState>(initialSorting)
   const [firstPostDate, setFirstPostDate] = useState<string | null>(null)
   const [activityLoading, setActivityLoading] = useState(false)
 
+  // Update URL with current state
+  const updateURL = useCallback((page: number, sort: SortingState) => {
+    const params = new URLSearchParams()
+
+    if (page > 1) {
+      params.set('page', page.toString())
+    }
+
+    if (sort.length > 0 && sort[0]?.id) {
+      params.set('sortBy', sort[0].id)
+      params.set('sortOrder', sort[0].desc ? 'desc' : 'asc')
+    }
+
+    const queryString = params.toString()
+    const newUrl = queryString ? `?${queryString}` : ''
+
+    // Use shallow routing to avoid full page reload
+    router.push(`/profiles/${handle}${newUrl}`, { scroll: false })
+  }, [router, handle])
 
   const fetchProfile = useCallback(async () => {
     if (!handle) return
@@ -83,7 +114,7 @@ export default function ProfileDetailPage() {
     }
   }, [handle])
 
-  const fetchProfilePosts = useCallback(async () => {
+  const fetchProfilePosts = useCallback(async (page: number, sort: SortingState, filter: 'all' | 'video' | 'photo') => {
     if (!profile?.id) return
 
     setLoading(true)
@@ -91,19 +122,18 @@ export default function ProfileDetailPage() {
 
     try {
       const params = new URLSearchParams({
-        page: currentPage.toString(),
+        page: page.toString(),
         limit: '50'
       })
 
-      if (contentTypeFilter !== 'all') {
-        params.append('contentType', contentTypeFilter)
+      if (filter !== 'all') {
+        params.append('contentType', filter)
       }
 
       // Add sorting parameters
-      if (sorting.length > 0) {
-        const sort = sorting[0]
-        params.append('sortBy', sort.id)
-        params.append('sortOrder', sort.desc ? 'desc' : 'asc')
+      if (sort.length > 0 && sort[0]?.id) {
+        params.append('sortBy', sort[0].id)
+        params.append('sortOrder', sort[0].desc ? 'desc' : 'asc')
       }
 
       const response = await fetch(`/api/tiktok/profiles/${profile.id}/posts?${params.toString()}`)
@@ -121,7 +151,7 @@ export default function ProfileDetailPage() {
     } finally {
       setLoading(false)
     }
-  }, [profile?.id, currentPage, contentTypeFilter, sorting])
+  }, [profile?.id])
 
   const fetchActivityData = useCallback(async () => {
     if (!profile?.id) return
@@ -148,9 +178,9 @@ export default function ProfileDetailPage() {
 
   const handleRefresh = useCallback(() => {
     fetchProfile()
-    fetchProfilePosts()
+    fetchProfilePosts(currentPage, sorting, contentTypeFilter)
     fetchActivityData()
-  }, [fetchProfile, fetchProfilePosts, fetchActivityData])
+  }, [fetchProfile, fetchProfilePosts, fetchActivityData, currentPage, sorting, contentTypeFilter])
 
   const handleMonitoringToggle = useCallback(async (enabled: boolean) => {
     if (!profile?.id) return
@@ -216,14 +246,32 @@ export default function ProfileDetailPage() {
     }
   }, [profile?.id])
 
+  // Sync state from URL params (for browser back/forward)
+  useEffect(() => {
+    const sortBy = searchParams.get('sortBy')
+    const sortOrder = searchParams.get('sortOrder')
+    const urlSorting: SortingState = sortBy && sortOrder
+      ? [{ id: sortBy, desc: sortOrder === 'desc' }]
+      : []
+
+    // Check if URL sorting is different from current state
+    const isDifferent = JSON.stringify(urlSorting) !== JSON.stringify(sorting)
+
+    if (isDifferent) {
+      setSorting(urlSorting)
+    }
+  }, [searchParams])
+
   // Load profile and posts on mount and when filters change
   useEffect(() => {
     fetchProfile()
   }, [fetchProfile])
 
   useEffect(() => {
-    fetchProfilePosts()
-  }, [fetchProfilePosts])
+    if (profile?.id) {
+      fetchProfilePosts(currentPage, sorting, contentTypeFilter)
+    }
+  }, [profile?.id, currentPage, sorting, contentTypeFilter, fetchProfilePosts])
 
   useEffect(() => {
     fetchActivityData()
@@ -253,6 +301,30 @@ export default function ProfileDetailPage() {
       return post.contentType === contentTypeFilter
     }), [posts, contentTypeFilter]
   )
+
+  // Handle sorting change with URL update
+  const handleSortingChange = useCallback((updaterOrValue: SortingState | ((old: SortingState) => SortingState)) => {
+    setSorting(prevSorting => {
+      const newSorting = typeof updaterOrValue === 'function'
+        ? updaterOrValue(prevSorting)
+        : updaterOrValue
+
+      updateURL(currentPage, newSorting)
+      return newSorting
+    })
+  }, [currentPage, updateURL])
+
+  // Handle page change with URL update
+  // Note: DataTable calls this with the NEW pageIndex (0-indexed) after navigation
+  const handlePageChange = useCallback((pageIndex: number, pageSize: number) => {
+    const newPage = pageIndex + 1 // Convert 0-indexed to 1-indexed for URL
+    setCurrentPage(newPage)
+
+    setSorting(currentSorting => {
+      updateURL(newPage, currentSorting)
+      return currentSorting
+    })
+  }, [updateURL])
 
   if (profileLoading) {
     return (
@@ -485,7 +557,8 @@ export default function ProfileDetailPage() {
                 value: contentTypeFilter,
                 onChange: setContentTypeFilter
               }}
-              onSortingChange={setSorting}
+              onPageChange={handlePageChange}
+              onSortingChange={handleSortingChange}
               sorting={sorting}
               enableServerSideSorting={true}
               hiddenColumns={['authorHandle']}
@@ -513,5 +586,19 @@ export default function ProfileDetailPage() {
         )}
       </div>
     </PageLayout>
+  )
+}
+
+export default function ProfileDetailPage() {
+  return (
+    <Suspense fallback={
+      <PageLayout title="Profile" description="Loading profile...">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </PageLayout>
+    }>
+      <ProfileDetailPageContent />
+    </Suspense>
   )
 }

@@ -15,6 +15,8 @@ import {
   Eye,
   Clock,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   Images,
   Sparkles
 } from 'lucide-react'
@@ -260,15 +262,18 @@ export const createPostsTableColumns = ({
     accessorKey: 'viewCount',
     header: ({ column }) => {
       const isSorted = column.getIsSorted()
+
       return (
         <div className="flex items-center justify-center">
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-            className={`h-auto p-1 hover:bg-transparent ${isSorted ? 'text-foreground' : 'text-muted-foreground'}`}
+            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'}`}
           >
             <Eye className="w-4 h-4" />
-            <ArrowUpDown className="ml-1 h-3 w-3" />
+            {isSorted === 'desc' && <ArrowDown className="ml-1 h-3 w-3" />}
+            {isSorted === 'asc' && <ArrowUp className="ml-1 h-3 w-3" />}
+            {!isSorted && <ArrowUpDown className="ml-1 h-3 w-3 opacity-0 group-hover:opacity-50" />}
           </Button>
         </div>
       )
@@ -335,15 +340,18 @@ export const createPostsTableColumns = ({
     accessorKey: 'likeCount',
     header: ({ column }) => {
       const isSorted = column.getIsSorted()
+
       return (
         <div className="flex items-center justify-center">
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-            className={`h-auto p-1 hover:bg-transparent ${isSorted ? 'text-foreground' : 'text-muted-foreground'}`}
+            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'}`}
           >
             <Heart className={`w-4 h-4 ${isSorted ? 'text-red-600' : 'text-red-400'}`} />
-            <ArrowUpDown className="ml-1 h-3 w-3" />
+            {isSorted === 'desc' && <ArrowDown className="ml-1 h-3 w-3" />}
+            {isSorted === 'asc' && <ArrowUp className="ml-1 h-3 w-3" />}
+            {!isSorted && <ArrowUpDown className="ml-1 h-3 w-3 opacity-0 group-hover:opacity-50" />}
           </Button>
         </div>
       )
@@ -361,15 +369,18 @@ export const createPostsTableColumns = ({
     accessorKey: 'commentCount',
     header: ({ column }) => {
       const isSorted = column.getIsSorted()
+
       return (
         <div className="flex items-center justify-center">
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-            className={`h-auto p-1 hover:bg-transparent ${isSorted ? 'text-foreground' : 'text-muted-foreground'}`}
+            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'}`}
           >
             <MessageCircle className={`w-4 h-4 ${isSorted ? 'text-blue-600' : 'text-blue-400'}`} />
-            <ArrowUpDown className="ml-1 h-3 w-3" />
+            {isSorted === 'desc' && <ArrowDown className="ml-1 h-3 w-3" />}
+            {isSorted === 'asc' && <ArrowUp className="ml-1 h-3 w-3" />}
+            {!isSorted && <ArrowUpDown className="ml-1 h-3 w-3 opacity-0 group-hover:opacity-50" />}
           </Button>
         </div>
       )
@@ -387,15 +398,18 @@ export const createPostsTableColumns = ({
     accessorKey: 'shareCount',
     header: ({ column }) => {
       const isSorted = column.getIsSorted()
+
       return (
         <div className="flex items-center justify-center">
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-            className={`h-auto p-1 hover:bg-transparent ${isSorted ? 'text-foreground' : 'text-muted-foreground'}`}
+            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'}`}
           >
             <Share className={`w-4 h-4 ${isSorted ? 'text-green-600' : 'text-green-400'}`} />
-            <ArrowUpDown className="ml-1 h-3 w-3" />
+            {isSorted === 'desc' && <ArrowDown className="ml-1 h-3 w-3" />}
+            {isSorted === 'asc' && <ArrowUp className="ml-1 h-3 w-3" />}
+            {!isSorted && <ArrowUpDown className="ml-1 h-3 w-3 opacity-0 group-hover:opacity-50" />}
           </Button>
         </div>
       )
@@ -413,15 +427,18 @@ export const createPostsTableColumns = ({
     accessorKey: 'saveCount',
     header: ({ column }) => {
       const isSorted = column.getIsSorted()
+
       return (
         <div className="flex items-center justify-center">
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-            className={`h-auto p-1 hover:bg-transparent ${isSorted ? 'text-foreground' : 'text-muted-foreground'}`}
+            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'}`}
           >
             <Bookmark className={`w-4 h-4 ${isSorted ? 'text-yellow-600' : 'text-yellow-400'}`} />
-            <ArrowUpDown className="ml-1 h-3 w-3" />
+            {isSorted === 'desc' && <ArrowDown className="ml-1 h-3 w-3" />}
+            {isSorted === 'asc' && <ArrowUp className="ml-1 h-3 w-3" />}
+            {!isSorted && <ArrowUpDown className="ml-1 h-3 w-3 opacity-0 group-hover:opacity-50" />}
           </Button>
         </div>
       )

@@ -67,6 +67,23 @@ const FONT_WEIGHTS = [
 ]
 
 export function TextStylePanel({ selectedTextBox, onUpdate, onDelete }: TextStylePanelProps) {
+  const updateTransform = (partial: Partial<NonNullable<RemixTextBoxType['transform']>>) => {
+    const current = selectedTextBox.transform || {
+      rotation: 0,
+      scaleX: 1,
+      scaleY: 1,
+      skewX: 0,
+      skewY: 0
+    }
+
+    onUpdate({
+      transform: {
+        ...current,
+        ...partial
+      }
+    })
+  }
+
   const toggleBold = () => {
     const isBold = selectedTextBox.fontWeight === 'bold' ||
                    ['600', '700', '800', '900'].includes(selectedTextBox.fontWeight)
@@ -192,6 +209,26 @@ export function TextStylePanel({ selectedTextBox, onUpdate, onDelete }: TextStyl
 
       <Separator />
 
+      {/* Transform */}
+      <div className="space-y-3">
+        <div className="text-xs font-medium text-muted-foreground">Transform</div>
+        <div className="space-y-2">
+          <label className="text-xs text-muted-foreground">
+            Rotation: {Math.round(selectedTextBox.transform?.rotation || 0)}°
+          </label>
+          <input
+            type="range"
+            min="-180"
+            max="180"
+            value={selectedTextBox.transform?.rotation || 0}
+            onChange={(e) => updateTransform({ rotation: parseInt(e.target.value, 10) })}
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+          />
+        </div>
+      </div>
+
+      <Separator />
+
       {/* Text Alignment */}
       <div className="space-y-3">
         <div className="text-xs font-medium text-muted-foreground">Alignment</div>
@@ -266,7 +303,7 @@ export function TextStylePanel({ selectedTextBox, onUpdate, onDelete }: TextStyl
             </Button>
           </div>
           {selectedTextBox.backgroundColor && (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <input
                   type="color"
@@ -293,6 +330,20 @@ export function TextStylePanel({ selectedTextBox, onUpdate, onDelete }: TextStyl
                   max="100"
                   value={(selectedTextBox.backgroundOpacity || 1) * 100}
                   onChange={(e) => onUpdate({ backgroundOpacity: parseInt(e.target.value) / 100 })}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+              {/* Background Rounding */}
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">
+                  Rounding: {selectedTextBox.borderRadius || 0}px
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="50"
+                  value={selectedTextBox.borderRadius || 0}
+                  onChange={(e) => onUpdate({ borderRadius: parseInt(e.target.value) })}
                   className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
@@ -338,17 +389,18 @@ export function TextStylePanel({ selectedTextBox, onUpdate, onDelete }: TextStyl
           />
         </div>
 
-        {/* Border Radius */}
+        {/* Word Spacing */}
         <div className="space-y-2">
           <label className="text-xs text-muted-foreground">
-            Border Radius: {selectedTextBox.borderRadius || 0}px
+            Word Spacing: {(selectedTextBox as any).wordSpacing || 0}px
           </label>
           <input
             type="range"
-            min="0"
+            min="-10"
             max="50"
-            value={selectedTextBox.borderRadius || 0}
-            onChange={(e) => onUpdate({ borderRadius: parseInt(e.target.value) })}
+            step="1"
+            value={(selectedTextBox as any).wordSpacing || 0}
+            onChange={(e) => onUpdate({ wordSpacing: parseFloat(e.target.value) } as any)}
             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
           />
         </div>
@@ -404,28 +456,6 @@ export function TextStylePanel({ selectedTextBox, onUpdate, onDelete }: TextStyl
               className="text-xs"
             />
           </div>
-        </div>
-      </div>
-
-      <Separator />
-
-      {/* Text Wrapping */}
-      <div className="space-y-3">
-        <div className="text-xs font-medium text-muted-foreground">Text Wrapping</div>
-        <div className="space-y-2">
-          <Select
-            value={selectedTextBox.textWrap}
-            onValueChange={(value) => onUpdate({ textWrap: value as any })}
-          >
-            <SelectTrigger className="text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">No Wrap</SelectItem>
-              <SelectItem value="wrap">Word Wrap</SelectItem>
-              <SelectItem value="ellipsis">Ellipsis</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
       </div>
 
