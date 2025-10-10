@@ -347,3 +347,41 @@ model ProfileMonitoringLog {
   @@index([status])
 }
 
+// TikTok Upload Accounts for OAuth-connected accounts used as upload destinations
+
+model TiktokUploadAccount {
+  id                  String   @id @default(cuid())
+
+  // TikTok user info
+  openId              String   @unique // TikTok's unique user identifier
+  displayName         String?  // User's display name
+  avatarUrl           String?  // Profile avatar URL
+
+  // OAuth tokens
+  accessToken         String   // OAuth access token
+  refreshToken        String   // OAuth refresh token
+  tokenExpiresAt      DateTime // When access token expires
+  refreshExpiresAt    DateTime // When refresh token expires
+
+  // Authorization scope
+  scope               String   // Granted scopes (e.g., "video.upload,video.publish")
+
+  // Account status
+  status              TiktokAccountStatus @default(ACTIVE)
+
+  // Timestamps
+  connectedAt         DateTime @default(now())
+  lastUsedAt          DateTime?
+  updatedAt           DateTime @updatedAt
+
+  @@map("tiktok_upload_accounts")
+  @@index([openId])
+  @@index([status])
+}
+
+enum TiktokAccountStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/lib/theme-provider";
-import { SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -54,11 +54,19 @@ export default function RootLayout({
       >
           <SidebarProvider>
             <AppSidebar />
-            <div className="flex-1 h-screen w-[calc(100%-16rem)]">
-              <main className="h-full">
+            <SidebarInset>
+              {/* Mobile header with menu trigger */}
+              <header className="flex h-14 items-center gap-4 border-b bg-background px-4 lg:hidden sticky top-0 z-50">
+                <SidebarTrigger />
+                <div className="flex-1">
+                  <h2 className="text-sm font-semibold">TikTok Carousel</h2>
+                </div>
+              </header>
+
+              <main className="flex-1 overflow-auto">
                 {children}
               </main>
-            </div>
+            </SidebarInset>
           </SidebarProvider>
           <Toaster />
       </body>

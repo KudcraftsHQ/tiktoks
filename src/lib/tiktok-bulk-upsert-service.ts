@@ -130,19 +130,68 @@ export class TikTokBulkUpsertService {
       }
     }
 
-    // Cache media for all posts first (outside transaction)
-    console.log(`🚀 [BulkUpsertService] Starting media caching for ${postsData.length} posts`)
-    const postsWithCachedMedia = await Promise.all(
-      postsData.map(async (postData) => {
-        console.log(`🔄 [BulkUpsertService] Caching media for post: ${postData.tiktokId}`)
+    // Check which posts already exist to avoid unnecessary media caching
+    console.log(`🔍 [BulkUpsertService] Checking for existing posts among ${postsData.length} posts`)
+    const tiktokIds = postsData.map(p => p.tiktokId)
+    const existingPostsInDb = await this.prisma.tiktokPost.findMany({
+      where: {
+        tiktokId: {
+          in: tiktokIds
+        }
+      },
+      select: {
+        tiktokId: true,
+        videoId: true,
+        coverId: true,
+        musicId: true,
+        authorAvatarId: true,
+        images: true
+      }
+    })
+
+    // Create a map for quick lookup
+    const existingPostsMap = new Map(existingPostsInDb.map(p => [p.tiktokId, p]))
+
+    // Split posts into new and existing
+    const newPosts = postsData.filter(p => !existingPostsMap.has(p.tiktokId))
+    const existingPosts = postsData.filter(p => existingPostsMap.has(p.tiktokId))
+
+    console.log(`📊 [BulkUpsertService] Found ${newPosts.length} new posts and ${existingPosts.length} existing posts`)
+
+    // Only cache media for NEW posts (outside transaction)
+    console.log(`🚀 [BulkUpsertService] Starting media caching for ${newPosts.length} new posts`)
+    const newPostsWithCachedMedia = await Promise.all(
+      newPosts.map(async (postData) => {
+        console.log(`🔄 [BulkUpsertService] Caching media for new post: ${postData.tiktokId}`)
         const cachedMedia = await cachePostMedia(postData)
         return {
           postData,
-          cachedMedia
+          cachedMedia,
+          isNew: true
         }
       })
     )
-    console.log(`✅ [BulkUpsertService] Media caching completed for all posts`)
+
+    // For existing posts, reuse their current cache asset IDs (no new caching)
+    const existingPostsWithCachedMedia = existingPosts.map((postData) => {
+      const existingPost = existingPostsMap.get(postData.tiktokId)!
+      console.log(`♻️ [BulkUpsertService] Reusing cached media for existing post: ${postData.tiktokId}`)
+      return {
+        postData,
+        cachedMedia: {
+          cachedVideo: existingPost.videoId,
+          cachedCover: existingPost.coverId,
+          cachedMusic: existingPost.musicId,
+          cachedImages: typeof existingPost.images === 'string' ? JSON.parse(existingPost.images) : existingPost.images,
+          cachedAuthorAvatar: existingPost.authorAvatarId
+        },
+        isNew: false
+      }
+    })
+
+    // Combine both arrays
+    const postsWithCachedMedia = [...newPostsWithCachedMedia, ...existingPostsWithCachedMedia]
+    console.log(`✅ [BulkUpsertService] Media caching completed: ${newPosts.length} cached, ${existingPosts.length} reused`)
 
     // Process database operations in smaller batches to avoid timeout
     console.log(`🚀 [BulkUpsertService] Starting database operations for ${postsWithCachedMedia.length} posts`)
@@ -184,13 +233,8 @@ export class TikTokBulkUpsertService {
 
       await this.prisma.$transaction(async (tx) => {
         await Promise.all(
-          batch.map(async ({ postData, cachedMedia }) => {
+          batch.map(async ({ postData, cachedMedia, isNew }) => {
             console.log(`🔄 [BulkUpsertService] Upserting post in DB: ${postData.tiktokId}`)
-
-            // Check if post exists
-            const existingPost = await tx.tiktokPost.findUnique({
-              where: { tiktokId: postData.tiktokId }
-            })
 
             // Prepare post data with cached media (using CacheAsset ID pattern)
             const postCreateData = {
@@ -218,6 +262,7 @@ export class TikTokBulkUpsertService {
               publishedAt: postData.publishedAt ? new Date(postData.publishedAt) : null
             }
 
+            // For updates, only update metrics and metadata, NOT media cache IDs
             const postUpdateData = {
               tiktokUrl: postData.tiktokUrl,
               contentType: postData.contentType,
@@ -225,19 +270,16 @@ export class TikTokBulkUpsertService {
               description: postData.description,
               authorNickname: postData.authorNickname,
               authorHandle: postData.authorHandle,
-              authorAvatarId: cachedMedia.cachedAuthorAvatar,
+              // Reuse existing cache IDs for updates (don't overwrite)
               hashtags: JSON.stringify(postData.hashtags),
               mentions: JSON.stringify(postData.mentions),
+              // Update metrics (these change over time)
               viewCount: BigInt(postData.viewCount),
               likeCount: postData.likeCount,
               shareCount: postData.shareCount,
               commentCount: postData.commentCount,
               saveCount: postData.saveCount,
               duration: postData.duration,
-              videoId: cachedMedia.cachedVideo,
-              coverId: cachedMedia.cachedCover,
-              musicId: cachedMedia.cachedMusic,
-              images: JSON.stringify(cachedMedia.cachedImages.length > 0 ? cachedMedia.cachedImages : postData.images),
               publishedAt: postData.publishedAt ? new Date(postData.publishedAt) : null,
               updatedAt: new Date()
             }
@@ -248,12 +290,12 @@ export class TikTokBulkUpsertService {
               update: postUpdateData
             })
 
-            if (existingPost) {
-              updatedCount++
-              console.log(`📝 [BulkUpsertService] Updated post: ${postData.tiktokId}`)
-            } else {
+            if (isNew) {
               createdCount++
               console.log(`➕ [BulkUpsertService] Created post: ${postData.tiktokId}`)
+            } else {
+              updatedCount++
+              console.log(`📝 [BulkUpsertService] Updated post: ${postData.tiktokId}`)
             }
           })
         )
