@@ -7,6 +7,15 @@ import { tiktokAPIService } from '@/lib/tiktok-api-service'
  */
 export async function POST(request: NextRequest) {
   try {
+    // Validate credentials are present
+    if (!process.env.TIKTOK_CLIENT_KEY || !process.env.TIKTOK_CLIENT_SECRET || !process.env.TIKTOK_REDIRECT_URI) {
+      console.error('❌ [OAuth URL] TikTok credentials not configured!')
+      return NextResponse.json(
+        { error: 'TikTok API credentials not configured. Please check your environment variables.' },
+        { status: 500 }
+      )
+    }
+
     // Generate CSRF state token
     const state = Math.random().toString(36).substring(2, 15)
 

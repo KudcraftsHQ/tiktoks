@@ -19,16 +19,20 @@ export default function ConnectTikTokPage() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to get authorization URL')
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to get authorization URL')
       }
 
       const data = await response.json()
+
+      console.log('Redirecting to TikTok OAuth:', data.url)
 
       // Redirect to TikTok OAuth
       window.location.href = data.url
     } catch (error) {
       console.error('Connection error:', error)
-      alert('Failed to start connection. Please try again.')
+      const message = error instanceof Error ? error.message : 'Failed to start connection. Please try again.'
+      alert(message)
       setIsConnecting(false)
     }
   }

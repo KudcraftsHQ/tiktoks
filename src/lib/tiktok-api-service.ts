@@ -71,6 +71,8 @@ export class TikTokAPIService {
    * Exchange authorization code for access token
    */
   async exchangeCodeForToken(code: string): Promise<TikTokOAuthTokenResponse> {
+    console.log('🔄 [Token Exchange] Starting token exchange...')
+
     const response = await fetch(`${TIKTOK_API_BASE}/v2/oauth/token/`, {
       method: 'POST',
       headers: {
@@ -85,20 +87,34 @@ export class TikTokAPIService {
       }),
     })
 
+    console.log('📡 [Token Exchange] Response status:', response.status)
+
     if (!response.ok) {
       const error = await response.text()
+      console.error('❌ [Token Exchange] Failed:', error)
       throw new Error(`TikTok token exchange failed: ${error}`)
     }
 
     const data = await response.json()
+    console.log('📦 [Token Exchange] Response data:', JSON.stringify(data, null, 2))
 
     if (data.error) {
+      console.error('❌ [Token Exchange] API error:', data.error)
       throw new Error(
         `TikTok token exchange error: ${data.error.message || data.error}`
       )
     }
 
-    return data.data as TikTokOAuthTokenResponse
+    // Validate required fields
+    if (!data.access_token || !data.open_id) {
+      console.error('❌ [Token Exchange] Missing required fields in response:', data)
+      throw new Error(
+        `Invalid TikTok API response: missing required token fields. Response: ${JSON.stringify(data)}`
+      )
+    }
+
+    console.log('✅ [Token Exchange] Success - open_id:', data.open_id)
+    return data as TikTokOAuthTokenResponse
   }
 
   /**
@@ -107,6 +123,8 @@ export class TikTokAPIService {
   async refreshAccessToken(
     refreshToken: string
   ): Promise<TikTokOAuthTokenResponse> {
+    console.log('🔄 [Token Refresh] Starting token refresh...')
+
     const response = await fetch(`${TIKTOK_API_BASE}/v2/oauth/token/`, {
       method: 'POST',
       headers: {
@@ -120,20 +138,34 @@ export class TikTokAPIService {
       }),
     })
 
+    console.log('📡 [Token Refresh] Response status:', response.status)
+
     if (!response.ok) {
       const error = await response.text()
+      console.error('❌ [Token Refresh] Failed:', error)
       throw new Error(`TikTok token refresh failed: ${error}`)
     }
 
     const data = await response.json()
+    console.log('📦 [Token Refresh] Response data:', JSON.stringify(data, null, 2))
 
     if (data.error) {
+      console.error('❌ [Token Refresh] API error:', data.error)
       throw new Error(
         `TikTok token refresh error: ${data.error.message || data.error}`
       )
     }
 
-    return data.data as TikTokOAuthTokenResponse
+    // Validate required fields
+    if (!data.access_token || !data.open_id) {
+      console.error('❌ [Token Refresh] Missing required fields in response:', data)
+      throw new Error(
+        `Invalid TikTok API response: missing required token fields. Response: ${JSON.stringify(data)}`
+      )
+    }
+
+    console.log('✅ [Token Refresh] Success - open_id:', data.open_id)
+    return data as TikTokOAuthTokenResponse
   }
 
   /**
