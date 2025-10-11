@@ -354,13 +354,17 @@ export class TikTokAPIService {
     const initData = await initResponse.json()
     console.log('📦 [TikTokAPI.uploadCarouselDraft] Init response:', JSON.stringify(initData, null, 2))
 
-    if (initData.error) {
+    // TikTok API returns { error: { code: "ok", message: "", log_id: "..." }, data: { publish_id: "..." } }
+    // Check if error.code is NOT "ok" (actual error condition)
+    if (initData.error && initData.error.code && initData.error.code !== 'ok') {
       console.error('❌❌❌ [TikTokAPI.uploadCarouselDraft] API returned error!')
       console.error('❌ [TikTokAPI.uploadCarouselDraft] Error object:', initData.error)
       throw new Error(
         `TikTok upload init error: ${initData.error.message || JSON.stringify(initData.error)}`
       )
     }
+
+    console.log('✅ [TikTokAPI.uploadCarouselDraft] TikTok API error check passed (code: ok)')
 
     const publishId = initData.data?.publish_id
 
