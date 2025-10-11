@@ -1,34 +1,27 @@
-# syntax=docker/dockerfile:1
-
 FROM node:20-alpine AS base
 
 # Disabling Telemetry
-ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_TELEMETRY_DISABLED 1
 RUN apk add --no-cache libc6-compat curl wget bash openssl
 
-# Enable Corepack for pnpm (faster than npm install -g)
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Install pnpm
+RUN npm install -g pnpm
+RUN apk add --no-cache libc6-compat
 
 FROM base AS deps
 WORKDIR /app
 
-# Copy package files and prisma schema
 COPY package.json pnpm-lock.yaml ./
 COPY prisma ./prisma
-
-# Install dependencies with cache mount
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile
+RUN pnpm i --frozen-lockfile
 
 FROM base AS builder
 WORKDIR /app
-
-# Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/src/generated ./src/generated
 COPY . .
 
-# Build arguments
+# Public env
 ARG SENTRY_AUTH_TOKEN
 ENV SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN}
 
@@ -40,20 +33,19 @@ ENV NEXT_PUBLIC_MIDTRANS_CLIENT_KEY=${NEXT_PUBLIC_MIDTRANS_CLIENT_KEY}
 ENV NEXT_PUBLIC_MIDTRANS_BASE_URL=${NEXT_PUBLIC_MIDTRANS_BASE_URL}
 ENV NEXT_PUBLIC_MIDTRANS_API_BASE_URL=${NEXT_PUBLIC_MIDTRANS_API_BASE_URL}
 
-# Build with Next.js cache mount
-RUN --mount=type=cache,target=/app/.next/cache \
-    pnpm run build
+RUN pnpm run build
 
 FROM base AS runner
 WORKDIR /app
 
-ENV NODE_ENV=production
+ENV NODE_ENV production
 
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
-RUN mkdir .next && chown nextjs:nodejs .next
+RUN mkdir .next
+RUN chown nextjs:nodejs .next
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
@@ -67,7 +59,7 @@ USER nextjs
 
 EXPOSE 3000
 
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
+ENV PORT 3000
+ENV HOSTNAME "0.0.0.0"
 
 CMD sh -c "npx prisma migrate deploy && node server.js"
