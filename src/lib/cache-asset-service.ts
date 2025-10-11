@@ -235,16 +235,30 @@ class CacheAssetService {
     originalUrls?: (string | undefined)[],
     preferPublic: boolean = false
   ): Promise<string[]> {
-    console.log(`🔗 [CacheAssetService] Getting URLs for ${cacheAssetIdsOrKeys.length} cache assets/keys (preferPublic: ${preferPublic})`)
+    console.log(`🔗🔗🔗 [CacheAssetService.getUrls] ==================== START ====================`)
+    console.log(`🔗 [CacheAssetService.getUrls] Input:`, {
+      count: cacheAssetIdsOrKeys.length,
+      preferPublic,
+      cacheAssetIdsOrKeys,
+      originalUrls
+    })
 
     const urls = await Promise.all(
       cacheAssetIdsOrKeys.map(async (cacheAssetIdOrKey, index) => {
         const originalUrl = originalUrls?.[index]
-        return this.getUrl(cacheAssetIdOrKey, originalUrl, preferPublic)
+        console.log(`🔗 [CacheAssetService.getUrls] Processing ${index + 1}/${cacheAssetIdsOrKeys.length}:`, {
+          cacheAssetIdOrKey,
+          originalUrl,
+          preferPublic
+        })
+        const resolvedUrl = await this.getUrl(cacheAssetIdOrKey, originalUrl, preferPublic)
+        console.log(`🔗 [CacheAssetService.getUrls] Resolved ${index + 1}/${cacheAssetIdsOrKeys.length}:`, resolvedUrl)
+        return resolvedUrl
       })
     )
 
-    console.log(`🎯 [CacheAssetService] Resolved ${urls.length} URLs`)
+    console.log(`🎯 [CacheAssetService.getUrls] ==================== COMPLETE ====================`)
+    console.log(`🎯 [CacheAssetService.getUrls] Resolved ${urls.length} URLs:`, urls)
     return urls
   }
 

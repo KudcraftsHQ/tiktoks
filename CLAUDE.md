@@ -162,3 +162,4 @@ Background media processing using BullMQ:
 - **Turbopack**: Enabled for both dev and build processes for faster compilation
 - **Asset Pattern**: Always use CacheAssetService for URL resolution in API endpoints
 - **Background Workers**: Run `pnpm run worker` for media processing in development
+- memorize how you setup next js to have different path for build on dev environment

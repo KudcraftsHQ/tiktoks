@@ -31,7 +31,15 @@ function getR2Client() {
 }
 
 const getBucketName = () => process.env.R2_BUCKET_NAME;
-const getPublicUrl = () => process.env.R2_CUSTOM_DOMAIN || process.env.R2_PUBLIC_URL;
+const getPublicUrl = () => {
+	const publicUrl = process.env.R2_CUSTOM_DOMAIN || process.env.R2_PUBLIC_URL;
+	console.log('🌐 [R2.getPublicUrl] Environment variables:', {
+		R2_CUSTOM_DOMAIN: process.env.R2_CUSTOM_DOMAIN || '(not set)',
+		R2_PUBLIC_URL: process.env.R2_PUBLIC_URL || '(not set)',
+		resolved: publicUrl || '(none)'
+	});
+	return publicUrl;
+};
 
 /**
  * Upload a file to R2 storage
@@ -182,11 +190,22 @@ export function extractKeyFromUrl(url: string): string {
  * Convert R2 key to public URL
  */
 export function keyToUrl(key: string): string {
+	console.log('🔑 [R2.keyToUrl] ==================== START ====================');
+	console.log('🔑 [R2.keyToUrl] Input key:', key);
+
 	const publicUrl = getPublicUrl();
+	console.log('🔑 [R2.keyToUrl] Public URL from env:', publicUrl);
+
 	if (!publicUrl) {
+		console.error('❌ [R2.keyToUrl] No public URL configured!');
 		throw new Error('R2_PUBLIC_URL or R2_CUSTOM_DOMAIN environment variable is not set');
 	}
-	return `${publicUrl}/${key}`;
+
+	const fullUrl = `${publicUrl}/${key}`;
+	console.log('🔑 [R2.keyToUrl] Generated URL:', fullUrl);
+	console.log('🔑 [R2.keyToUrl] ==================== COMPLETE ====================');
+
+	return fullUrl;
 }
 
 /**

@@ -258,20 +258,50 @@ export class TikTokAPIService {
   async uploadCarouselDraft(
     request: TikTokUploadRequest
   ): Promise<TikTokUploadResponse> {
+    console.log('🎬🎬🎬 [TikTokAPI.uploadCarouselDraft] ==================== START ====================')
     const { accessToken, title, description, photoUrls, photoCoverIndex = 0 } = request
+
+    console.log('📋 [TikTokAPI.uploadCarouselDraft] Input:', {
+      title,
+      description,
+      photoUrlsCount: photoUrls.length,
+      photoUrls,
+      photoCoverIndex,
+      accessTokenPrefix: accessToken.substring(0, 10) + '...'
+    })
 
     // Validate input
     if (photoUrls.length < 1) {
+      console.error('❌ [TikTokAPI.uploadCarouselDraft] Validation failed: Not enough photos')
       throw new Error('At least 1 photo is required')
     }
     if (photoUrls.length > 35) {
+      console.error('❌ [TikTokAPI.uploadCarouselDraft] Validation failed: Too many photos')
       throw new Error('TikTok allows maximum 35 photos')
     }
 
-    console.log('📸 [Photo Upload] Starting PULL_FROM_URL for', photoUrls.length, 'photos')
+    console.log('✅ [TikTokAPI.uploadCarouselDraft] Validation passed')
+    console.log('📸 [TikTokAPI.uploadCarouselDraft] Starting PULL_FROM_URL for', photoUrls.length, 'photos')
+
+    // Validate all URLs are publicly accessible
+    console.log('🔍 [TikTokAPI.uploadCarouselDraft] Validating photo URLs...')
+    photoUrls.forEach((url, index) => {
+      try {
+        const parsedUrl = new URL(url)
+        console.log(`🔗 [TikTokAPI.uploadCarouselDraft] Photo ${index + 1}:`, {
+          url,
+          protocol: parsedUrl.protocol,
+          hostname: parsedUrl.hostname,
+          pathname: parsedUrl.pathname
+        })
+      } catch (error) {
+        console.error(`❌ [TikTokAPI.uploadCarouselDraft] Invalid URL at index ${index}:`, url)
+        throw new Error(`Invalid photo URL at index ${index}: ${url}`)
+      }
+    })
 
     // Initialize upload session using PULL_FROM_URL
-    console.log('🚀 [Photo Upload] Initializing upload session...')
+    console.log('🚀 [TikTokAPI.uploadCarouselDraft] Initializing upload session...')
     const initPayload: any = {
       post_mode: 'MEDIA_UPLOAD', // Draft mode
       media_type: 'PHOTO',
@@ -286,10 +316,17 @@ export class TikTokAPIService {
     // Add optional fields
     if (title) {
       initPayload.post_info.title = title.substring(0, 90) // Max 90 chars
+      console.log('📝 [TikTokAPI.uploadCarouselDraft] Added title:', initPayload.post_info.title)
     }
     if (description) {
       initPayload.post_info.description = description.substring(0, 4000) // Max 4000 chars
+      console.log('📝 [TikTokAPI.uploadCarouselDraft] Added description:', initPayload.post_info.description)
     }
+
+    console.log('📦 [TikTokAPI.uploadCarouselDraft] Complete payload:', JSON.stringify(initPayload, null, 2))
+
+    console.log('🌐 [TikTokAPI.uploadCarouselDraft] Making request to TikTok API...')
+    console.log('🌐 [TikTokAPI.uploadCarouselDraft] Endpoint:', `${TIKTOK_API_BASE}/v2/post/publish/content/init/`)
 
     const initResponse = await fetch(
       `${TIKTOK_API_BASE}/v2/post/publish/content/init/`,
@@ -303,16 +340,23 @@ export class TikTokAPIService {
       }
     )
 
+    console.log('📡 [TikTokAPI.uploadCarouselDraft] Response status:', initResponse.status)
+    console.log('📡 [TikTokAPI.uploadCarouselDraft] Response headers:', Object.fromEntries(initResponse.headers.entries()))
+
     if (!initResponse.ok) {
       const error = await initResponse.text()
-      console.error('❌ [Photo Upload] Init failed:', error)
+      console.error('❌❌❌ [TikTokAPI.uploadCarouselDraft] Init failed!')
+      console.error('❌ [TikTokAPI.uploadCarouselDraft] Status:', initResponse.status)
+      console.error('❌ [TikTokAPI.uploadCarouselDraft] Error text:', error)
       throw new Error(`TikTok upload init failed: ${error}`)
     }
 
     const initData = await initResponse.json()
-    console.log('📦 [Photo Upload] Init response:', JSON.stringify(initData, null, 2))
+    console.log('📦 [TikTokAPI.uploadCarouselDraft] Init response:', JSON.stringify(initData, null, 2))
 
     if (initData.error) {
+      console.error('❌❌❌ [TikTokAPI.uploadCarouselDraft] API returned error!')
+      console.error('❌ [TikTokAPI.uploadCarouselDraft] Error object:', initData.error)
       throw new Error(
         `TikTok upload init error: ${initData.error.message || JSON.stringify(initData.error)}`
       )
@@ -321,11 +365,15 @@ export class TikTokAPIService {
     const publishId = initData.data?.publish_id
 
     if (!publishId) {
+      console.error('❌ [TikTokAPI.uploadCarouselDraft] Missing publish_id in response!')
+      console.error('❌ [TikTokAPI.uploadCarouselDraft] Response data:', initData)
       throw new Error('Invalid init response: missing publish_id')
     }
 
-    console.log('✅ [Photo Upload] Init successful - publish_id:', publishId)
-    console.log('🎉 [Photo Upload] TikTok is pulling images from URLs!')
+    console.log('✅✅✅ [TikTokAPI.uploadCarouselDraft] Init successful!')
+    console.log('✅ [TikTokAPI.uploadCarouselDraft] Publish ID:', publishId)
+    console.log('🎉 [TikTokAPI.uploadCarouselDraft] TikTok is pulling images from URLs!')
+    console.log('🎉 [TikTokAPI.uploadCarouselDraft] ==================== COMPLETE ====================')
 
     return {
       publish_id: publishId,

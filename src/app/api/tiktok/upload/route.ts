@@ -16,11 +16,21 @@ interface UploadRequest {
  */
 export async function POST(request: NextRequest) {
   try {
+    console.log('🚀 [TikTok Upload API] ==================== START ====================')
     const body = (await request.json()) as UploadRequest
     const { accountId, title, description, photoIds } = body
 
+    console.log('📋 [TikTok Upload API] Request body:', {
+      accountId,
+      title,
+      description,
+      photoIds,
+      photoIdsCount: photoIds?.length
+    })
+
     // Validate input
     if (!accountId || !photoIds || photoIds.length === 0) {
+      console.log('❌ [TikTok Upload API] Validation failed: Missing accountId or photoIds')
       return NextResponse.json(
         { error: 'Account ID and photos are required' },
         { status: 400 }
@@ -42,13 +52,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Get account
+    console.log('🔍 [TikTok Upload API] Fetching TikTok account:', accountId)
     const account = await prisma.tiktokUploadAccount.findUnique({
       where: { id: accountId },
     })
 
     if (!account) {
+      console.log('❌ [TikTok Upload API] Account not found:', accountId)
       return NextResponse.json({ error: 'Account not found' }, { status: 404 })
     }
+
+    console.log('✅ [TikTok Upload API] Account found:', {
+      id: account.id,
+      username: account.username,
+      status: account.status,
+      tokenExpiresAt: account.tokenExpiresAt
+    })
 
     // Check if token is expired
     const now = new Date()
@@ -93,19 +112,49 @@ export async function POST(request: NextRequest) {
 
     // Get image URLs from cache assets (using PULL_FROM_URL method)
     // Use public URLs (not presigned) for TikTok domain verification
-    console.log('📸 [TikTok Upload] Fetching image URLs from cache assets...')
+    console.log('📸 [TikTok Upload API] ==================== FETCHING URLS ====================')
+    console.log('📸 [TikTok Upload API] Photo IDs to resolve:', photoIds)
+    console.log('📸 [TikTok Upload API] preferPublic: true (for custom domain)')
+
     const photoUrls = await cacheAssetService.getUrls(photoIds, undefined, true) // preferPublic = true
 
+    console.log('📸 [TikTok Upload API] ==================== URLS RESOLVED ====================')
+    console.log('📸 [TikTok Upload API] Resolved URLs count:', photoUrls.length)
+    console.log('📸 [TikTok Upload API] Resolved URLs:', photoUrls)
+
+    // Check each URL format
+    photoUrls.forEach((url, index) => {
+      const domain = new URL(url).hostname
+      console.log(`📸 [TikTok Upload API] URL ${index + 1}:`, {
+        url,
+        domain,
+        isCustomDomain: domain === 'srbfarm-assets.kudcrafts.com',
+        isR2Domain: domain.includes('r2.cloudflarestorage.com')
+      })
+    })
+
     if (photoUrls.length !== photoIds.length) {
+      console.log('❌ [TikTok Upload API] URL count mismatch!', {
+        expected: photoIds.length,
+        received: photoUrls.length
+      })
       return NextResponse.json(
         { error: 'Failed to resolve all image URLs' },
         { status: 500 }
       )
     }
 
-    console.log('📸 [TikTok Upload] Resolved', photoUrls.length, 'public image URLs')
+    console.log('✅ [TikTok Upload API] All URLs resolved successfully')
 
     // Upload to TikTok using PULL_FROM_URL (TikTok will fetch images from URLs)
+    console.log('🎬 [TikTok Upload API] ==================== UPLOADING TO TIKTOK ====================')
+    console.log('🎬 [TikTok Upload API] Upload params:', {
+      title,
+      description,
+      photoUrlsCount: photoUrls.length,
+      photoUrls: photoUrls
+    })
+
     const uploadResult = await tiktokAPIService.uploadCarouselDraft({
       accessToken,
       title,
@@ -113,12 +162,17 @@ export async function POST(request: NextRequest) {
       photoUrls,
     })
 
+    console.log('🎬 [TikTok Upload API] Upload result:', uploadResult)
+
     if (uploadResult.error) {
+      console.log('❌ [TikTok Upload API] Upload failed with error:', uploadResult.error)
       return NextResponse.json(
         { error: uploadResult.error.message },
         { status: 500 }
       )
     }
+
+    console.log('✅ [TikTok Upload API] Upload successful! Publish ID:', uploadResult.publish_id)
 
     // Update last used time
     await prisma.tiktokUploadAccount.update({
@@ -126,6 +180,7 @@ export async function POST(request: NextRequest) {
       data: { lastUsedAt: new Date() },
     })
 
+    console.log('🎉 [TikTok Upload API] ==================== SUCCESS ====================')
     return NextResponse.json({
       success: true,
       publishId: uploadResult.publish_id,
@@ -133,7 +188,9 @@ export async function POST(request: NextRequest) {
         'Carousel uploaded as draft! Check your TikTok inbox to complete and publish.',
     })
   } catch (error) {
-    console.error('Upload to TikTok failed:', error)
+    console.error('❌❌❌ [TikTok Upload API] ==================== ERROR ====================')
+    console.error('❌ [TikTok Upload API] Error details:', error)
+    console.error('❌ [TikTok Upload API] Error stack:', error instanceof Error ? error.stack : 'N/A')
     return NextResponse.json(
       {
         error:
