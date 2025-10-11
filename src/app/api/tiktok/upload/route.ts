@@ -93,9 +93,7 @@ export async function POST(request: NextRequest) {
 
     // Generate proxy URLs for TikTok (required for URL ownership verification)
     // TikTok requires verified domain ownership, so we use our app's domain as proxy
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : 'http://localhost:3000'
+    const baseUrl = 'https://tiktok.kudcrafts.com'
 
     const photoUrls = photoIds.map(
       (id) => `${baseUrl}/api/tiktok/images/${id}`

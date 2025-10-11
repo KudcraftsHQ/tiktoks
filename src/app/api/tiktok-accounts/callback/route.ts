@@ -21,6 +21,16 @@ export async function POST(request: NextRequest) {
     // Exchange code for tokens
     const tokenData = await tiktokAPIService.exchangeCodeForToken(code)
 
+    // Fetch user info to get username, display name, and avatar
+    let userInfo
+    try {
+      userInfo = await tiktokAPIService.getUserInfo(tokenData.access_token)
+    } catch (error) {
+      console.error('Failed to fetch user info:', error)
+      // Continue without user info if it fails
+      userInfo = null
+    }
+
     // Check if account already exists
     const existingAccount = await prisma.tiktokUploadAccount.findUnique({
       where: { openId: tokenData.open_id },
@@ -28,8 +38,9 @@ export async function POST(request: NextRequest) {
 
     const accountData = {
       openId: tokenData.open_id,
-      displayName: null, // TikTok doesn't provide display name in token response
-      avatarUrl: null,
+      username: userInfo?.username || null,
+      displayName: userInfo?.display_name || null,
+      avatarUrl: userInfo?.avatar_url || null,
       accessToken: tokenData.access_token,
       refreshToken: tokenData.refresh_token,
       tokenExpiresAt: new Date(Date.now() + tokenData.expires_in * 1000),

@@ -54,6 +54,7 @@ interface UploadedPhoto {
 interface TikTokAccount {
   id: string
   openId: string
+  username: string | null
   displayName: string | null
   avatarUrl: string | null
   status: string
@@ -412,16 +413,16 @@ export default function UploadPage() {
                         ) : (
                           <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
                             <span className="text-xs font-medium">
-                              {(account.displayName || 'T').charAt(0).toUpperCase()}
+                              {(account.displayName || account.username || 'T').charAt(0).toUpperCase()}
                             </span>
                           </div>
                         )}
                         <div className="flex flex-col items-start">
                           <span className="font-medium">
-                            {account.displayName || 'TikTok User'}
+                            {account.displayName || account.username || 'TikTok User'}
                           </span>
                           <span className="text-xs text-muted-foreground">
-                            ID: {account.openId.substring(0, 12)}...
+                            {account.username ? `@${account.username}` : `ID: ${account.openId.substring(0, 12)}...`}
                           </span>
                         </div>
                       </div>

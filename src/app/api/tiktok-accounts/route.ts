@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         openId: true,
+        username: true,
         displayName: true,
         avatarUrl: true,
         status: true,

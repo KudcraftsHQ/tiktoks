@@ -354,6 +354,7 @@ model TiktokUploadAccount {
 
   // TikTok user info
   openId              String   @unique // TikTok's unique user identifier
+  username            String?  // TikTok username/handle
   displayName         String?  // User's display name
   avatarUrl           String?  // Profile avatar URL
 

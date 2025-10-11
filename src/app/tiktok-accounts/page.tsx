@@ -18,6 +18,7 @@ import {
 interface TikTokAccount {
   id: string
   openId: string
+  username: string | null
   displayName: string | null
   avatarUrl: string | null
   status: 'ACTIVE' | 'EXPIRED' | 'REVOKED'
@@ -162,7 +163,7 @@ export default function TikTokAccountsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-semibold truncate">
-                          {account.displayName || `TikTok User (${account.openId.substring(0, 8)}...)`}
+                          {account.displayName || account.username || `TikTok User (${account.openId.substring(0, 8)}...)`}
                         </h3>
                         {account.isExpired || account.status === 'EXPIRED' ? (
                           <span className="flex items-center gap-1 text-xs text-destructive bg-destructive/10 px-2 py-0.5 rounded-full flex-shrink-0">
@@ -178,6 +179,9 @@ export default function TikTokAccountsPage() {
                       </div>
 
                       <div className="space-y-1 text-sm text-muted-foreground">
+                        {account.username && (
+                          <p className="font-medium">@{account.username}</p>
+                        )}
                         <p>Connected: {formatDate(account.connectedAt)}</p>
                         {account.lastUsedAt && (
                           <p>Last used: {formatDate(account.lastUsedAt)}</p>

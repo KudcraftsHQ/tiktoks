@@ -32,6 +32,24 @@ export interface TikTokUploadResponse {
   }
 }
 
+export interface TikTokUserInfo {
+  open_id: string
+  union_id: string
+  avatar_url: string
+  avatar_url_100: string
+  avatar_url_200: string
+  avatar_large_url: string
+  display_name: string
+  bio_description: string
+  profile_deep_link: string
+  is_verified: boolean
+  follower_count: number
+  following_count: number
+  likes_count: number
+  video_count: number
+  username: string
+}
+
 export class TikTokAPIService {
   private clientKey: string
   private clientSecret: string
@@ -188,6 +206,48 @@ export class TikTokAPIService {
       const error = await response.text()
       throw new Error(`TikTok token revocation failed: ${error}`)
     }
+  }
+
+  /**
+   * Get user info from TikTok API
+   * Fetches username, display name, avatar, and other profile details
+   */
+  async getUserInfo(accessToken: string): Promise<TikTokUserInfo> {
+    console.log('👤 [User Info] Fetching user info...')
+
+    const response = await fetch(`${TIKTOK_API_BASE}/v2/user/info/?fields=open_id,union_id,avatar_url,avatar_url_100,avatar_url_200,avatar_large_url,display_name,bio_description,profile_deep_link,is_verified,follower_count,following_count,likes_count,video_count,username`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    })
+
+    console.log('📡 [User Info] Response status:', response.status)
+
+    if (!response.ok) {
+      const error = await response.text()
+      console.error('❌ [User Info] Failed:', error)
+      throw new Error(`TikTok user info fetch failed: ${error}`)
+    }
+
+    const result = await response.json()
+    console.log('📦 [User Info] Response data:', JSON.stringify(result, null, 2))
+
+    if (result.error) {
+      console.error('❌ [User Info] API error:', result.error)
+      throw new Error(
+        `TikTok user info error: ${result.error.message || result.error}`
+      )
+    }
+
+    if (!result.data || !result.data.user) {
+      console.error('❌ [User Info] Invalid response structure:', result)
+      throw new Error('Invalid TikTok user info response')
+    }
+
+    console.log('✅ [User Info] Success - username:', result.data.user.username)
+    return result.data.user as TikTokUserInfo
   }
 
   /**
