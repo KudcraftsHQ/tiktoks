@@ -27,9 +27,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (photoIds.length < 2) {
+    if (photoIds.length < 1) {
       return NextResponse.json(
-        { error: 'TikTok requires at least 2 photos for carousel' },
+        { error: 'At least 1 photo is required' },
         { status: 400 }
       )
     }
@@ -91,15 +91,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Resolve photo URLs from CacheAsset IDs
-    const photoUrls = await cacheAssetService.getUrls(photoIds)
+    // Generate proxy URLs for TikTok (required for URL ownership verification)
+    // TikTok requires verified domain ownership, so we use our app's domain as proxy
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : 'http://localhost:3000'
 
-    if (photoUrls.length !== photoIds.length) {
-      return NextResponse.json(
-        { error: 'Failed to resolve some photo URLs' },
-        { status: 500 }
-      )
-    }
+    const photoUrls = photoIds.map(
+      (id) => `${baseUrl}/api/tiktok/images/${id}`
+    )
+
+    console.log('📸 [TikTok Upload] Generated proxy URLs:', photoUrls)
 
     // Upload to TikTok
     const uploadResult = await tiktokAPIService.uploadCarouselDraft({

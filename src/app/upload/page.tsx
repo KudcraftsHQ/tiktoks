@@ -55,6 +55,7 @@ interface TikTokAccount {
   id: string
   openId: string
   displayName: string | null
+  avatarUrl: string | null
   status: string
   isExpired: boolean
 }
@@ -287,13 +288,13 @@ export default function UploadPage() {
       return
     }
 
-    if (photos.length < 2) {
-      alert('Please upload at least 2 photos')
+    if (photos.length < 1) {
+      alert('Please upload at least 1 photo')
       return
     }
 
     const uploadedPhotos = photos.filter((p) => p.cacheAssetId && !p.error)
-    if (uploadedPhotos.length < 2) {
+    if (uploadedPhotos.length < 1) {
       alert('Please wait for photos to finish uploading')
       return
     }
@@ -395,14 +396,35 @@ export default function UploadPage() {
               </div>
             ) : (
               <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-                <SelectTrigger id="account">
+                <SelectTrigger id="account" className="h-auto">
                   <SelectValue placeholder="Select account" />
                 </SelectTrigger>
                 <SelectContent>
                   {accounts.map((account) => (
-                    <SelectItem key={account.id} value={account.id}>
-                      {account.displayName ||
-                        `TikTok User (${account.openId.substring(0, 8)}...)`}
+                    <SelectItem key={account.id} value={account.id} className="py-2">
+                      <div className="flex items-center gap-3">
+                        {account.avatarUrl ? (
+                          <img
+                            src={account.avatarUrl}
+                            alt={account.displayName || 'TikTok User'}
+                            className="w-8 h-8 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                            <span className="text-xs font-medium">
+                              {(account.displayName || 'T').charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex flex-col items-start">
+                          <span className="font-medium">
+                            {account.displayName || 'TikTok User'}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            ID: {account.openId.substring(0, 12)}...
+                          </span>
+                        </div>
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -416,7 +438,7 @@ export default function UploadPage() {
               Photos ({photos.length}/10)
             </Label>
             <p className="text-sm text-muted-foreground mb-4">
-              Upload 2-10 photos. Drag to reorder.
+              Upload 1-10 photos. Drag to reorder.
             </p>
 
             <DndContext
@@ -532,6 +554,46 @@ export default function UploadPage() {
           {/* Submit Button */}
           <div className="sticky bottom-0 bg-background pt-4 pb-6 border-t">
             <div className="space-y-4">
+              {/* Status Indicators */}
+              {!isSubmitting && !submitStatus.type && (
+                <div className="space-y-2">
+                  {!selectedAccountId && (
+                    <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+                      <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                      <span>Please select a TikTok account</span>
+                    </div>
+                  )}
+
+                  {photos.length < 1 && (
+                    <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+                      <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                      <span>Please upload at least 1 photo</span>
+                    </div>
+                  )}
+
+                  {photos.length >= 1 && photos.some((p) => p.isUploading) && (
+                    <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+                      <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin" />
+                      <span>Uploading {photos.filter((p) => p.isUploading).length} photo{photos.filter((p) => p.isUploading).length > 1 ? 's' : ''}...</span>
+                    </div>
+                  )}
+
+                  {photos.length >= 1 && photos.some((p) => p.error) && (
+                    <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                      <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                      <span>{photos.filter((p) => p.error).length} photo{photos.filter((p) => p.error).length > 1 ? 's' : ''} failed to upload - please remove and try again</span>
+                    </div>
+                  )}
+
+                  {selectedAccountId && photos.length >= 1 && !photos.some((p) => p.isUploading || p.error) && (
+                    <div className="flex items-center gap-2 text-sm text-green-600 bg-green-500/10 border border-green-500/20 rounded-lg p-3">
+                      <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                      <span>Ready to upload {photos.length} photo{photos.length > 1 ? 's' : ''} to TikTok</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {submitStatus.type && (
                 <div
                   className={`p-4 rounded-lg ${
@@ -556,7 +618,7 @@ export default function UploadPage() {
                 disabled={
                   isSubmitting ||
                   !selectedAccountId ||
-                  photos.length < 2 ||
+                  photos.length < 1 ||
                   photos.some((p) => p.isUploading || p.error)
                 }
                 size="lg"

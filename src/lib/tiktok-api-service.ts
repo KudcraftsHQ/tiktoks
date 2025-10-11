@@ -200,11 +200,11 @@ export class TikTokAPIService {
     const { accessToken, title, description, photoUrls, photoCoverIndex = 0 } = request
 
     // Validate input
-    if (photoUrls.length < 2) {
-      throw new Error('TikTok requires at least 2 photos for carousel')
+    if (photoUrls.length < 1) {
+      throw new Error('At least 1 photo is required')
     }
     if (photoUrls.length > 35) {
-      throw new Error('TikTok allows maximum 35 photos for carousel')
+      throw new Error('TikTok allows maximum 35 photos')
     }
 
     const payload: any = {
