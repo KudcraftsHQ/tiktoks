@@ -303,7 +303,7 @@ export class TikTokAPIService {
     }
 
     const initResponse = await fetch(
-      `${TIKTOK_API_BASE}/v2/post/publish/inbox/photo/init/`,
+      `${TIKTOK_API_BASE}/v2/post/publish/content/init/`,
       {
         method: 'POST',
         headers: {
