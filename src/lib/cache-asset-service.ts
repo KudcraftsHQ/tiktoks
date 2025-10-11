@@ -130,8 +130,8 @@ class CacheAssetService {
    * Get the best available URL for a cache asset or original URL
    * This is the main method that API endpoints should use
    */
-  async getUrl(cacheAssetIdOrKey: string | null | undefined, originalUrl?: string): Promise<string> {
-    console.log(`🔗 [CacheAssetService] Getting URL for cache asset/key: ${cacheAssetIdOrKey} (type: ${typeof cacheAssetIdOrKey})`)
+  async getUrl(cacheAssetIdOrKey: string | null | undefined, originalUrl?: string, preferPublic: boolean = false): Promise<string> {
+    console.log(`🔗 [CacheAssetService] Getting URL for cache asset/key: ${cacheAssetIdOrKey} (type: ${typeof cacheAssetIdOrKey}, preferPublic: ${preferPublic})`)
 
     if (!cacheAssetIdOrKey) {
       console.log(`⚠️ [CacheAssetService] No cache asset ID/key, using original URL: ${originalUrl}`)
@@ -153,21 +153,33 @@ class CacheAssetService {
       } : 'null')
 
       if (cacheAsset) {
-        // If cached successfully, return presigned URL
+        // If cached successfully, return public or presigned URL
         if (cacheAsset.status === CacheStatus.CACHED && cacheAsset.cacheKey) {
-          console.log(`✅ [CacheAssetService] Cache asset is cached, generating presigned URL`)
-          try {
-            const presignedUrl = await generatePresignedUrlFromKey(cacheAsset.cacheKey)
-            console.log(`✅ [CacheAssetService] Generated presigned URL`)
-            return presignedUrl
-          } catch (error) {
-            console.warn(`❌ [CacheAssetService] Failed to generate presigned URL, using public URL:`, error)
+          // Prefer public URL if requested (for TikTok domain verification)
+          if (preferPublic) {
+            console.log(`✅ [CacheAssetService] Cache asset is cached, generating public URL`)
             try {
               const publicUrl = keyToUrl(cacheAsset.cacheKey)
-              console.log(`🔄 [CacheAssetService] Using public URL as fallback`)
+              console.log(`✅ [CacheAssetService] Generated public URL: ${publicUrl}`)
               return publicUrl
-            } catch (fallbackError) {
-              console.warn(`❌ [CacheAssetService] Failed to generate public URL:`, fallbackError)
+            } catch (error) {
+              console.warn(`❌ [CacheAssetService] Failed to generate public URL:`, error)
+            }
+          } else {
+            console.log(`✅ [CacheAssetService] Cache asset is cached, generating presigned URL`)
+            try {
+              const presignedUrl = await generatePresignedUrlFromKey(cacheAsset.cacheKey)
+              console.log(`✅ [CacheAssetService] Generated presigned URL`)
+              return presignedUrl
+            } catch (error) {
+              console.warn(`❌ [CacheAssetService] Failed to generate presigned URL, using public URL:`, error)
+              try {
+                const publicUrl = keyToUrl(cacheAsset.cacheKey)
+                console.log(`🔄 [CacheAssetService] Using public URL as fallback`)
+                return publicUrl
+              } catch (fallbackError) {
+                console.warn(`❌ [CacheAssetService] Failed to generate public URL:`, fallbackError)
+              }
             }
           }
         }
@@ -180,18 +192,28 @@ class CacheAssetService {
 
       // If not found as cache asset ID, treat as legacy R2 key
       console.log(`🔄 [CacheAssetService] Not found as cache asset ID, treating as legacy R2 key`)
-      try {
-        const presignedUrl = await generatePresignedUrlFromKey(cacheAssetIdOrKey)
-        console.log(`✅ [CacheAssetService] Generated presigned URL from legacy key`)
-        return presignedUrl
-      } catch (error) {
-        console.warn(`❌ [CacheAssetService] Failed to generate presigned URL from legacy key:`, error)
+      if (preferPublic) {
         try {
           const publicUrl = keyToUrl(cacheAssetIdOrKey)
-          console.log(`🔄 [CacheAssetService] Using public URL from legacy key`)
+          console.log(`✅ [CacheAssetService] Generated public URL from legacy key`)
           return publicUrl
-        } catch (fallbackError) {
-          console.warn(`❌ [CacheAssetService] Failed to generate public URL from legacy key:`, fallbackError)
+        } catch (error) {
+          console.warn(`❌ [CacheAssetService] Failed to generate public URL from legacy key:`, error)
+        }
+      } else {
+        try {
+          const presignedUrl = await generatePresignedUrlFromKey(cacheAssetIdOrKey)
+          console.log(`✅ [CacheAssetService] Generated presigned URL from legacy key`)
+          return presignedUrl
+        } catch (error) {
+          console.warn(`❌ [CacheAssetService] Failed to generate presigned URL from legacy key:`, error)
+          try {
+            const publicUrl = keyToUrl(cacheAssetIdOrKey)
+            console.log(`🔄 [CacheAssetService] Using public URL from legacy key`)
+            return publicUrl
+          } catch (fallbackError) {
+            console.warn(`❌ [CacheAssetService] Failed to generate public URL from legacy key:`, fallbackError)
+          }
         }
       }
 
@@ -210,14 +232,15 @@ class CacheAssetService {
    */
   async getUrls(
     cacheAssetIdsOrKeys: (string | null | undefined)[],
-    originalUrls?: (string | undefined)[]
+    originalUrls?: (string | undefined)[],
+    preferPublic: boolean = false
   ): Promise<string[]> {
-    console.log(`🔗 [CacheAssetService] Getting URLs for ${cacheAssetIdsOrKeys.length} cache assets/keys`)
+    console.log(`🔗 [CacheAssetService] Getting URLs for ${cacheAssetIdsOrKeys.length} cache assets/keys (preferPublic: ${preferPublic})`)
 
     const urls = await Promise.all(
       cacheAssetIdsOrKeys.map(async (cacheAssetIdOrKey, index) => {
         const originalUrl = originalUrls?.[index]
-        return this.getUrl(cacheAssetIdOrKey, originalUrl)
+        return this.getUrl(cacheAssetIdOrKey, originalUrl, preferPublic)
       })
     )
 

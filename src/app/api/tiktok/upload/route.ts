@@ -91,10 +91,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Get image URLs from cache assets (using FILE_UPLOAD method - no domain verification needed!)
+    // Get image URLs from cache assets (using PULL_FROM_URL method)
+    // Use public URLs (not presigned) for TikTok domain verification
     console.log('📸 [TikTok Upload] Fetching image URLs from cache assets...')
-    const photoUrls = await cacheAssetService.getUrls(photoIds)
-    
+    const photoUrls = await cacheAssetService.getUrls(photoIds, undefined, true) // preferPublic = true
+
     if (photoUrls.length !== photoIds.length) {
       return NextResponse.json(
         { error: 'Failed to resolve all image URLs' },
@@ -102,9 +103,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('📸 [TikTok Upload] Resolved', photoUrls.length, 'image URLs')
+    console.log('📸 [TikTok Upload] Resolved', photoUrls.length, 'public image URLs')
 
-    // Upload to TikTok using FILE_UPLOAD (no domain verification required)
+    // Upload to TikTok using PULL_FROM_URL (TikTok will fetch images from URLs)
     const uploadResult = await tiktokAPIService.uploadCarouselDraft({
       accessToken,
       title,
