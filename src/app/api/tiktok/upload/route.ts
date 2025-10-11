@@ -91,17 +91,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate proxy URLs for TikTok (required for URL ownership verification)
-    // TikTok requires verified domain ownership, so we use our app's domain as proxy
-    const baseUrl = 'https://tiktok.kudcrafts.com'
+    // Get image URLs from cache assets (using FILE_UPLOAD method - no domain verification needed!)
+    console.log('📸 [TikTok Upload] Fetching image URLs from cache assets...')
+    const photoUrls = await cacheAssetService.getUrls(photoIds)
+    
+    if (photoUrls.length !== photoIds.length) {
+      return NextResponse.json(
+        { error: 'Failed to resolve all image URLs' },
+        { status: 500 }
+      )
+    }
 
-    const photoUrls = photoIds.map(
-      (id) => `${baseUrl}/api/tiktok/images/${id}`
-    )
+    console.log('📸 [TikTok Upload] Resolved', photoUrls.length, 'image URLs')
 
-    console.log('📸 [TikTok Upload] Generated proxy URLs:', photoUrls)
-
-    // Upload to TikTok
+    // Upload to TikTok using FILE_UPLOAD (no domain verification required)
     const uploadResult = await tiktokAPIService.uploadCarouselDraft({
       accessToken,
       title,

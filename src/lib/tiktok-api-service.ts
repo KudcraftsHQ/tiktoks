@@ -251,7 +251,7 @@ export class TikTokAPIService {
   }
 
   /**
-   * Upload photo carousel as draft to TikTok
+   * Upload photo carousel as draft to TikTok using FILE_UPLOAD
    * Uses MEDIA_UPLOAD mode - content goes to user's inbox for manual publishing
    */
   async uploadCarouselDraft(
@@ -267,53 +267,104 @@ export class TikTokAPIService {
       throw new Error('TikTok allows maximum 35 photos')
     }
 
-    const payload: any = {
+    console.log('📸 [Photo Upload] Starting FILE_UPLOAD for', photoUrls.length, 'photos')
+
+    // Step 1: Download all images from URLs
+    const imageBlobs: Blob[] = []
+    for (let i = 0; i < photoUrls.length; i++) {
+      console.log(`📥 [Photo Upload] Downloading image ${i + 1}/${photoUrls.length}`)
+      const imageResponse = await fetch(photoUrls[i])
+      if (!imageResponse.ok) {
+        throw new Error(`Failed to download image ${i + 1}: ${imageResponse.statusText}`)
+      }
+      const blob = await imageResponse.blob()
+      imageBlobs.push(blob)
+      console.log(`✅ [Photo Upload] Downloaded image ${i + 1} (${blob.size} bytes)`)
+    }
+
+    // Step 2: Initialize upload session
+    console.log('🚀 [Photo Upload] Initializing upload session...')
+    const initPayload: any = {
       post_mode: 'MEDIA_UPLOAD', // Draft mode
       media_type: 'PHOTO',
       post_info: {},
       source_info: {
-        source: 'PULL_FROM_URL',
-        photo_images: photoUrls,
+        source: 'FILE_UPLOAD',
         photo_cover_index: photoCoverIndex,
       },
     }
 
     // Add optional fields
     if (title) {
-      payload.post_info.title = title.substring(0, 90) // Max 90 chars
+      initPayload.post_info.title = title.substring(0, 90) // Max 90 chars
     }
     if (description) {
-      payload.post_info.description = description.substring(0, 4000) // Max 4000 chars
+      initPayload.post_info.description = description.substring(0, 4000) // Max 4000 chars
     }
 
-    const response = await fetch(
-      `${TIKTOK_API_BASE}/v2/post/publish/content/init/`,
+    const initResponse = await fetch(
+      `${TIKTOK_API_BASE}/v2/post/publish/inbox/photo/init/`,
       {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(initPayload),
       }
     )
 
-    if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`TikTok upload failed: ${error}`)
+    if (!initResponse.ok) {
+      const error = await initResponse.text()
+      console.error('❌ [Photo Upload] Init failed:', error)
+      throw new Error(`TikTok upload init failed: ${error}`)
     }
 
-    const data = await response.json()
+    const initData = await initResponse.json()
+    console.log('📦 [Photo Upload] Init response:', JSON.stringify(initData, null, 2))
 
-    if (data.error) {
+    if (initData.error) {
       throw new Error(
-        `TikTok upload error: ${data.error.message || JSON.stringify(data.error)}`
+        `TikTok upload init error: ${initData.error.message || JSON.stringify(initData.error)}`
       )
     }
 
+    const publishId = initData.data?.publish_id
+    const uploadUrls = initData.data?.upload_url as string[]
+
+    if (!publishId || !uploadUrls || uploadUrls.length !== imageBlobs.length) {
+      throw new Error('Invalid init response: missing publish_id or upload_urls')
+    }
+
+    console.log('✅ [Photo Upload] Init successful - publish_id:', publishId)
+    console.log('📤 [Photo Upload] Got', uploadUrls.length, 'upload URLs')
+
+    // Step 3: Upload each image to its respective URL
+    for (let i = 0; i < imageBlobs.length; i++) {
+      console.log(`⬆️ [Photo Upload] Uploading image ${i + 1}/${imageBlobs.length} to TikTok...`)
+      
+      const uploadResponse = await fetch(uploadUrls[i], {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'image/jpeg',
+          'Content-Length': imageBlobs[i].size.toString(),
+        },
+        body: imageBlobs[i],
+      })
+
+      if (!uploadResponse.ok) {
+        const error = await uploadResponse.text()
+        console.error(`❌ [Photo Upload] Upload failed for image ${i + 1}:`, error)
+        throw new Error(`Failed to upload image ${i + 1}: ${uploadResponse.statusText}`)
+      }
+
+      console.log(`✅ [Photo Upload] Image ${i + 1} uploaded successfully`)
+    }
+
+    console.log('🎉 [Photo Upload] All images uploaded successfully!')
+
     return {
-      publish_id: data.data?.publish_id || '',
-      error: data.error,
+      publish_id: publishId,
     }
   }
 
