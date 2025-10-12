@@ -1,8 +1,10 @@
 'use client'
 
+import React from 'react'
 import { ColumnDef } from '@tanstack/react-table'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   ExternalLink,
   Video,
@@ -18,7 +20,11 @@ import {
   ArrowUp,
   ArrowDown,
   Images,
-  Sparkles
+  Sparkles,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  FileText
 } from 'lucide-react'
 import { createSortableHeader } from '@/components/ui/data-table'
 import { getProxiedImageUrl } from '@/lib/image-proxy'
@@ -65,6 +71,10 @@ export interface TikTokPost {
     saveCount: number
     recordedAt: string
   }>
+  // OCR fields
+  ocrStatus: 'pending' | 'processing' | 'completed' | 'failed'
+  ocrProcessedAt?: string | null
+  ocrTexts?: any
 }
 
 interface PostsTableColumnsProps {
@@ -72,6 +82,11 @@ interface PostsTableColumnsProps {
   onOpenImageGallery?: (images: Array<{ url: string; width: number; height: number }>, initialIndex: number) => void
   onRemixPost?: (post: TikTokPost) => void
   onRowClick?: (post: TikTokPost) => void
+  onTriggerOCR?: (postId: string) => Promise<void>
+  selectedPosts?: Set<string>
+  onSelectPost?: (postId: string, selected: boolean) => void
+  onSelectAll?: (selected: boolean) => void
+  allSelected?: boolean
 }
 
 const formatNumber = (num: number): string => {
@@ -123,8 +138,47 @@ export const createPostsTableColumns = ({
   onPreviewPost,
   onOpenImageGallery,
   onRemixPost,
-  onRowClick
+  onRowClick,
+  onTriggerOCR,
+  selectedPosts = new Set(),
+  onSelectPost,
+  onSelectAll,
+  allSelected = false
 }: PostsTableColumnsProps): ColumnDef<TikTokPost>[] => [
+  {
+    id: 'select',
+    header: ({ table }) => (
+      <div className="flex items-center justify-center">
+        <Checkbox
+          checked={allSelected}
+          onCheckedChange={(checked) => {
+            onSelectAll?.(checked === true)
+          }}
+          aria-label="Select all"
+        />
+      </div>
+    ),
+    cell: ({ row }) => {
+      const post = row.original
+      // Only show checkbox for photo posts
+      if (post.contentType !== 'photo') {
+        return null
+      }
+      return (
+        <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={selectedPosts.has(post.id)}
+            onCheckedChange={(checked) => {
+              onSelectPost?.(post.id, checked === true)
+            }}
+            aria-label={`Select ${post.authorHandle}`}
+          />
+        </div>
+      )
+    },
+    size: 50,
+    meta: { pinned: 'left' }
+  },
   {
     accessorKey: 'contentType',
     header: '',
@@ -465,17 +519,97 @@ export const createPostsTableColumns = ({
     }
   },
   {
+    accessorKey: 'ocrStatus',
+    header: 'OCR Status',
+    cell: ({ row }) => {
+      const post = row.original
+      
+      // Only show OCR status for photo posts
+      if (post.contentType !== 'photo') {
+        return <div className="text-center text-muted-foreground text-xs">N/A</div>
+      }
+
+      const statusConfig = {
+        pending: {
+          icon: FileText,
+          label: 'Pending',
+          className: 'text-muted-foreground',
+          bgClassName: 'bg-muted'
+        },
+        processing: {
+          icon: Loader2,
+          label: 'Processing',
+          className: 'text-blue-600',
+          bgClassName: 'bg-blue-50 dark:bg-blue-950'
+        },
+        completed: {
+          icon: CheckCircle2,
+          label: 'Completed',
+          className: 'text-green-600',
+          bgClassName: 'bg-green-50 dark:bg-green-950'
+        },
+        failed: {
+          icon: XCircle,
+          label: 'Failed',
+          className: 'text-red-600',
+          bgClassName: 'bg-red-50 dark:bg-red-950'
+        }
+      }
+
+      const config = statusConfig[post.ocrStatus] || statusConfig.pending
+      const Icon = config.icon
+
+      return (
+        <div className="flex items-center justify-center">
+          <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md ${config.bgClassName}`}>
+            <Icon className={`w-3.5 h-3.5 ${config.className} ${post.ocrStatus === 'processing' ? 'animate-spin' : ''}`} />
+            <span className={`text-xs font-medium ${config.className}`}>
+              {config.label}
+            </span>
+          </div>
+        </div>
+      )
+    }
+  },
+  {
     id: 'actions',
     header: 'Actions',
-    size: 120,
+    size: 160,
     meta: {
       pinned: 'right'
     },
     cell: ({ row }) => {
       const post = row.original
 
+      const handleTriggerOCR = async (e: React.MouseEvent) => {
+        e.stopPropagation()
+        if (!onTriggerOCR) return
+
+        try {
+          await onTriggerOCR(post.id)
+        } catch (err) {
+          // Error handling is done in parent component
+        }
+      }
+
       return (
         <div className="flex items-center space-x-2">
+          {post.contentType === 'photo' && onTriggerOCR && post.ocrStatus !== 'completed' && (
+            <Button
+              variant={post.ocrStatus === 'pending' ? 'default' : 'outline'}
+              size="sm"
+              onClick={handleTriggerOCR}
+              disabled={post.ocrStatus === 'processing'}
+              title={post.ocrStatus === 'pending' ? 'Run OCR' : post.ocrStatus === 'processing' ? 'Processing...' : 'Retry OCR'}
+            >
+              {post.ocrStatus === 'processing' ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <FileText className="w-3 h-3" />
+              )}
+            </Button>
+          )}
+
           <Button
             variant="ghost"
             size="sm"

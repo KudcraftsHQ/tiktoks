@@ -424,12 +424,12 @@ export default function RemixPage({ params }: RemixPageProps) {
       {/* Main Container with proper scrolling */}
       <div className="flex flex-col h-[calc(100vh-80px)]">
         <div className="flex-1 overflow-auto">
-          <div className="min-w-max">
+          <div style={{ width: `max(calc(100vw - 16rem), ${80 + (maxSlidesCount * 72) + 48}px)` }}>
 
             {/* Header Row with Slide Numbers and Actions */}
-            <div className="flex border-b bg-background sticky top-0 z-1000">
+            <div className="flex border-b bg-background sticky top-0 z-20">
               {/* Post Information Column Header */}
-              <div className="w-80 border-r bg-foreground-primary p-4 flex-shrink-0 sticky left-0 bg-background">
+              <div className="w-80 border-r bg-foreground-primary p-4 flex-shrink-0 sticky left-0 bg-background z-10">
                 <h3 className="font-semibold text-sm">Posts & Remixes</h3>
               </div>
 
@@ -443,35 +443,8 @@ export default function RemixPage({ params }: RemixPageProps) {
               </div>
 
               {/* Actions Column */}
-              <div className="w-48 p-4 flex-shrink-0 sticky right-0 bg-background">
-                <div className="space-y-2">
-                  {canCreateRemix && (
-                    <Button
-                      onClick={() => setIsRemixDialogOpen(true)}
-                      size="sm"
-                      className="w-full"
-                    >
-                      <Sparkles className="h-3 w-3 mr-2" />
-                      Create Remix
-                    </Button>
-                  )}
-
-                  {post.contentType === 'photo' && post.ocrStatus !== 'completed' && (
-                    <Button
-                      onClick={runOCR}
-                      disabled={isRunningOCR || post.ocrStatus === 'processing'}
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                    >
-                      {getOCRStatusIcon()}
-                      <span className="ml-1 text-xs">
-                        {post.ocrStatus === 'processing' ? 'Processing...' :
-                         isRunningOCR ? 'Running...' : 'Run OCR'}
-                      </span>
-                    </Button>
-                  )}
-                </div>
+              <div className="w-48 p-4 flex-shrink-0 sticky right-0 bg-background z-10 border-l">
+                <h3 className="font-semibold text-sm">Actions</h3>
               </div>
             </div>
 
@@ -479,7 +452,7 @@ export default function RemixPage({ params }: RemixPageProps) {
             {originalSlides.length > 0 && (
               <div className="flex border-b">
                 {/* Post Information Column */}
-                <div className="w-80 border-r p-4 bg-background flex-shrink-0 sticky left-0 z-100">
+                <div className="w-80 border-r p-4 bg-background flex-shrink-0 sticky left-0 z-10">
                   <div className="flex items-center gap-2 mb-3">
                     <Eye className="h-4 w-4 text-blue-500" />
                     <h3 className="font-semibold text-sm">Original Post</h3>
@@ -571,7 +544,7 @@ export default function RemixPage({ params }: RemixPageProps) {
                 </div>
 
                 {/* Actions for this row */}
-                <div className="w-48 p-4 flex-shrink-0 sticky right-0 bg-background">
+                <div className="w-48 p-4 flex-shrink-0 sticky right-0 bg-background z-10 border-l">
                   <div className="text-xs text-muted-foreground">
                     Original content
                   </div>
@@ -583,7 +556,7 @@ export default function RemixPage({ params }: RemixPageProps) {
             {remixRows.map((remixRow) => (
               <div key={remixRow.remix.id} className="flex border-b">
                 {/* Post Name Column */}
-                <div className="w-80 border-r p-4 bg-background flex-shrink-0 sticky left-0 z-100">
+                <div className="w-80 border-r p-4 bg-background flex-shrink-0 sticky left-0 z-10">
                   <div className="flex items-center gap-2 mb-2">
                     <Sparkles className="h-4 w-4 text-purple-500" />
                     <h3 className="font-semibold text-sm">{remixRow.remix.name}</h3>
@@ -639,7 +612,7 @@ export default function RemixPage({ params }: RemixPageProps) {
                 </div>
 
                 {/* Actions for this row */}
-                <div className="w-48 p-4 flex-shrink-0 sticky right-0 bg-background">
+                <div className="w-48 p-4 flex-shrink-0 sticky right-0 bg-background z-10 border-l">
                   <div className="space-y-2">
                     <Button
                       onClick={() => toggleBookmark(remixRow.remix.id)}

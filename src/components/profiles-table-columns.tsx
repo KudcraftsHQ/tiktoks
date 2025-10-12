@@ -4,6 +4,7 @@ import React from 'react'
 import { ColumnDef } from '@tanstack/react-table'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   ExternalLink,
   User,
@@ -16,7 +17,11 @@ import {
   MessageCircle,
   Share2,
   Bookmark,
-  Star
+  Star,
+  Bell,
+  BellOff,
+  PlayCircle,
+  PauseCircle
 } from 'lucide-react'
 import { createSortableHeader } from '@/components/ui/data-table'
 import Link from 'next/link'
@@ -45,9 +50,9 @@ export interface TikTokProfile {
   totalSaves?: string | bigint
 
   // Monitoring
-  monitoringEnabled?: boolean
-  lastMonitoringRun?: string
-  nextMonitoringRun?: string
+  monitoringEnabled: boolean
+  lastMonitoringRun?: string | null
+  nextMonitoringRun?: string | null
 
   // Own profile flag
   isOwnProfile?: boolean
@@ -62,6 +67,11 @@ export interface TikTokProfile {
 interface ProfilesTableColumnsProps {
   onPreviewProfile: (profile: TikTokProfile) => void
   onToggleOwnProfile?: (profileId: string, isOwn: boolean) => Promise<void>
+  onToggleMonitoring?: (profileId: string, enabled: boolean) => Promise<void>
+  selectedProfiles?: Set<string>
+  onSelectProfile?: (profileId: string, selected: boolean) => void
+  onSelectAll?: (selected: boolean) => void
+  allSelected?: boolean
 }
 
 const formatNumber = (num?: number | string | bigint | null): string => {
@@ -120,11 +130,48 @@ function OwnProfileToggle({ profile, onToggle }: OwnProfileToggleProps) {
 
 export const createProfilesTableColumns = ({
   onPreviewProfile,
-  onToggleOwnProfile
+  onToggleOwnProfile,
+  onToggleMonitoring,
+  selectedProfiles = new Set(),
+  onSelectProfile,
+  onSelectAll,
+  allSelected = false
 }: ProfilesTableColumnsProps): ColumnDef<TikTokProfile>[] => [
+  {
+    id: 'select',
+    header: ({ table }) => (
+      <div className="flex items-center justify-center">
+        <Checkbox
+          checked={allSelected}
+          onCheckedChange={(checked) => {
+            onSelectAll?.(checked === true)
+          }}
+          aria-label="Select all"
+        />
+      </div>
+    ),
+    cell: ({ row }) => {
+      const profile = row.original
+      return (
+        <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={selectedProfiles.has(profile.id)}
+            onCheckedChange={(checked) => {
+              onSelectProfile?.(profile.id, checked === true)
+            }}
+            aria-label={`Select ${profile.handle}`}
+          />
+        </div>
+      )
+    },
+    size: 50,
+    meta: { pinned: 'left' }
+  },
   {
     accessorKey: 'handle',
     header: createSortableHeader('Handle'),
+    size: 250,
+    meta: { pinned: 'left' },
     cell: ({ row }) => {
       const profile = row.original
       return (
@@ -244,6 +291,28 @@ export const createProfilesTableColumns = ({
     }
   },
   {
+    accessorKey: 'monitoringEnabled',
+    header: 'Monitoring',
+    cell: ({ row }) => {
+      const profile = row.original
+      return (
+        <div className="flex items-center justify-center">
+          {profile.monitoringEnabled ? (
+            <div className="flex items-center gap-1.5 text-green-600">
+              <Bell className="w-4 h-4" />
+              <span className="text-sm font-medium">Enabled</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <BellOff className="w-4 h-4" />
+              <span className="text-sm">Disabled</span>
+            </div>
+          )}
+        </div>
+      )
+    }
+  },
+  {
     accessorKey: 'updatedAt',
     header: createSortableHeader('Last Updated'),
     cell: ({ row }) => {
@@ -274,8 +343,33 @@ export const createProfilesTableColumns = ({
     cell: ({ row }) => {
       const profile = row.original
 
+      const handleToggleMonitoring = async (e: React.MouseEvent) => {
+        e.stopPropagation()
+        if (!onToggleMonitoring) return
+
+        try {
+          await onToggleMonitoring(profile.id, !profile.monitoringEnabled)
+        } catch (err) {
+          // Error handling is done in parent component
+        }
+      }
+
       return (
         <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
+          <Button
+            variant={profile.monitoringEnabled ? "default" : "outline"}
+            size="sm"
+            onClick={handleToggleMonitoring}
+            disabled={!onToggleMonitoring}
+            title={profile.monitoringEnabled ? "Disable Monitoring" : "Enable Monitoring"}
+          >
+            {profile.monitoringEnabled ? (
+              <PauseCircle className="w-3 h-3" />
+            ) : (
+              <PlayCircle className="w-3 h-3" />
+            )}
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -296,6 +390,8 @@ export const createProfilesTableColumns = ({
           </Link>
         </div>
       )
-    }
+    },
+    size: 180,
+    meta: { pinned: 'right' }
   }
 ]

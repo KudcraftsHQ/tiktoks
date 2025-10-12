@@ -51,11 +51,14 @@ interface DataTableProps<TData, TValue> {
   onSortingChange?: (sorting: SortingState) => void
   sorting?: SortingState
   manualSorting?: boolean
+  manualPagination?: boolean
+  totalRows?: number
   isLoading?: boolean
   onRowClick?: (row: TData) => void
   enableColumnPinning?: boolean
   getRowId?: (row: TData) => string
   hiddenColumns?: string[]
+  customHeaderActions?: React.ReactNode
 }
 
 export function DataTable<TData, TValue>({
@@ -70,11 +73,14 @@ export function DataTable<TData, TValue>({
   onSortingChange,
   sorting: externalSorting,
   manualSorting = false,
+  manualPagination = false,
+  totalRows,
   isLoading,
   onRowClick,
   enableColumnPinning = false,
   getRowId,
-  hiddenColumns = []
+  hiddenColumns = [],
+  customHeaderActions
 }: DataTableProps<TData, TValue>) {
   const [internalSorting, setInternalSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -92,6 +98,10 @@ export function DataTable<TData, TValue>({
   const [rowSelection, setRowSelection] = React.useState({})
   const [globalFilter, setGlobalFilter] = React.useState('')
   const [shadowOpacity, setShadowOpacity] = React.useState({ left: 0, right: 0 })
+  const [pagination, setPagination] = React.useState({
+    pageIndex: 0,
+    pageSize: 25,
+  })
 
   const tableWrapperRef = React.useRef<HTMLDivElement>(null)
 
@@ -151,6 +161,7 @@ export function DataTable<TData, TValue>({
     getRowId,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
+    onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: manualSorting ? undefined : getSortedRowModel(),
@@ -160,6 +171,11 @@ export function DataTable<TData, TValue>({
     onGlobalFilterChange: setGlobalFilter,
     onColumnPinningChange: setColumnPinning,
     manualSorting,
+    manualPagination,
+    enableMultiSort: true, // Enable multi-column sorting (Shift+Click)
+    pageCount: manualPagination && totalRows !== undefined 
+      ? Math.ceil(totalRows / pagination.pageSize) 
+      : undefined,
     globalFilterFn: globalFilterFn ? (row, _columnId, filterValue) => {
       return globalFilterFn(row.original, filterValue)
     } : undefined,
@@ -170,11 +186,7 @@ export function DataTable<TData, TValue>({
       rowSelection,
       globalFilter,
       columnPinning: enableColumnPinning ? columnPinning : { left: [], right: [] },
-    },
-    initialState: {
-      pagination: {
-        pageSize: 25,
-      },
+      pagination,
     },
   })
 
@@ -230,6 +242,7 @@ export function DataTable<TData, TValue>({
         ) : null}
 
         <div className="flex items-center gap-2 sm:ml-auto">
+          {customHeaderActions}
           {contentTypeFilter && (
             <PostTypeFilter
               value={contentTypeFilter.value}
@@ -350,12 +363,18 @@ export function DataTable<TData, TValue>({
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4 border-t">
           <div className="flex items-center gap-4">
             <div className="text-sm text-muted-foreground">
-              Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to{' '}
-              {Math.min(
-                (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-                table.getFilteredRowModel().rows.length
-              )}{' '}
-              of {table.getFilteredRowModel().rows.length} entries
+              {(() => {
+                const pageIndex = table.getState().pagination.pageIndex
+                const pageSize = table.getState().pagination.pageSize
+                const total = manualPagination && totalRows !== undefined 
+                  ? totalRows 
+                  : table.getFilteredRowModel().rows.length
+                
+                const from = pageIndex * pageSize + 1
+                const to = Math.min((pageIndex + 1) * pageSize, total)
+                
+                return `Showing ${from} to ${to} of ${total} entries`
+              })()}
             </div>
             <select
               value={table.getState().pagination.pageSize}
@@ -416,20 +435,32 @@ export function DataTable<TData, TValue>({
   )
 }
 
-// Helper function to create sortable column headers
+// Helper function to create sortable column headers with multi-sort indicators
 export function createSortableHeader(title: string) {
-  return ({ column }: { column: any }) => {
+  return ({ column, table }: { column: any; table: any }) => {
     const isSorted = column.getIsSorted()
+    const sortingState = table.getState().sorting
+    const sortIndex = sortingState.findIndex((s: any) => s.id === column.id)
+    const isMultiSorted = sortingState.length > 1 && sortIndex !== -1
 
     return (
       <Button
         variant="ghost"
         onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
         className={`h-auto p-0 hover:bg-transparent group ${isSorted ? 'font-bold' : ''}`}
+        title={isMultiSorted ? `Sort order: ${sortIndex + 1}. Shift+Click to modify multi-sort` : 'Click to sort, Shift+Click for multi-sort'}
       >
         {title}
-        {isSorted === 'desc' && <ArrowDown className="h-3 w-3 ml-1" />}
-        {isSorted === 'asc' && <ArrowUp className="h-3 w-3 ml-1" />}
+        {isSorted && (
+          <span className="inline-flex items-center ml-1">
+            {isMultiSorted && (
+              <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold bg-primary/20 text-primary rounded-full mr-0.5">
+                {sortIndex + 1}
+              </span>
+            )}
+            {isSorted === 'desc' ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />}
+          </span>
+        )}
         {!isSorted && <ArrowUpDown className="h-3 w-3 ml-1 opacity-0 group-hover:opacity-50" />}
       </Button>
     )

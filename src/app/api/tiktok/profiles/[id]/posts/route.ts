@@ -17,10 +17,28 @@ export async function GET(
     const search = searchParams.get('search') || ''
     const includeHistory = searchParams.get('includeHistory') !== 'false' // Default to true
 
-    // Parse sorting from URL
-    const sortBy = searchParams.get('sortBy') || 'publishedAt'
-    const sortOrder = searchParams.get('sortOrder') || 'desc'
-    const orderBy: any = { [sortBy]: sortOrder }
+    // Parse sorting from URL - supports multi-column sorting
+    // Format: ?sort=viewCount.desc,likeCount.asc,publishedAt.desc
+    // Backward compatible with old format: ?sortBy=viewCount&sortOrder=desc
+    const sortParam = searchParams.get('sort')
+    const oldSortBy = searchParams.get('sortBy')
+    const oldSortOrder = searchParams.get('sortOrder')
+    
+    let orderBy: any
+    
+    if (sortParam) {
+      // New format: multi-column sorting
+      orderBy = sortParam.split(',').map(sort => {
+        const [field, direction] = sort.trim().split('.')
+        return { [field]: direction || 'desc' }
+      })
+    } else if (oldSortBy) {
+      // Backward compatibility: old single-column format
+      orderBy = { [oldSortBy]: oldSortOrder || 'desc' }
+    } else {
+      // Default sorting
+      orderBy = { publishedAt: 'desc' }
+    }
 
     const skip = (page - 1) * limit
 

@@ -50,12 +50,21 @@ function ProfileDetailPageContent() {
   // Initialize state from URL params
   const initialPage = parseInt(searchParams.get('page') || '1', 10)
 
-  // Parse sorting from URL
-  const sortBy = searchParams.get('sortBy')
-  const sortOrder = searchParams.get('sortOrder')
-  const initialSorting: SortingState = sortBy && sortOrder
-    ? [{ id: sortBy, desc: sortOrder === 'desc' }]
-    : []
+  // Parse sorting from URL - supports multi-column sorting
+  const sortParam = searchParams.get('sort')
+  const oldSortBy = searchParams.get('sortBy')
+  const oldSortOrder = searchParams.get('sortOrder')
+  
+  let initialSorting: SortingState = []
+  
+  if (sortParam) {
+    initialSorting = sortParam.split(',').map(sort => {
+      const [id, direction] = sort.trim().split('.')
+      return { id, desc: direction === 'desc' }
+    })
+  } else if (oldSortBy && oldSortOrder) {
+    initialSorting = [{ id: oldSortBy, desc: oldSortOrder === 'desc' }]
+  }
 
   const [profile, setProfile] = useState<TikTokProfile | null>(null)
   const [posts, setPosts] = useState<TikTokPost[]>([])
@@ -81,9 +90,11 @@ function ProfileDetailPageContent() {
       params.set('page', page.toString())
     }
 
-    if (sort.length > 0 && sort[0]?.id) {
-      params.set('sortBy', sort[0].id)
-      params.set('sortOrder', sort[0].desc ? 'desc' : 'asc')
+    if (sort.length > 0) {
+      const sortParam = sort
+        .map(s => `${s.id}.${s.desc ? 'desc' : 'asc'}`)
+        .join(',')
+      params.set('sort', sortParam)
     }
 
     const queryString = params.toString()
@@ -131,9 +142,11 @@ function ProfileDetailPageContent() {
       }
 
       // Add sorting parameters
-      if (sort.length > 0 && sort[0]?.id) {
-        params.append('sortBy', sort[0].id)
-        params.append('sortOrder', sort[0].desc ? 'desc' : 'asc')
+      if (sort.length > 0) {
+        const sortParam = sort
+          .map(s => `${s.id}.${s.desc ? 'desc' : 'asc'}`)
+          .join(',')
+        params.append('sort', sortParam)
       }
 
       const response = await fetch(`/api/tiktok/profiles/${profile.id}/posts?${params.toString()}`)
@@ -248,11 +261,20 @@ function ProfileDetailPageContent() {
 
   // Sync state from URL params (for browser back/forward)
   useEffect(() => {
-    const sortBy = searchParams.get('sortBy')
-    const sortOrder = searchParams.get('sortOrder')
-    const urlSorting: SortingState = sortBy && sortOrder
-      ? [{ id: sortBy, desc: sortOrder === 'desc' }]
-      : []
+    const sortParam = searchParams.get('sort')
+    const oldSortBy = searchParams.get('sortBy')
+    const oldSortOrder = searchParams.get('sortOrder')
+    
+    let urlSorting: SortingState = []
+    
+    if (sortParam) {
+      urlSorting = sortParam.split(',').map(sort => {
+        const [id, direction] = sort.trim().split('.')
+        return { id, desc: direction === 'desc' }
+      })
+    } else if (oldSortBy && oldSortOrder) {
+      urlSorting = [{ id: oldSortBy, desc: oldSortOrder === 'desc' }]
+    }
 
     // Check if URL sorting is different from current state
     const isDifferent = JSON.stringify(urlSorting) !== JSON.stringify(sorting)
@@ -260,7 +282,7 @@ function ProfileDetailPageContent() {
     if (isDifferent) {
       setSorting(urlSorting)
     }
-  }, [searchParams])
+  }, [searchParams, sorting])
 
   // Load profile and posts on mount and when filters change
   useEffect(() => {
@@ -304,15 +326,17 @@ function ProfileDetailPageContent() {
 
   // Handle sorting change with URL update
   const handleSortingChange = useCallback((updaterOrValue: SortingState | ((old: SortingState) => SortingState)) => {
-    setSorting(prevSorting => {
-      const newSorting = typeof updaterOrValue === 'function'
-        ? updaterOrValue(prevSorting)
-        : updaterOrValue
+    const newSorting = typeof updaterOrValue === 'function'
+      ? updaterOrValue(sorting)
+      : updaterOrValue
 
+    setSorting(newSorting)
+    
+    // Update URL in a separate effect to avoid render issues
+    setTimeout(() => {
       updateURL(currentPage, newSorting)
-      return newSorting
-    })
-  }, [currentPage, updateURL])
+    }, 0)
+  }, [currentPage, sorting, updateURL])
 
   // Handle page change with URL update
   // Note: DataTable calls this with the NEW pageIndex (0-indexed) after navigation
@@ -494,21 +518,25 @@ function ProfileDetailPageContent() {
             </div>
             <div className="rounded-lg border border-border bg-card p-3">
               <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center">
+                  <Eye className="w-4 h-4 text-pink-500" />
+                </div>
+                <span className="text-sm text-muted-foreground">Avg Views</span>
+              </div>
+              <div className="text-2xl font-bold">
+                {profile.totalPosts && profile.totalPosts > 0
+                  ? formatNumber(Math.round(parseInt(profile.totalViews?.toString() || '0') / profile.totalPosts))
+                  : '0'}
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3">
+              <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center">
                   <Heart className="w-4 h-4 text-red-500" />
                 </div>
                 <span className="text-sm text-muted-foreground">Likes</span>
               </div>
               <div className="text-2xl font-bold">{formatNumber(parseInt(profile.totalLikes?.toString() || '0'))}</div>
-            </div>
-            <div className="rounded-lg border border-border bg-card p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
-                  <Users className="w-4 h-4 text-green-500" />
-                </div>
-                <span className="text-sm text-muted-foreground">Shares</span>
-              </div>
-              <div className="text-2xl font-bold">{formatNumber(parseInt(profile.totalShares?.toString() || '0'))}</div>
             </div>
             <div className="rounded-lg border border-border bg-card p-3">
               <div className="flex items-center gap-2 mb-2">
@@ -521,12 +549,12 @@ function ProfileDetailPageContent() {
             </div>
             <div className="rounded-lg border border-border bg-card p-3">
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center">
-                  <Users className="w-4 h-4 text-pink-500" />
+                <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+                  <Users className="w-4 h-4 text-green-500" />
                 </div>
-                <span className="text-sm text-muted-foreground">Followers</span>
+                <span className="text-sm text-muted-foreground">Saved</span>
               </div>
-              <div className="text-2xl font-bold">{formatNumber(profile.followerCount)}</div>
+              <div className="text-2xl font-bold">{formatNumber(parseInt(profile.totalShares?.toString() || '0'))}</div>
             </div>
           </div>
 

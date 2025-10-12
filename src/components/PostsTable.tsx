@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -17,9 +18,12 @@ import { useRouter } from 'next/navigation'
 import { SmartImage } from '@/components/SmartImage'
 import { PostAnalyticsSheet } from '@/components/PostAnalyticsSheet'
 import { SortingState } from '@tanstack/react-table'
+import { FileText, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface PostsTableProps {
   posts: TikTokPost[]
+  totalPosts?: number
   contentTypeFilter?: {
     value: 'all' | 'video' | 'photo'
     onChange: (value: 'all' | 'video' | 'photo') => void
@@ -34,6 +38,7 @@ interface PostsTableProps {
 
 export function PostsTable({
   posts,
+  totalPosts,
   contentTypeFilter,
   onPageChange,
   onSortingChange,
@@ -46,6 +51,9 @@ export function PostsTable({
   const [selectedPost, setSelectedPost] = useState<TikTokPost | null>(null)
   const [analyticsPost, setAnalyticsPost] = useState<TikTokPost | null>(null)
   const [showAnalytics, setShowAnalytics] = useState(false)
+  const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set())
+  const [isBulkOCRing, setIsBulkOCRing] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   // Use a stable cache to store proxied URLs by cache asset IDs
   // This ensures URLs never change, even when underlying R2 URLs change
@@ -119,13 +127,98 @@ export function PostsTable({
     setShowAnalytics(true)
   }
 
+  const handleTriggerOCR = async (postId: string) => {
+    try {
+      const response = await fetch(`/api/tiktok/posts/${postId}/ocr`, {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to trigger OCR')
+      }
+
+      toast.success('OCR processing started')
+      
+      // Trigger refresh
+      setRefreshTrigger(prev => prev + 1)
+    } catch (err) {
+      console.error('Failed to trigger OCR:', err)
+      toast.error('Failed to start OCR processing')
+      throw err
+    }
+  }
+
+  const handleSelectPost = (postId: string, selected: boolean) => {
+    setSelectedPosts(prev => {
+      const newSet = new Set(prev)
+      if (selected) {
+        newSet.add(postId)
+      } else {
+        newSet.delete(postId)
+      }
+      return newSet
+    })
+  }
+
+  const handleSelectAll = (selected: boolean) => {
+    if (selected) {
+      // Only select photo posts
+      const photoPosts = postsWithProxiedUrls.filter(p => p.contentType === 'photo')
+      setSelectedPosts(new Set(photoPosts.map(p => p.id)))
+    } else {
+      setSelectedPosts(new Set())
+    }
+  }
+
+  const handleBulkOCR = async () => {
+    if (selectedPosts.size === 0) return
+
+    setIsBulkOCRing(true)
+    try {
+      const response = await fetch('/api/tiktok/posts/bulk-ocr', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          postIds: Array.from(selectedPosts)
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to bulk OCR')
+      }
+
+      const result = await response.json()
+      
+      toast.success(`OCR started for ${selectedPosts.size} posts`)
+      
+      // Clear selection and refresh
+      setSelectedPosts(new Set())
+      setRefreshTrigger(prev => prev + 1)
+    } catch (err) {
+      console.error('Failed to bulk OCR:', err)
+      toast.error('Failed to start bulk OCR processing')
+    } finally {
+      setIsBulkOCRing(false)
+    }
+  }
+
+  const photoPosts = postsWithProxiedUrls.filter(p => p.contentType === 'photo')
+  const allPhotosSelected = photoPosts.length > 0 && selectedPosts.size === photoPosts.length
+
   // Create columns with handlers
   const columns = useMemo(() => createPostsTableColumns({
     onPreviewPost: handlePreviewPost,
     onOpenImageGallery: handleOpenImageGallery,
     onRemixPost: handleRemixPost,
-    onRowClick: handleRowClick
-  }), [])
+    onRowClick: handleRowClick,
+    onTriggerOCR: handleTriggerOCR,
+    selectedPosts,
+    onSelectPost: handleSelectPost,
+    onSelectAll: handleSelectAll,
+    allSelected: allPhotosSelected
+  }), [selectedPosts, allPhotosSelected, refreshTrigger])
 
   // Global filter function to search across author and OCR text
   const globalFilterFn = (post: TikTokPost, filterValue: string) => {
@@ -164,10 +257,39 @@ export function PostsTable({
           onSortingChange={onSortingChange}
           sorting={sorting}
           manualSorting={enableServerSideSorting}
+          manualPagination={true}
+          totalRows={totalPosts}
           isLoading={isLoading}
           enableColumnPinning={true}
           hiddenColumns={hiddenColumns}
           onRowClick={handleRowClick}
+          customHeaderActions={
+            selectedPosts.size > 0 ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  {selectedPosts.size} selected
+                </span>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleBulkOCR}
+                  disabled={isBulkOCRing}
+                >
+                  {isBulkOCRing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-4 h-4 mr-1" />
+                      Run OCR on Selected
+                    </>
+                  )}
+                </Button>
+              </div>
+            ) : null
+          }
         />
       </div>
 

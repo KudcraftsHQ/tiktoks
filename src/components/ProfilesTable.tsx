@@ -13,7 +13,7 @@ import { DataTable } from '@/components/ui/data-table'
 import { createProfilesTableColumns, TikTokProfile } from '@/components/profiles-table-columns'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ExternalLink, Users, Heart, Video, CheckCircle } from 'lucide-react'
+import { ExternalLink, Users, Heart, Video, CheckCircle, PlayCircle, PauseCircle } from 'lucide-react'
 
 interface ProfilesTableProps {
   profiles: TikTokProfile[]
@@ -23,6 +23,8 @@ interface ProfilesTableProps {
 export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps) {
   const router = useRouter()
   const [selectedProfile, setSelectedProfile] = useState<TikTokProfile | null>(null)
+  const [selectedProfiles, setSelectedProfiles] = useState<Set<string>>(new Set())
+  const [isBulkToggling, setIsBulkToggling] = useState(false)
 
   const formatNumber = (num?: number | null): string => {
     if (!num) return '0'
@@ -74,11 +76,95 @@ export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps
     }
   }
 
+  const handleToggleMonitoring = async (profileId: string, enabled: boolean) => {
+    try {
+      const response = await fetch(`/api/tiktok/profiles/${profileId}/monitoring`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ enabled })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to toggle monitoring')
+      }
+
+      // Trigger parent refresh
+      if (onProfilesChange) {
+        onProfilesChange()
+      }
+    } catch (err) {
+      console.error('Failed to toggle monitoring:', err)
+      throw err
+    }
+  }
+
+  const handleSelectProfile = (profileId: string, selected: boolean) => {
+    setSelectedProfiles(prev => {
+      const newSet = new Set(prev)
+      if (selected) {
+        newSet.add(profileId)
+      } else {
+        newSet.delete(profileId)
+      }
+      return newSet
+    })
+  }
+
+  const handleSelectAll = (selected: boolean) => {
+    if (selected) {
+      setSelectedProfiles(new Set(profiles.map(p => p.id)))
+    } else {
+      setSelectedProfiles(new Set())
+    }
+  }
+
+  const handleBulkToggleMonitoring = async (enabled: boolean) => {
+    if (selectedProfiles.size === 0) return
+
+    setIsBulkToggling(true)
+    try {
+      const response = await fetch('/api/tiktok/profiles/bulk/monitoring', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          profileIds: Array.from(selectedProfiles),
+          enabled
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to bulk toggle monitoring')
+      }
+
+      // Clear selection and refresh
+      setSelectedProfiles(new Set())
+      if (onProfilesChange) {
+        onProfilesChange()
+      }
+    } catch (err) {
+      console.error('Failed to bulk toggle monitoring:', err)
+      alert('Failed to update monitoring status. Please try again.')
+    } finally {
+      setIsBulkToggling(false)
+    }
+  }
+
+  const allSelected = profiles.length > 0 && selectedProfiles.size === profiles.length
+
   // Create columns with handlers
   const columns = useMemo(() => createProfilesTableColumns({
     onPreviewProfile: handlePreviewProfile,
-    onToggleOwnProfile: handleToggleOwnProfile
-  }), [onProfilesChange])
+    onToggleOwnProfile: handleToggleOwnProfile,
+    onToggleMonitoring: handleToggleMonitoring,
+    selectedProfiles,
+    onSelectProfile: handleSelectProfile,
+    onSelectAll: handleSelectAll,
+    allSelected
+  }), [selectedProfiles, allSelected, onProfilesChange])
 
   return (
     <>
@@ -89,6 +175,35 @@ export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps
         searchPlaceholder="Search profiles..."
         showPagination={false}
         onRowClick={handleRowClick}
+        enableColumnPinning={true}
+        getRowId={(row) => row.id}
+        customHeaderActions={
+          selectedProfiles.size > 0 ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                {selectedProfiles.size} selected
+              </span>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => handleBulkToggleMonitoring(true)}
+                disabled={isBulkToggling}
+              >
+                <PlayCircle className="w-4 h-4 mr-1" />
+                Enable Monitoring
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleBulkToggleMonitoring(false)}
+                disabled={isBulkToggling}
+              >
+                <PauseCircle className="w-4 h-4 mr-1" />
+                Disable Monitoring
+              </Button>
+            </div>
+          ) : null
+        }
       />
 
       {/* Profile Preview Dialog */}

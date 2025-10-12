@@ -30,6 +30,8 @@ interface PostsResponse {
   posts: TikTokPost[]
   hasMore: boolean
   total: number
+  page: number
+  limit: number
   error?: string
 }
 
@@ -40,14 +42,29 @@ function PostsPageContent() {
   // Initialize state from URL params
   const initialPage = parseInt(searchParams.get('page') || '1', 10)
 
-  // Parse sorting from URL
-  const sortBy = searchParams.get('sortBy')
-  const sortOrder = searchParams.get('sortOrder')
-  const initialSorting: SortingState = sortBy && sortOrder
-    ? [{ id: sortBy, desc: sortOrder === 'desc' }]
-    : []
+  // Parse sorting from URL - supports multi-column sorting
+  // New format: ?sort=viewCount.desc,likeCount.asc
+  // Old format (backward compatible): ?sortBy=viewCount&sortOrder=desc
+  const sortParam = searchParams.get('sort')
+  const oldSortBy = searchParams.get('sortBy')
+  const oldSortOrder = searchParams.get('sortOrder')
+  
+  let initialSorting: SortingState = []
+  
+  if (sortParam) {
+    // New format: multi-column sorting
+    initialSorting = sortParam.split(',').map(sort => {
+      const [id, direction] = sort.trim().split('.')
+      return { id, desc: direction === 'desc' }
+    })
+  } else if (oldSortBy && oldSortOrder) {
+    // Backward compatibility: old single-column format
+    initialSorting = [{ id: oldSortBy, desc: oldSortOrder === 'desc' }]
+  }
+  // Default: no sorting (let API use its default)
 
   const [posts, setPosts] = useState<TikTokPost[]>([])
+  const [totalPosts, setTotalPosts] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [currentPage, setCurrentPage] = useState(initialPage)
   const [pageSize, setPageSize] = useState(25)
@@ -64,9 +81,12 @@ function PostsPageContent() {
       params.set('page', page.toString())
     }
 
-    if (sort.length > 0 && sort[0]?.id) {
-      params.set('sortBy', sort[0].id)
-      params.set('sortOrder', sort[0].desc ? 'desc' : 'asc')
+    if (sort.length > 0) {
+      // New format: multi-column sorting
+      const sortParam = sort
+        .map(s => `${s.id}.${s.desc ? 'desc' : 'asc'}`)
+        .join(',')
+      params.set('sort', sortParam)
     }
 
     const queryString = params.toString()
@@ -85,9 +105,11 @@ function PostsPageContent() {
       })
 
       // Add sorting parameters
-      if (sort.length > 0 && sort[0]?.id) {
-        params.append('sortBy', sort[0].id)
-        params.append('sortOrder', sort[0].desc ? 'desc' : 'asc')
+      if (sort.length > 0) {
+        const sortParam = sort
+          .map(s => `${s.id}.${s.desc ? 'desc' : 'asc'}`)
+          .join(',')
+        params.append('sort', sortParam)
       }
 
       const response = await fetch(`/api/tiktok/posts?${params}`)
@@ -98,6 +120,7 @@ function PostsPageContent() {
       }
 
       setPosts(data.posts || [])
+      setTotalPosts(data.total || 0)
     } catch (error) {
       console.error('Failed to fetch posts:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to fetch posts')
@@ -109,18 +132,18 @@ function PostsPageContent() {
 
   // Handle sorting change with URL update
   const handleSortingChange = useCallback((updaterOrValue: SortingState | ((old: SortingState) => SortingState)) => {
-    setSorting(prevSorting => {
-      const newSorting = typeof updaterOrValue === 'function'
-        ? updaterOrValue(prevSorting)
-        : updaterOrValue
+    const newSorting = typeof updaterOrValue === 'function'
+      ? updaterOrValue(sorting)
+      : updaterOrValue
 
-      // Update URL and fetch with new sorting
+    setSorting(newSorting)
+    
+    // Update URL and fetch in a separate effect to avoid render issues
+    setTimeout(() => {
       updateURL(currentPage, newSorting)
       fetchPosts(currentPage, pageSize, newSorting)
-
-      return newSorting
-    })
-  }, [currentPage, pageSize, updateURL, fetchPosts])
+    }, 0)
+  }, [currentPage, pageSize, sorting, updateURL, fetchPosts])
 
   // Handle page change with URL update
   const handlePageChange = useCallback((pageIndex: number, newPageSize: number) => {
@@ -169,11 +192,20 @@ function PostsPageContent() {
 
   // Sync state from URL params (for browser back/forward)
   useEffect(() => {
-    const sortBy = searchParams.get('sortBy')
-    const sortOrder = searchParams.get('sortOrder')
-    const urlSorting: SortingState = sortBy && sortOrder
-      ? [{ id: sortBy, desc: sortOrder === 'desc' }]
-      : []
+    const sortParam = searchParams.get('sort')
+    const oldSortBy = searchParams.get('sortBy')
+    const oldSortOrder = searchParams.get('sortOrder')
+    
+    let urlSorting: SortingState = []
+    
+    if (sortParam) {
+      urlSorting = sortParam.split(',').map(sort => {
+        const [id, direction] = sort.trim().split('.')
+        return { id, desc: direction === 'desc' }
+      })
+    } else if (oldSortBy && oldSortOrder) {
+      urlSorting = [{ id: oldSortBy, desc: oldSortOrder === 'desc' }]
+    }
 
     // Check if URL sorting is different from current state
     const isDifferent = JSON.stringify(urlSorting) !== JSON.stringify(sorting)
@@ -182,7 +214,7 @@ function PostsPageContent() {
       setSorting(urlSorting)
       fetchPosts(currentPage, pageSize, urlSorting)
     }
-  }, [searchParams])
+  }, [searchParams, sorting, currentPage, pageSize, fetchPosts])
 
   // Initial fetch
   useEffect(() => {
@@ -247,6 +279,7 @@ function PostsPageContent() {
     >
       <PostsTable
         posts={posts}
+        totalPosts={totalPosts}
         onPageChange={handlePageChange}
         onSortingChange={handleSortingChange}
         sorting={sorting}
