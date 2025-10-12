@@ -6,6 +6,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   ExternalLink,
   User,
   Heart,
@@ -21,7 +28,9 @@ import {
   Bell,
   BellOff,
   PlayCircle,
-  PauseCircle
+  PauseCircle,
+  MoreHorizontal,
+  RefreshCw
 } from 'lucide-react'
 import { createSortableHeader } from '@/components/ui/data-table'
 import Link from 'next/link'
@@ -68,6 +77,7 @@ interface ProfilesTableColumnsProps {
   onPreviewProfile: (profile: TikTokProfile) => void
   onToggleOwnProfile?: (profileId: string, isOwn: boolean) => Promise<void>
   onToggleMonitoring?: (profileId: string, enabled: boolean) => Promise<void>
+  onTriggerUpdate?: (profileId: string) => Promise<void>
   selectedProfiles?: Set<string>
   onSelectProfile?: (profileId: string, selected: boolean) => void
   onSelectAll?: (selected: boolean) => void
@@ -90,6 +100,91 @@ const formatDate = (dateString: string): string => {
   return new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(
     Math.floor((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
     'day'
+  )
+}
+
+interface ProfileActionsCellProps {
+  profile: TikTokProfile
+  onToggleMonitoring?: (profileId: string, enabled: boolean) => Promise<void>
+  onTriggerUpdate?: (profileId: string) => Promise<void>
+}
+
+function ProfileActionsCell({ profile, onToggleMonitoring, onTriggerUpdate }: ProfileActionsCellProps) {
+  const [isUpdating, setIsUpdating] = React.useState(false)
+
+  const handleToggleMonitoring = async () => {
+    if (!onToggleMonitoring) return
+    try {
+      await onToggleMonitoring(profile.id, !profile.monitoringEnabled)
+    } catch (err) {
+      // Error handling is done in parent component
+    }
+  }
+
+  const handleTriggerUpdate = async () => {
+    if (!onTriggerUpdate) return
+    setIsUpdating(true)
+    try {
+      await onTriggerUpdate(profile.id)
+    } catch (err) {
+      // Error handling is done in parent component
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm">
+            <MoreHorizontal className="w-4 h-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuItem asChild>
+            <Link href={`/profiles/${profile.handle}`} className="cursor-pointer">
+              <Eye className="w-4 h-4 mr-2" />
+              View Posts
+            </Link>
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
+            onClick={() => window.open(`https://www.tiktok.com/@${profile.handle}`, '_blank')}
+          >
+            <ExternalLink className="w-4 h-4 mr-2" />
+            Open on TikTok
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+
+          <DropdownMenuItem
+            onClick={handleTriggerUpdate}
+            disabled={isUpdating || !onTriggerUpdate}
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${isUpdating ? 'animate-spin' : ''}`} />
+            Update Now
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
+            onClick={handleToggleMonitoring}
+            disabled={!onToggleMonitoring}
+          >
+            {profile.monitoringEnabled ? (
+              <>
+                <PauseCircle className="w-4 h-4 mr-2" />
+                Disable Monitoring
+              </>
+            ) : (
+              <>
+                <PlayCircle className="w-4 h-4 mr-2" />
+                Enable Monitoring
+              </>
+            )}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   )
 }
 
@@ -132,6 +227,7 @@ export const createProfilesTableColumns = ({
   onPreviewProfile,
   onToggleOwnProfile,
   onToggleMonitoring,
+  onTriggerUpdate,
   selectedProfiles = new Set(),
   onSelectProfile,
   onSelectAll,
@@ -343,55 +439,13 @@ export const createProfilesTableColumns = ({
     cell: ({ row }) => {
       const profile = row.original
 
-      const handleToggleMonitoring = async (e: React.MouseEvent) => {
-        e.stopPropagation()
-        if (!onToggleMonitoring) return
-
-        try {
-          await onToggleMonitoring(profile.id, !profile.monitoringEnabled)
-        } catch (err) {
-          // Error handling is done in parent component
-        }
-      }
-
-      return (
-        <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
-          <Button
-            variant={profile.monitoringEnabled ? "default" : "outline"}
-            size="sm"
-            onClick={handleToggleMonitoring}
-            disabled={!onToggleMonitoring}
-            title={profile.monitoringEnabled ? "Disable Monitoring" : "Enable Monitoring"}
-          >
-            {profile.monitoringEnabled ? (
-              <PauseCircle className="w-3 h-3" />
-            ) : (
-              <PlayCircle className="w-3 h-3" />
-            )}
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.open(`https://www.tiktok.com/@${profile.handle}`, '_blank')}
-            title="Open on TikTok"
-          >
-            <ExternalLink className="w-3 h-3" />
-          </Button>
-
-          <Link href={`/profiles/${profile.handle}`}>
-            <Button
-              variant="default"
-              size="sm"
-              title="View Posts"
-            >
-              <Eye className="w-3 h-3" />
-            </Button>
-          </Link>
-        </div>
-      )
+      return <ProfileActionsCell 
+        profile={profile} 
+        onToggleMonitoring={onToggleMonitoring}
+        onTriggerUpdate={onTriggerUpdate}
+      />
     },
-    size: 180,
+    size: 80,
     meta: { pinned: 'right' }
   }
 ]

@@ -13,7 +13,7 @@ import { DataTable } from '@/components/ui/data-table'
 import { createProfilesTableColumns, TikTokProfile } from '@/components/profiles-table-columns'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ExternalLink, Users, Heart, Video, CheckCircle, PlayCircle, PauseCircle } from 'lucide-react'
+import { ExternalLink, Users, Heart, Video, CheckCircle, PlayCircle, PauseCircle, RefreshCw } from 'lucide-react'
 
 interface ProfilesTableProps {
   profiles: TikTokProfile[]
@@ -25,6 +25,7 @@ export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps
   const [selectedProfile, setSelectedProfile] = useState<TikTokProfile | null>(null)
   const [selectedProfiles, setSelectedProfiles] = useState<Set<string>>(new Set())
   const [isBulkToggling, setIsBulkToggling] = useState(false)
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false)
 
   const formatNumber = (num?: number | null): string => {
     if (!num) return '0'
@@ -153,6 +154,56 @@ export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps
     }
   }
 
+  const handleBulkTriggerUpdate = async () => {
+    if (selectedProfiles.size === 0) return
+
+    setIsBulkUpdating(true)
+    try {
+      const response = await fetch('/api/tiktok/profiles/bulk/trigger', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          profileIds: Array.from(selectedProfiles)
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to bulk trigger update')
+      }
+
+      const result = await response.json()
+      alert(`Successfully queued update for ${result.queuedCount} profile${result.queuedCount > 1 ? 's' : ''}`)
+
+      // Clear selection
+      setSelectedProfiles(new Set())
+    } catch (err) {
+      console.error('Failed to bulk trigger update:', err)
+      alert('Failed to queue profile updates. Please try again.')
+    } finally {
+      setIsBulkUpdating(false)
+    }
+  }
+
+  const handleTriggerUpdate = async (profileId: string) => {
+    try {
+      const response = await fetch(`/api/tiktok/profiles/${profileId}/monitoring/trigger`, {
+        method: 'POST'
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to trigger update')
+      }
+
+      alert('Profile update queued successfully')
+    } catch (err) {
+      console.error('Failed to trigger update:', err)
+      alert('Failed to queue profile update. Please try again.')
+      throw err
+    }
+  }
+
   const allSelected = profiles.length > 0 && selectedProfiles.size === profiles.length
 
   // Create columns with handlers
@@ -160,6 +211,7 @@ export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps
     onPreviewProfile: handlePreviewProfile,
     onToggleOwnProfile: handleToggleOwnProfile,
     onToggleMonitoring: handleToggleMonitoring,
+    onTriggerUpdate: handleTriggerUpdate,
     selectedProfiles,
     onSelectProfile: handleSelectProfile,
     onSelectAll: handleSelectAll,
@@ -185,6 +237,15 @@ export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps
               </span>
               <Button
                 variant="default"
+                size="sm"
+                onClick={handleBulkTriggerUpdate}
+                disabled={isBulkUpdating}
+              >
+                <RefreshCw className={`w-4 h-4 mr-1 ${isBulkUpdating ? 'animate-spin' : ''}`} />
+                Update Now
+              </Button>
+              <Button
+                variant="outline"
                 size="sm"
                 onClick={() => handleBulkToggleMonitoring(true)}
                 disabled={isBulkToggling}
