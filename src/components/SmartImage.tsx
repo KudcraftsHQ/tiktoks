@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, ImgHTMLAttributes } from 'react'
+import { useState, useEffect, ImgHTMLAttributes, memo } from 'react'
 
 interface SmartImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> {
   src: string
@@ -17,14 +17,14 @@ interface SmartImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src
  * 3. Shows loading state during conversion
  * 4. Falls back to placeholder on complete failure
  */
-export function SmartImage({
+const SmartImageComponent = ({
   src,
   fallback,
   loadingClassName,
   className,
   alt = '',
   ...props
-}: SmartImageProps) {
+}: SmartImageProps) => {
   const [imageSrc, setImageSrc] = useState<string>(src)
   const [isConverting, setIsConverting] = useState(false)
   const [hasError, setHasError] = useState(false)
@@ -132,3 +132,6 @@ export function SmartImage({
     />
   )
 }
+
+// Memoize to prevent unnecessary re-renders when parent re-renders
+export const SmartImage = memo(SmartImageComponent)

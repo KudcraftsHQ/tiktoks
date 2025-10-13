@@ -324,7 +324,7 @@ export function DataTable<TData, TValue>({
                   key={row.id}
                   data-state={row.getIsSelected() && 'selected'}
                   onClick={() => onRowClick?.(row.original)}
-                  className={onRowClick ? 'cursor-pointer hover:bg-muted/50 group' : ''}
+                  className={onRowClick ? 'cursor-pointer hover:bg-muted group' : ''}
                 >
                   {row.getVisibleCells().map((cell) => {
                     const pinningStyles = enableColumnPinning
@@ -335,7 +335,7 @@ export function DataTable<TData, TValue>({
                       <TableCell
                         key={cell.id}
                         style={pinningStyles}
-                        className={cell.column.getIsPinned() ? 'bg-background group-hover:bg-muted/50' : ''}
+                        className={cell.column.getIsPinned() ? 'bg-background group-hover:bg-muted' : ''}
                       >
                         {flexRender(
                           cell.column.columnDef.cell,

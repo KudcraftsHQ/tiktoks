@@ -3,20 +3,9 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
-import {
-  Plus,
-  Image as ImageIcon,
+  Sparkles,
 } from 'lucide-react'
 import { PostsTable } from '@/components/PostsTable'
 import { Card, CardContent } from '@/components/ui/card'
@@ -25,6 +14,8 @@ import { PageLayout } from '@/components/PageLayout'
 import { designTokens } from '@/lib/design-tokens'
 import { toast } from 'sonner'
 import { SortingState } from '@tanstack/react-table'
+import { ContentAnalysisSidebar } from '@/components/ContentAnalysisSidebar'
+import { cn } from '@/lib/utils'
 
 interface PostsResponse {
   posts: TikTokPost[]
@@ -69,9 +60,17 @@ function PostsPageContent() {
   const [currentPage, setCurrentPage] = useState(initialPage)
   const [pageSize, setPageSize] = useState(25)
   const [sorting, setSorting] = useState<SortingState>(initialSorting)
-  const [showAddDialog, setShowAddDialog] = useState(false)
-  const [newPostUrl, setNewPostUrl] = useState('')
-  const [isAddingPost, setIsAddingPost] = useState(false)
+
+  // Selection and Analysis sidebar state
+  const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set())
+  const [isAnalysisSidebarOpen, setIsAnalysisSidebarOpen] = useState(false)
+
+  // Don't auto-close sidebar when posts are deselected
+  // useEffect(() => {
+  //   if (selectedPosts.size === 0) {
+  //     setIsAnalysisSidebarOpen(false)
+  //   }
+  // }, [selectedPosts])
 
   // Update URL with current state
   const updateURL = useCallback((page: number, sort: SortingState) => {
@@ -158,38 +157,6 @@ function PostsPageContent() {
     })
   }, [updateURL, fetchPosts])
 
-  const handleAddPost = async () => {
-    if (!newPostUrl.trim()) return
-
-    setIsAddingPost(true)
-    try {
-      const response = await fetch('/api/tiktok/posts', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ url: newPostUrl.trim() }),
-      })
-
-      if (response.ok) {
-        setShowAddDialog(false)
-        setNewPostUrl('')
-        setCurrentPage(1)
-        fetchPosts(1, pageSize, sorting)
-        toast.success('Post imported successfully')
-      } else {
-        const error = await response.json()
-        toast.error(error.message || 'Failed to add post')
-      }
-    } catch (error) {
-      console.error('Failed to add post:', error)
-      toast.error('Failed to add post')
-    } finally {
-      setIsAddingPost(false)
-    }
-  }
-
-
   // Sync state from URL params (for browser back/forward)
   useEffect(() => {
     const sortParam = searchParams.get('sort')
@@ -221,72 +188,71 @@ function PostsPageContent() {
     fetchPosts(initialPage, pageSize, initialSorting)
   }, [])
 
+  // Get selected posts data for sidebar
+  const selectedPostsData = posts
+    .filter(p => selectedPosts.has(p.id))
+    .map(p => ({
+      id: p.id,
+      authorHandle: p.authorHandle || 'unknown',
+      authorAvatarId: p.authorAvatarId,
+      description: p.description,
+      contentType: p.contentType,
+      images: p.images
+    }))
+
+  const handleRemovePost = (postId: string) => {
+    setSelectedPosts(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(postId)
+      return newSet
+    })
+  }
+
+  const handleClearSelection = () => {
+    setSelectedPosts(new Set())
+  }
+
   return (
-    <PageLayout
-      title="TikTok Posts"
-      description="Manage your imported TikTok content and create remixes"
-      headerActions={
-        <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-          <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto">
-              <Plus className="h-4 w-4 mr-2" />
-              Import TikTok Post
+    <div className="flex h-screen w-full">
+      {/* Main content area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <PageLayout
+          title="TikTok Posts"
+          description="Manage your imported TikTok content and create remixes"
+          headerActions={
+            <Button
+              variant={isAnalysisSidebarOpen ? "default" : "outline"}
+              onClick={() => setIsAnalysisSidebarOpen(!isAnalysisSidebarOpen)}
+              className="w-full sm:w-auto"
+            >
+              <Sparkles className="h-4 w-4 mr-2" />
+              Chat with Data {selectedPosts.size > 0 && `(${selectedPosts.size})`}
             </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Import TikTok Post</DialogTitle>
-              <DialogDescription>
-                Enter a TikTok URL to import the post and create remixes from it
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <Input
-                value={newPostUrl}
-                onChange={(e) => setNewPostUrl(e.target.value)}
-                placeholder="https://www.tiktok.com/@username/video/..."
-                className="w-full"
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setShowAddDialog(false)}
-                disabled={isAddingPost}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleAddPost}
-                disabled={!newPostUrl.trim() || isAddingPost}
-              >
-                {isAddingPost ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Importing...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Import Post
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      }
-    >
-      <PostsTable
-        posts={posts}
-        totalPosts={totalPosts}
-        onPageChange={handlePageChange}
-        onSortingChange={handleSortingChange}
-        sorting={sorting}
-        enableServerSideSorting={true}
-        isLoading={isLoading}
+          }
+        >
+          <PostsTable
+            posts={posts}
+            totalPosts={totalPosts}
+            onPageChange={handlePageChange}
+            onSortingChange={handleSortingChange}
+            sorting={sorting}
+            enableServerSideSorting={true}
+            isLoading={isLoading}
+            selectedPosts={selectedPosts}
+            onSelectionChange={setSelectedPosts}
+          />
+        </PageLayout>
+      </div>
+
+      {/* Sidebar - spans full height */}
+      <ContentAnalysisSidebar
+        isOpen={isAnalysisSidebarOpen}
+        onClose={() => setIsAnalysisSidebarOpen(false)}
+        selectedPosts={selectedPostsData}
+        onRemovePost={handleRemovePost}
+        onClearSelection={handleClearSelection}
       />
-    </PageLayout>
+    </div>
   )
 }
 

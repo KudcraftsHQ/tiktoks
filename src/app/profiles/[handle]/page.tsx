@@ -21,7 +21,8 @@ import {
   Activity,
   Play,
   Eye,
-  ChevronLeft
+  ChevronLeft,
+  Sparkles
 } from 'lucide-react'
 import { TikTokPost } from '@/components/posts-table-columns'
 import { TikTokProfile } from '@/components/profiles-table-columns'
@@ -31,6 +32,8 @@ import { designTokens } from '@/lib/design-tokens'
 import { PageLayout } from '@/components/PageLayout'
 import { PostingActivityHeatmap } from '@/components/PostingActivityHeatmap'
 import { SortingState } from '@tanstack/react-table'
+import { ContentAnalysisSidebar } from '@/components/ContentAnalysisSidebar'
+import { cn } from '@/lib/utils'
 
 interface ProfilePostsResult {
   posts: TikTokPost[]
@@ -81,6 +84,17 @@ function ProfileDetailPageContent() {
   const [sorting, setSorting] = useState<SortingState>(initialSorting)
   const [firstPostDate, setFirstPostDate] = useState<string | null>(null)
   const [activityLoading, setActivityLoading] = useState(false)
+
+  // Selection and Analysis sidebar state
+  const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set())
+  const [isAnalysisSidebarOpen, setIsAnalysisSidebarOpen] = useState(false)
+
+  // Don't auto-close sidebar when posts are deselected
+  // useEffect(() => {
+  //   if (selectedPosts.size === 0) {
+  //     setIsAnalysisSidebarOpen(false)
+  //   }
+  // }, [selectedPosts])
 
   // Update URL with current state
   const updateURL = useCallback((page: number, sort: SortingState) => {
@@ -324,6 +338,30 @@ function ProfileDetailPageContent() {
     }), [posts, contentTypeFilter]
   )
 
+  // Get selected posts data for sidebar
+  const selectedPostsData = posts
+    .filter(p => selectedPosts.has(p.id))
+    .map(p => ({
+      id: p.id,
+      authorHandle: p.authorHandle || 'unknown',
+      authorAvatarId: p.authorAvatarId,
+      description: p.description,
+      contentType: p.contentType,
+      images: p.images
+    }))
+
+  const handleRemovePost = (postId: string) => {
+    setSelectedPosts(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(postId)
+      return newSet
+    })
+  }
+
+  const handleClearSelection = () => {
+    setSelectedPosts(new Set())
+  }
+
   // Handle sorting change with URL update
   const handleSortingChange = useCallback((updaterOrValue: SortingState | ((old: SortingState) => SortingState)) => {
     const newSorting = typeof updaterOrValue === 'function'
@@ -431,40 +469,51 @@ function ProfileDetailPageContent() {
   }
 
   return (
-    <PageLayout
-      title={
-        <div className="flex items-center gap-2">
-          <Link href="/profiles">
-            <Button variant="secondary" size="icon" className="rounded-full">
-              <ChevronLeft className="w-4 h-4" />
+    <div className="flex h-screen w-full">
+      {/* Main content area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <PageLayout
+          title={
+            <div className="flex items-center gap-2">
+            <Link href="/profiles">
+              <Button variant="secondary" size="icon" className="rounded-full">
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+            </Link>
+            {profile.avatar ? (
+              <img
+                src={profile.avatar}
+                alt={`${profile.handle} avatar`}
+                className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                <User className="w-6 h-6 text-muted-foreground" />
+              </div>
+            )}
+            <span>@{profile.handle}</span>
+            {profile.verified && (
+              <CheckCircle className="w-5 h-5 text-blue-500" />
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(`https://www.tiktok.com/@${profile.handle}`, '_blank')}
+            >
+              <ExternalLink className="w-4 h-4" />
             </Button>
-          </Link>
-          {profile.avatar ? (
-            <img
-              src={profile.avatar}
-              alt={`${profile.handle} avatar`}
-              className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-              <User className="w-6 h-6 text-muted-foreground" />
-            </div>
-          )}
-          <span>@{profile.handle}</span>
-          {profile.verified && (
-            <CheckCircle className="w-5 h-5 text-blue-500" />
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.open(`https://www.tiktok.com/@${profile.handle}`, '_blank')}
-          >
-            <ExternalLink className="w-4 h-4" />
-          </Button>
-        </div>
-      }
+          </div>
+        }
       headerActions={
         <div className="flex items-center gap-2">
+          <Button
+            variant={isAnalysisSidebarOpen ? "default" : "outline"}
+            onClick={() => setIsAnalysisSidebarOpen(!isAnalysisSidebarOpen)}
+            size="sm"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            Chat with Data {selectedPosts.size > 0 && `(${selectedPosts.size})`}
+          </Button>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border bg-background">
             <Activity className="w-4 h-4 text-muted-foreground" />
             <Label htmlFor="monitoring-switch" className="text-sm cursor-pointer">
@@ -590,6 +639,8 @@ function ProfileDetailPageContent() {
               sorting={sorting}
               enableServerSideSorting={true}
               hiddenColumns={['authorHandle']}
+              selectedPosts={selectedPosts}
+              onSelectionChange={setSelectedPosts}
             />
           </div>
         ) : loading ? (
@@ -613,7 +664,18 @@ function ProfileDetailPageContent() {
           </Card>
         )}
       </div>
-    </PageLayout>
+        </PageLayout>
+      </div>
+
+      {/* Sidebar - spans full height */}
+      <ContentAnalysisSidebar
+        isOpen={isAnalysisSidebarOpen}
+        onClose={() => setIsAnalysisSidebarOpen(false)}
+        selectedPosts={selectedPostsData}
+        onRemovePost={handleRemovePost}
+        onClearSelection={handleClearSelection}
+      />
+    </div>
   )
 }
 

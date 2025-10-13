@@ -6,6 +6,12 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   ExternalLink,
   Video,
   Image as ImageIcon,
@@ -24,7 +30,8 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
-  FileText
+  FileText,
+  MoreHorizontal
 } from 'lucide-react'
 import { createSortableHeader } from '@/components/ui/data-table'
 import { getProxiedImageUrl } from '@/lib/image-proxy'
@@ -574,7 +581,7 @@ export const createPostsTableColumns = ({
   {
     id: 'actions',
     header: 'Actions',
-    size: 160,
+    size: 80,
     meta: {
       pinned: 'right'
     },
@@ -593,48 +600,57 @@ export const createPostsTableColumns = ({
       }
 
       return (
-        <div className="flex items-center space-x-2">
-          {post.contentType === 'photo' && onTriggerOCR && post.ocrStatus !== 'completed' && (
-            <Button
-              variant={post.ocrStatus === 'pending' ? 'default' : 'outline'}
-              size="sm"
-              onClick={handleTriggerOCR}
-              disabled={post.ocrStatus === 'processing'}
-              title={post.ocrStatus === 'pending' ? 'Run OCR' : post.ocrStatus === 'processing' ? 'Processing...' : 'Retry OCR'}
-            >
-              {post.ocrStatus === 'processing' ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <FileText className="w-3 h-3" />
+        <div className="flex items-center justify-center">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => e.stopPropagation()}
+                className="h-8 w-8 p-0"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+                <span className="sr-only">Open menu</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+              {post.contentType === 'photo' && onTriggerOCR && (
+                <DropdownMenuItem
+                  onClick={handleTriggerOCR}
+                  disabled={post.ocrStatus === 'processing'}
+                >
+                  {post.ocrStatus === 'processing' ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileText className="mr-2 h-4 w-4" />
+                  )}
+                  {post.ocrStatus === 'completed' ? 'OCR Complete' : post.ocrStatus === 'processing' ? 'Processing OCR...' : post.ocrStatus === 'failed' ? 'Retry OCR' : 'Run OCR'}
+                </DropdownMenuItem>
               )}
-            </Button>
-          )}
 
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation()
-              window.open(post.tiktokUrl, '_blank')
-            }}
-            title="Open on TikTok"
-          >
-            <ExternalLink className="w-4 h-4" />
-          </Button>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation()
+                  window.open(post.tiktokUrl, '_blank')
+                }}
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Open on TikTok
+              </DropdownMenuItem>
 
-          {post.contentType === 'photo' && onRemixPost && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                onRemixPost(post)
-              }}
-              title="Create Remix"
-            >
-              <Sparkles className="w-4 h-4 text-purple-600" />
-            </Button>
-          )}
+              {post.contentType === 'photo' && onRemixPost && (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onRemixPost(post)
+                  }}
+                >
+                  <Sparkles className="mr-2 h-4 w-4 text-purple-600" />
+                  Create Remix
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )
     }
