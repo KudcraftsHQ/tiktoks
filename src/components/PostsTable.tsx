@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useCallback } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,8 +13,7 @@ import {
 import { DataTable } from '@/components/ui/data-table'
 import { createPostsTableColumns, TikTokPost } from '@/components/posts-table-columns'
 import { ImageGallery } from '@/components/ImageGallery'
-import { getProxiedImageUrl, getProxiedImageUrlById } from '@/lib/image-proxy'
-import { useRouter } from 'next/navigation'
+import { getProxiedImageUrlById } from '@/lib/image-proxy'
 import { SmartImage } from '@/components/SmartImage'
 import { PostAnalyticsSheet } from '@/components/PostAnalyticsSheet'
 import { SortingState } from '@tanstack/react-table'
@@ -34,6 +33,9 @@ interface PostsTableProps {
   isLoading?: boolean
   hiddenColumns?: string[]
   enableServerSideSorting?: boolean
+  // Selection state (controlled from parent)
+  selectedPosts?: Set<string>
+  onSelectionChange?: (selectedPosts: Set<string>) => void
 }
 
 export function PostsTable({
@@ -45,15 +47,21 @@ export function PostsTable({
   sorting,
   isLoading,
   hiddenColumns,
-  enableServerSideSorting = false
+  enableServerSideSorting = false,
+  selectedPosts: externalSelectedPosts,
+  onSelectionChange
 }: PostsTableProps) {
-  const router = useRouter()
   const [selectedPost, setSelectedPost] = useState<TikTokPost | null>(null)
   const [analyticsPost, setAnalyticsPost] = useState<TikTokPost | null>(null)
   const [showAnalytics, setShowAnalytics] = useState(false)
-  const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set())
+  // Use external selection state if provided, otherwise use internal state
+  const [internalSelectedPosts, setInternalSelectedPosts] = useState<Set<string>>(new Set())
+  const selectedPosts = externalSelectedPosts ?? internalSelectedPosts
+  const setSelectedPosts = onSelectionChange ?? setInternalSelectedPosts
   const [isBulkOCRing, setIsBulkOCRing] = useState(false)
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
+
+  const photoPosts = posts.filter(p => p.contentType === 'photo')
+  const allPhotosSelected = photoPosts.length > 0 && selectedPosts.size === photoPosts.length
 
   // Use a stable cache to store proxied URLs by cache asset IDs
   // This ensures URLs never change, even when underlying R2 URLs change
@@ -107,27 +115,27 @@ export function PostsTable({
     )
   }
 
-
-  const handlePreviewPost = (post: TikTokPost) => {
+  // Memoize all handlers to prevent columns regeneration
+  const handlePreviewPost = useCallback((post: TikTokPost) => {
     setSelectedPost(post)
-  }
+  }, [])
 
-  const handleOpenImageGallery = (images: Array<{ url: string; width: number; height: number }>, initialIndex: number) => {
+  const handleOpenImageGallery = useCallback((images: Array<{ url: string; width: number; height: number }>, initialIndex: number) => {
     setGalleryImages(images)
     setGalleryInitialIndex(initialIndex)
     setShowGallery(true)
-  }
+  }, [])
 
-  const handleRemixPost = (post: TikTokPost) => {
+  const handleRemixPost = useCallback((post: TikTokPost) => {
     window.open(`/posts/${post.id}/remix`, '_blank')
-  }
+  }, [])
 
-  const handleRowClick = (post: TikTokPost) => {
+  const handleRowClick = useCallback((post: TikTokPost) => {
     setAnalyticsPost(post)
     setShowAnalytics(true)
-  }
+  }, [])
 
-  const handleTriggerOCR = async (postId: string) => {
+  const handleTriggerOCR = useCallback(async (postId: string) => {
     try {
       const response = await fetch(`/api/tiktok/posts/${postId}/ocr`, {
         method: 'POST',
@@ -138,37 +146,33 @@ export function PostsTable({
       }
 
       toast.success('OCR processing started')
-      
-      // Trigger refresh
-      setRefreshTrigger(prev => prev + 1)
     } catch (err) {
       console.error('Failed to trigger OCR:', err)
       toast.error('Failed to start OCR processing')
       throw err
     }
-  }
+  }, [])
 
-  const handleSelectPost = (postId: string, selected: boolean) => {
-    setSelectedPosts(prev => {
-      const newSet = new Set(prev)
-      if (selected) {
-        newSet.add(postId)
-      } else {
-        newSet.delete(postId)
-      }
-      return newSet
-    })
-  }
+  const handleSelectPost = useCallback((postId: string, selected: boolean) => {
+    const newSet = new Set(selectedPosts)
+    if (selected) {
+      newSet.add(postId)
+    } else {
+      newSet.delete(postId)
+    }
+    setSelectedPosts(newSet)
+  }, [selectedPosts, setSelectedPosts])
 
-  const handleSelectAll = (selected: boolean) => {
+  const handleSelectAll = useCallback((selected: boolean) => {
     if (selected) {
       // Only select photo posts
       const photoPosts = postsWithProxiedUrls.filter(p => p.contentType === 'photo')
-      setSelectedPosts(new Set(photoPosts.map(p => p.id)))
+      const newSet = new Set(photoPosts.map(p => p.id))
+      setSelectedPosts(newSet)
     } else {
       setSelectedPosts(new Set())
     }
-  }
+  }, [postsWithProxiedUrls, setSelectedPosts])
 
   const handleBulkOCR = async () => {
     if (selectedPosts.size === 0) return
@@ -189,13 +193,12 @@ export function PostsTable({
         throw new Error('Failed to bulk OCR')
       }
 
-      const result = await response.json()
-      
+      await response.json()
+
       toast.success(`OCR started for ${selectedPosts.size} posts`)
-      
-      // Clear selection and refresh
+
+      // Clear selection
       setSelectedPosts(new Set())
-      setRefreshTrigger(prev => prev + 1)
     } catch (err) {
       console.error('Failed to bulk OCR:', err)
       toast.error('Failed to start bulk OCR processing')
@@ -204,21 +207,21 @@ export function PostsTable({
     }
   }
 
-  const photoPosts = postsWithProxiedUrls.filter(p => p.contentType === 'photo')
-  const allPhotosSelected = photoPosts.length > 0 && selectedPosts.size === photoPosts.length
-
-  // Create columns with handlers
-  const columns = useMemo(() => createPostsTableColumns({
-    onPreviewPost: handlePreviewPost,
-    onOpenImageGallery: handleOpenImageGallery,
-    onRemixPost: handleRemixPost,
-    onRowClick: handleRowClick,
-    onTriggerOCR: handleTriggerOCR,
-    selectedPosts,
-    onSelectPost: handleSelectPost,
-    onSelectAll: handleSelectAll,
-    allSelected: allPhotosSelected
-  }), [selectedPosts, allPhotosSelected, refreshTrigger])
+  // Create columns - memoized with all necessary dependencies
+  // Selection state IS included but handlers are memoized to minimize re-creation
+  const columns = useMemo(() => {
+    return createPostsTableColumns({
+      onPreviewPost: handlePreviewPost,
+      onOpenImageGallery: handleOpenImageGallery,
+      onRemixPost: handleRemixPost,
+      onRowClick: handleRowClick,
+      onTriggerOCR: handleTriggerOCR,
+      selectedPosts,
+      onSelectPost: handleSelectPost,
+      onSelectAll: handleSelectAll,
+      allSelected: allPhotosSelected
+    })
+  }, [handlePreviewPost, handleOpenImageGallery, handleRemixPost, handleRowClick, handleTriggerOCR, selectedPosts, handleSelectPost, handleSelectAll, allPhotosSelected])
 
   // Global filter function to search across author and OCR text
   const globalFilterFn = (post: TikTokPost, filterValue: string) => {
