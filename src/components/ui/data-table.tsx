@@ -146,7 +146,6 @@ export function DataTable<TData, TValue>({
       boxShadow: isLastLeftPinnedColumn ? leftShadow
                 : isFirstRightPinnedColumn ? rightShadow
                 : 'none',
-      transition: 'box-shadow 0.1s linear',
       left: isPinned === 'left' ? `${column.getStart('left')}px` : undefined,
       right: isPinned === 'right' ? `${column.getAfter('right')}px` : undefined,
       position: isPinned ? 'sticky' : 'relative',
@@ -324,7 +323,7 @@ export function DataTable<TData, TValue>({
                   key={row.id}
                   data-state={row.getIsSelected() && 'selected'}
                   onClick={() => onRowClick?.(row.original)}
-                  className={onRowClick ? 'cursor-pointer hover:bg-muted group' : ''}
+                  className={onRowClick ? 'cursor-pointer group' : ''}
                 >
                   {row.getVisibleCells().map((cell) => {
                     const pinningStyles = enableColumnPinning
@@ -335,7 +334,7 @@ export function DataTable<TData, TValue>({
                       <TableCell
                         key={cell.id}
                         style={pinningStyles}
-                        className={cell.column.getIsPinned() ? 'bg-background group-hover:bg-muted' : ''}
+                        className="bg-background group-hover:bg-muted"
                       >
                         {flexRender(
                           cell.column.columnDef.cell,
