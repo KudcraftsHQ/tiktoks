@@ -15,6 +15,7 @@ import {
   MediaCacheJobData,
   MediaCacheJobResult
 } from './config'
+import { setJobContext, captureJobError } from '../sentry-worker'
 
 class MediaCacheWorker {
   private worker: Worker<MediaCacheJobData, MediaCacheJobResult>
@@ -47,6 +48,10 @@ class MediaCacheWorker {
 
     this.worker.on('failed', (job, err) => {
       console.error(`❌ [MediaCacheWorker] Job ${job?.id} failed:`, err)
+      // Capture error in Sentry with job context
+      if (job) {
+        captureJobError(err, QUEUE_NAMES.MEDIA_CACHE, job.id!, job.data)
+      }
     })
 
     this.worker.on('error', (err) => {
@@ -65,6 +70,9 @@ class MediaCacheWorker {
       folder,
       filename
     })
+
+    // Set Sentry context for this job
+    setJobContext(QUEUE_NAMES.MEDIA_CACHE, job.id!, job.data)
 
     try {
       // Update status to DOWNLOADING

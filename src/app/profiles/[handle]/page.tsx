@@ -331,12 +331,6 @@ function ProfileDetailPageContent() {
     )
   }
 
-  const filteredPosts = useMemo(() =>
-    posts.filter(post => {
-      if (contentTypeFilter === 'all') return true
-      return post.contentType === contentTypeFilter
-    }), [posts, contentTypeFilter]
-  )
 
   // Get selected posts data for sidebar
   const selectedPostsData = posts
@@ -626,10 +620,11 @@ function ProfileDetailPageContent() {
         </div>
 
         {/* Posts Table - Takes remaining height, filter is inside */}
-        {posts.length > 0 ? (
+        {posts.length > 0 || contentTypeFilter !== 'all' ? (
           <div className="min-h-0">
             <PostsTable
-              posts={filteredPosts}
+              posts={posts}
+              totalPosts={totalPosts}
               contentTypeFilter={{
                 value: contentTypeFilter,
                 onChange: setContentTypeFilter

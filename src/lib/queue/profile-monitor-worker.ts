@@ -14,6 +14,7 @@ import {
   ProfileMonitorJobData,
   ProfileMonitorJobResult
 } from './config'
+import { setJobContext, captureJobError } from '../sentry-worker'
 
 class ProfileMonitorWorker {
   private worker: Worker<ProfileMonitorJobData, ProfileMonitorJobResult>
@@ -75,6 +76,10 @@ class ProfileMonitorWorker {
 
     this.worker.on('failed', (job, err) => {
       console.error(`❌ [ProfileMonitorWorker] Job ${job?.id} failed:`, err)
+      // Capture error in Sentry with job context
+      if (job) {
+        captureJobError(err, QUEUE_NAMES.PROFILE_MONITOR, job.id!, job.data)
+      }
     })
 
     this.worker.on('error', (err) => {
@@ -100,6 +105,9 @@ class ProfileMonitorWorker {
     console.log(`🚀 [ProfileMonitorWorker] Starting monitoring job for profile:`, {
       profileId
     })
+
+    // Set Sentry context for this job
+    setJobContext(QUEUE_NAMES.PROFILE_MONITOR, job.id!, job.data)
 
     // Create monitoring log entry
     const monitoringLog = await this.prisma.profileMonitoringLog.create({
@@ -213,11 +221,30 @@ class ProfileMonitorWorker {
               stats: upsertResult.stats
             })
           } catch (upsertError) {
-            console.error(`❌ [ProfileMonitorWorker] Bulk upsert error:`, {
+            const errorDetails = {
               error: upsertError instanceof Error ? upsertError.message : String(upsertError),
               errorType: upsertError?.constructor?.name,
-              stack: upsertError instanceof Error ? upsertError.stack : undefined
+              stack: upsertError instanceof Error ? upsertError.stack : undefined,
+              profileId,
+              monitoringLogId: monitoringLog.id
+            }
+
+            console.error(`❌ [ProfileMonitorWorker] Bulk upsert error:`, errorDetails)
+
+            // Capture in Sentry with detailed context
+            const Sentry = await import('@sentry/node')
+            Sentry.withScope((scope) => {
+              scope.setTag('error-type', 'bulk-upsert-failed')
+              scope.setTag('profile-id', profileId)
+              scope.setTag('monitoring-log-id', monitoringLog.id)
+              scope.setContext('upsert-details', {
+                profileHandle: profileData.handle,
+                postsCount: postsForUpsert.length,
+                page: pagesScraped
+              })
+              Sentry.captureException(upsertError)
             })
+
             throw new Error(`Bulk upsert failed: ${upsertError instanceof Error ? upsertError.message : String(upsertError)}`)
           }
         }

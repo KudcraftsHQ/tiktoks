@@ -308,7 +308,22 @@ export function PostsTable({
 
           {selectedPost && (
             <div className="space-y-4">
-              {selectedPost.coverId && (
+              {selectedPost.contentType === 'video' && selectedPost.videoUrl ? (
+                <div className="flex justify-center">
+                  <video
+                    src={selectedPost.videoUrl}
+                    controls
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="max-w-full h-auto rounded-lg max-h-[60vh]"
+                    poster={selectedPost.coverUrl}
+                  >
+                    Your browser does not support the video tag.
+                  </video>
+                </div>
+              ) : selectedPost.coverId && (
                 <div className="flex justify-center">
                   <SmartImage
                     src={getStableProxyUrl(selectedPost.coverId)}

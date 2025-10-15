@@ -3,6 +3,7 @@ import { PrismaClient } from '@/generated/prisma'
 import { z } from 'zod'
 import { mediaCacheServiceV2 } from '@/lib/media-cache-service-v2'
 import { cacheAssetService } from '@/lib/cache-asset-service'
+import * as Sentry from '@sentry/nextjs'
 
 const prisma = new PrismaClient()
 
@@ -82,8 +83,9 @@ const SavePostSchema = z.object({
 })
 
 export async function POST(request: NextRequest) {
+  let body: any
   try {
-    const body = await request.json()
+    body = await request.json()
     const validatedData = SavePostSchema.parse(body)
 
     // Check if post already exists
@@ -163,6 +165,17 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // Capture error in Sentry with context
+    Sentry.withScope((scope) => {
+      scope.setTag('api-route', '/api/tiktok/posts')
+      scope.setTag('http-method', 'POST')
+      scope.setContext('request-body', {
+        hasData: !!body,
+        // Don't log full body as it might be large
+      })
+      Sentry.captureException(error)
+    })
 
     console.error('Failed to save post:', error)
     return NextResponse.json(

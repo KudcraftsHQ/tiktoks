@@ -60,6 +60,7 @@ function PostsPageContent() {
   const [currentPage, setCurrentPage] = useState(initialPage)
   const [pageSize, setPageSize] = useState(25)
   const [sorting, setSorting] = useState<SortingState>(initialSorting)
+  const [contentTypeFilter, setContentTypeFilter] = useState<'all' | 'video' | 'photo'>('all')
 
   // Selection and Analysis sidebar state
   const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set())
@@ -95,13 +96,18 @@ function PostsPageContent() {
     router.push(newUrl, { scroll: false })
   }, [router])
 
-  const fetchPosts = useCallback(async (page: number, limit: number, sort: SortingState) => {
+  const fetchPosts = useCallback(async (page: number, limit: number, sort: SortingState, filter: 'all' | 'video' | 'photo') => {
     setIsLoading(true)
     try {
       const params = new URLSearchParams({
         page: page.toString(),
         limit: limit.toString()
       })
+
+      // Add content type filter
+      if (filter !== 'all') {
+        params.append('contentType', filter)
+      }
 
       // Add sorting parameters
       if (sort.length > 0) {
@@ -136,13 +142,13 @@ function PostsPageContent() {
       : updaterOrValue
 
     setSorting(newSorting)
-    
+
     // Update URL and fetch in a separate effect to avoid render issues
     setTimeout(() => {
       updateURL(currentPage, newSorting)
-      fetchPosts(currentPage, pageSize, newSorting)
+      fetchPosts(currentPage, pageSize, newSorting, contentTypeFilter)
     }, 0)
-  }, [currentPage, pageSize, sorting, updateURL, fetchPosts])
+  }, [currentPage, pageSize, sorting, contentTypeFilter, updateURL, fetchPosts])
 
   // Handle page change with URL update
   const handlePageChange = useCallback((pageIndex: number, newPageSize: number) => {
@@ -152,19 +158,19 @@ function PostsPageContent() {
 
     setSorting(currentSorting => {
       updateURL(newPage, currentSorting)
-      fetchPosts(newPage, newPageSize, currentSorting)
+      fetchPosts(newPage, newPageSize, currentSorting, contentTypeFilter)
       return currentSorting
     })
-  }, [updateURL, fetchPosts])
+  }, [contentTypeFilter, updateURL, fetchPosts])
 
   // Sync state from URL params (for browser back/forward)
   useEffect(() => {
     const sortParam = searchParams.get('sort')
     const oldSortBy = searchParams.get('sortBy')
     const oldSortOrder = searchParams.get('sortOrder')
-    
+
     let urlSorting: SortingState = []
-    
+
     if (sortParam) {
       urlSorting = sortParam.split(',').map(sort => {
         const [id, direction] = sort.trim().split('.')
@@ -179,14 +185,19 @@ function PostsPageContent() {
 
     if (isDifferent) {
       setSorting(urlSorting)
-      fetchPosts(currentPage, pageSize, urlSorting)
+      fetchPosts(currentPage, pageSize, urlSorting, contentTypeFilter)
     }
-  }, [searchParams, sorting, currentPage, pageSize, fetchPosts])
+  }, [searchParams, sorting, currentPage, pageSize, contentTypeFilter, fetchPosts])
 
   // Initial fetch
   useEffect(() => {
-    fetchPosts(initialPage, pageSize, initialSorting)
+    fetchPosts(initialPage, pageSize, initialSorting, contentTypeFilter)
   }, [])
+
+  // Refetch when content type filter changes
+  useEffect(() => {
+    fetchPosts(currentPage, pageSize, sorting, contentTypeFilter)
+  }, [contentTypeFilter])
 
   // Get selected posts data for sidebar
   const selectedPostsData = posts
@@ -233,6 +244,10 @@ function PostsPageContent() {
           <PostsTable
             posts={posts}
             totalPosts={totalPosts}
+            contentTypeFilter={{
+              value: contentTypeFilter,
+              onChange: setContentTypeFilter
+            }}
             onPageChange={handlePageChange}
             onSortingChange={handleSortingChange}
             sorting={sorting}

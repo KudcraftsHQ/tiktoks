@@ -16,8 +16,13 @@
  *   REDIS_DB - Redis database number (default: 0)
  */
 
+import { initSentryWorker, flushSentry } from './src/lib/sentry-worker'
 import { mediaCacheWorker } from './src/lib/queue/media-cache-worker'
 import { profileMonitorWorker } from './src/lib/queue/profile-monitor-worker'
+import * as Sentry from '@sentry/node'
+
+// Initialize Sentry for error tracking
+initSentryWorker()
 
 const queueName = process.env.QUEUE_NAME || 'all'
 
@@ -54,6 +59,7 @@ console.log('─'.repeat(60))
 const shutdown = async () => {
   console.log('📥 Shutting down gracefully...')
   await Promise.all(activeWorkers.map(worker => worker.close()))
+  await flushSentry() // Flush pending Sentry events
   process.exit(0)
 }
 
@@ -62,12 +68,16 @@ process.on('SIGINT', shutdown)
 
 process.on('uncaughtException', async (error) => {
   console.error('❌ Uncaught Exception:', error)
+  Sentry.captureException(error)
+  await flushSentry()
   await Promise.all(activeWorkers.map(worker => worker.close()))
   process.exit(1)
 })
 
 process.on('unhandledRejection', async (reason, promise) => {
   console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason)
+  Sentry.captureException(reason)
+  await flushSentry()
   await Promise.all(activeWorkers.map(worker => worker.close()))
   process.exit(1)
 })
