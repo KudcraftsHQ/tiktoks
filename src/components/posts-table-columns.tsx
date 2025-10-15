@@ -37,6 +37,7 @@ import { createSortableHeader } from '@/components/ui/data-table'
 import { getProxiedImageUrl } from '@/lib/image-proxy'
 import { SmartImage } from '@/components/SmartImage'
 import { MiniSparkline } from '@/components/MiniSparkline'
+import { useRouter } from 'next/navigation'
 
 export interface TikTokPost {
   id: string
@@ -124,6 +125,24 @@ const formatDate = (dateString: string): string => {
     day: 'numeric',
     year: 'numeric'
   }).format(date)
+}
+
+const formatDateTime = (dateString: string): { date: string; time: string } => {
+  const date = new Date(dateString)
+
+  const dateStr = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  }).format(date)
+
+  const timeStr = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  }).format(date)
+
+  return { date: dateStr, time: timeStr }
 }
 
 const parseImages = (images: any): Array<{ url: string; width: number; height: number }> => {
@@ -230,8 +249,19 @@ export const createPostsTableColumns = ({
     },
     cell: ({ row }) => {
       const post = row.original as any
+
+      const handleClick = (e: React.MouseEvent) => {
+        e.stopPropagation()
+        if (post.authorHandle) {
+          window.location.href = `/profiles/${post.authorHandle}`
+        }
+      }
+
       return (
-        <div className="flex items-center space-x-3 min-w-[180px]">
+        <div
+          className="flex items-center space-x-3 min-w-[180px] cursor-pointer hover:bg-muted/50 -mx-2 px-2 py-1 rounded-md transition-colors"
+          onClick={handleClick}
+        >
           {post._proxiedAuthorAvatar ? (
             <SmartImage
               src={post._proxiedAuthorAvatar}
@@ -518,9 +548,11 @@ export const createPostsTableColumns = ({
     header: createSortableHeader('Published'),
     cell: ({ row }) => {
       const publishedAt = row.getValue('publishedAt') as string
+      const { date, time } = formatDateTime(publishedAt)
       return (
-        <div className="text-sm text-muted-foreground whitespace-nowrap">
-          {formatDate(publishedAt)}
+        <div className="text-sm whitespace-nowrap">
+          <div>{date}</div>
+          <div className="text-muted-foreground text-xs">{time}</div>
         </div>
       )
     }
