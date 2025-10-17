@@ -96,34 +96,32 @@ export function setupQueueSentryListeners(
 
   // Track completed jobs (for successful completions)
   (queue as any).on("completed", (job: any) => {
-    Sentry.captureMessage(`Job completed: ${job.name}`, "info", {
-      tags: {
-        "job.status": "completed",
-        "job.queue": queueName,
-        "job.name": job.name,
-      },
-      extra: {
+    Sentry.withScope((scope) => {
+      scope.setTag("job.status", "completed");
+      scope.setTag("job.queue", queueName);
+      scope.setTag("job.name", job.name);
+      scope.setContext("job", {
         jobId: job.id,
         duration: job.finishedOn ? job.finishedOn - (job.processedOn || 0) : 0,
-      },
+      });
+      Sentry.captureMessage(`Job completed: ${job.name}`, "info");
     });
   });
 
   // Track failed jobs with full context
   (queue as any).on("failed", (job: any, err: any) => {
-    Sentry.captureException(err, {
-      tags: {
-        "job.status": "failed",
-        "job.queue": queueName,
-        "job.name": job.name,
-      },
-      extra: {
+    Sentry.withScope((scope) => {
+      scope.setTag("job.status", "failed");
+      scope.setTag("job.queue", queueName);
+      scope.setTag("job.name", job.name);
+      scope.setLevel("error");
+      scope.setContext("job", {
         jobId: job.id,
         attemptsMade: job.attemptsMade,
         data: job.data,
         failedReason: err instanceof Error ? err.message : String(err),
-      },
-      level: "error",
+      });
+      Sentry.captureException(err);
     });
     console.error(
       `❌ [Sentry] Job ${job.id} failed after ${job.attemptsMade} attempts:`,
@@ -133,15 +131,15 @@ export function setupQueueSentryListeners(
 
   // Track stalled jobs (jobs that are taking too long)
   (queue as any).on("stalled", (jobId: string, prev: string) => {
-    Sentry.captureMessage(`Job stalled: ${jobId}`, "warning", {
-      tags: {
-        "job.status": "stalled",
-        "job.queue": queueName,
-      },
-      extra: {
+    Sentry.withScope((scope) => {
+      scope.setTag("job.status", "stalled");
+      scope.setTag("job.queue", queueName);
+      scope.setLevel("warning");
+      scope.setContext("job", {
         jobId,
         previousState: prev,
-      },
+      });
+      Sentry.captureMessage(`Job stalled: ${jobId}`, "warning");
     });
     console.warn(
       `⚠️ [Sentry] Job ${jobId} stalled (previous state: ${prev})`
@@ -150,16 +148,15 @@ export function setupQueueSentryListeners(
 
   // Track delayed jobs (jobs waiting to be processed)
   (queue as any).on("delayed", (job: any, delay: number) => {
-    Sentry.captureMessage(`Job delayed: ${job.name}`, "debug", {
-      tags: {
-        "job.status": "delayed",
-        "job.queue": queueName,
-        "job.name": job.name,
-      },
-      extra: {
+    Sentry.withScope((scope) => {
+      scope.setTag("job.status", "delayed");
+      scope.setTag("job.queue", queueName);
+      scope.setTag("job.name", job.name);
+      scope.setContext("job", {
         jobId: job.id,
         delayMs: delay,
-      },
+      });
+      Sentry.captureMessage(`Job delayed: ${job.name}`, "info");
     });
   });
 
