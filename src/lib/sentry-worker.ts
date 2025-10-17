@@ -6,13 +6,18 @@
  */
 
 import * as Sentry from "@sentry/node";
+import { Queue } from "bullmq";
 
 /**
  * Initialize Sentry for the worker process
  */
 export function initSentryWorker() {
+  // Use same DSN as server if SENTRY_DSN not specifically set
+  const dsn = process.env.SENTRY_DSN || 
+    "https://29de806860ecdb2fa86f5b031a1e66cb@o1127849.ingest.us.sentry.io/4510185243738112";
+
   Sentry.init({
-    dsn: process.env.SENTRY_DSN,
+    dsn,
 
     // Adjust this value in production
     tracesSampleRate: 1.0,
@@ -77,6 +82,102 @@ export function captureJobError(
 
     Sentry.captureException(error);
   });
+}
+
+/**
+ * Setup Sentry listeners for BullMQ queue events
+ * Provides comprehensive job lifecycle monitoring and error tracking
+ */
+export function setupQueueSentryListeners(
+  queue: Queue<any>,
+  queueName: string
+) {
+  console.log(`🎧 [Sentry] Setting up listeners for queue: ${queueName}`);
+
+  // Track completed jobs (for successful completions)
+  (queue as any).on("completed", (job: any) => {
+    Sentry.captureMessage(`Job completed: ${job.name}`, "info", {
+      tags: {
+        "job.status": "completed",
+        "job.queue": queueName,
+        "job.name": job.name,
+      },
+      extra: {
+        jobId: job.id,
+        duration: job.finishedOn ? job.finishedOn - (job.processedOn || 0) : 0,
+      },
+    });
+  });
+
+  // Track failed jobs with full context
+  (queue as any).on("failed", (job: any, err: any) => {
+    Sentry.captureException(err, {
+      tags: {
+        "job.status": "failed",
+        "job.queue": queueName,
+        "job.name": job.name,
+      },
+      extra: {
+        jobId: job.id,
+        attemptsMade: job.attemptsMade,
+        data: job.data,
+        failedReason: err instanceof Error ? err.message : String(err),
+      },
+      level: "error",
+    });
+    console.error(
+      `❌ [Sentry] Job ${job.id} failed after ${job.attemptsMade} attempts:`,
+      err instanceof Error ? err.message : String(err)
+    );
+  });
+
+  // Track stalled jobs (jobs that are taking too long)
+  (queue as any).on("stalled", (jobId: string, prev: string) => {
+    Sentry.captureMessage(`Job stalled: ${jobId}`, "warning", {
+      tags: {
+        "job.status": "stalled",
+        "job.queue": queueName,
+      },
+      extra: {
+        jobId,
+        previousState: prev,
+      },
+    });
+    console.warn(
+      `⚠️ [Sentry] Job ${jobId} stalled (previous state: ${prev})`
+    );
+  });
+
+  // Track delayed jobs (jobs waiting to be processed)
+  (queue as any).on("delayed", (job: any, delay: number) => {
+    Sentry.captureMessage(`Job delayed: ${job.name}`, "debug", {
+      tags: {
+        "job.status": "delayed",
+        "job.queue": queueName,
+        "job.name": job.name,
+      },
+      extra: {
+        jobId: job.id,
+        delayMs: delay,
+      },
+    });
+  });
+
+  // Track queue errors (e.g., Redis connection issues)
+  (queue as any).on("error", (err: any) => {
+    Sentry.captureException(err, {
+      tags: {
+        "error.type": "queue",
+        "error.queue": queueName,
+      },
+      level: "error",
+    });
+    console.error(`❌ [Sentry] Queue ${queueName} error:`, err);
+  });
+
+  console.log(
+    `✅ [Sentry] Queue ${queueName} monitoring enabled with Sentry`
+  );
 }
 
 /**

@@ -4,7 +4,7 @@
  * Background worker that processes media caching jobs
  */
 
-import { Worker, Job } from 'bullmq'
+import { Worker, Job, Queue } from 'bullmq'
 import { PrismaClient, CacheStatus } from '@/generated/prisma'
 import { mediaDownloadService } from '../media-download'
 import { uploadToR2 } from '../r2'
@@ -15,14 +15,16 @@ import {
   MediaCacheJobData,
   MediaCacheJobResult
 } from './config'
-import { setJobContext, captureJobError } from '../sentry-worker'
+import { setJobContext, captureJobError, setupQueueSentryListeners } from '../sentry-worker'
 
 class MediaCacheWorker {
   private worker: Worker<MediaCacheJobData, MediaCacheJobResult>
+  private queue: Queue<MediaCacheJobData>
   private prisma: PrismaClient
 
   constructor() {
     this.prisma = new PrismaClient()
+    this.queue = new Queue(QUEUE_NAMES.MEDIA_CACHE, defaultWorkerOptions)
     this.worker = new Worker(
       QUEUE_NAMES.MEDIA_CACHE,
       this.processJob.bind(this),
@@ -31,6 +33,9 @@ class MediaCacheWorker {
 
     // Set up event listeners
     this.setupEventListeners()
+
+    // Setup Sentry monitoring for this queue
+    setupQueueSentryListeners(this.queue, QUEUE_NAMES.MEDIA_CACHE)
   }
 
   private setupEventListeners(): void {
@@ -279,6 +284,7 @@ class MediaCacheWorker {
   async close(): Promise<void> {
     console.log('🛑 [MediaCacheWorker] Closing worker...')
     await this.worker.close()
+    await this.queue.close()
     await this.prisma.$disconnect()
     console.log('✅ [MediaCacheWorker] Worker closed successfully')
   }

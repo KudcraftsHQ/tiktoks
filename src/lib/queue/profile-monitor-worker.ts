@@ -4,7 +4,7 @@
  * Background worker that processes profile monitoring jobs
  */
 
-import { Worker, Job } from 'bullmq'
+import { Worker, Job, Queue } from 'bullmq'
 import { PrismaClient } from '@/generated/prisma'
 import { scrapeProfileVideos } from '../tiktok-scraping'
 import { TikTokBulkUpsertService } from '../tiktok-bulk-upsert-service'
@@ -14,10 +14,11 @@ import {
   ProfileMonitorJobData,
   ProfileMonitorJobResult
 } from './config'
-import { setJobContext, captureJobError } from '../sentry-worker'
+import { setJobContext, captureJobError, setupQueueSentryListeners } from '../sentry-worker'
 
 class ProfileMonitorWorker {
   private worker: Worker<ProfileMonitorJobData, ProfileMonitorJobResult>
+  private queue: Queue<ProfileMonitorJobData>
   private prisma: PrismaClient
   private bulkUpsertService: TikTokBulkUpsertService
 
@@ -31,6 +32,7 @@ class ProfileMonitorWorker {
 
     this.prisma = new PrismaClient()
     this.bulkUpsertService = new TikTokBulkUpsertService(this.prisma)
+    this.queue = new Queue(QUEUE_NAMES.PROFILE_MONITOR, defaultWorkerOptions)
     this.worker = new Worker(
       QUEUE_NAMES.PROFILE_MONITOR,
       this.processJob.bind(this),
@@ -51,6 +53,9 @@ class ProfileMonitorWorker {
 
     // Set up event listeners
     this.setupEventListeners()
+
+    // Setup Sentry monitoring for this queue
+    setupQueueSentryListeners(this.queue, QUEUE_NAMES.PROFILE_MONITOR)
   }
 
   private setupEventListeners(): void {
@@ -395,6 +400,7 @@ class ProfileMonitorWorker {
   async close(): Promise<void> {
     console.log('🛑 [ProfileMonitorWorker] Closing worker...')
     await this.worker.close()
+    await this.queue.close()
     await this.prisma.$disconnect()
     console.log('✅ [ProfileMonitorWorker] Worker closed successfully')
   }
