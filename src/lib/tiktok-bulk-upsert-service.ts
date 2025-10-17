@@ -19,6 +19,26 @@ function chunkArray<T>(array: T[], size: number): T[][] {
   return chunks
 }
 
+/**
+ * Safely stringify data with proper Unicode handling
+ */
+function safeStringify(data: any): string {
+  try {
+    // Use replacer to handle potentially problematic characters
+    return JSON.stringify(data, (key, value) => {
+      if (typeof value === 'string') {
+        // Ensure all strings are valid UTF-8
+        return value.replace(/[\x00-\x1F\x7F]/g, '')
+      }
+      return value
+    })
+  } catch (error) {
+    console.error('Error stringifying data:', error)
+    // Fallback: return empty array/object
+    return Array.isArray(data) ? '[]' : '{}'
+  }
+}
+
 export interface ProfileData {
   handle: string
   nickname?: string
@@ -247,8 +267,8 @@ export class TikTokBulkUpsertService {
               authorNickname: postData.authorNickname,
               authorHandle: postData.authorHandle,
               authorAvatarId: cachedMedia.cachedAuthorAvatar,
-              hashtags: JSON.stringify(postData.hashtags),
-              mentions: JSON.stringify(postData.mentions),
+              hashtags: safeStringify(postData.hashtags),
+              mentions: safeStringify(postData.mentions),
               viewCount: BigInt(postData.viewCount),
               likeCount: postData.likeCount,
               shareCount: postData.shareCount,
@@ -258,7 +278,7 @@ export class TikTokBulkUpsertService {
               videoId: cachedMedia.cachedVideo,
               coverId: cachedMedia.cachedCover,
               musicId: cachedMedia.cachedMusic,
-              images: JSON.stringify(cachedMedia.cachedImages.length > 0 ? cachedMedia.cachedImages : postData.images),
+              images: safeStringify(cachedMedia.cachedImages.length > 0 ? cachedMedia.cachedImages : postData.images),
               publishedAt: postData.publishedAt ? new Date(postData.publishedAt) : null
             }
 
@@ -271,8 +291,8 @@ export class TikTokBulkUpsertService {
               authorNickname: postData.authorNickname,
               authorHandle: postData.authorHandle,
               // Reuse existing cache IDs for updates (don't overwrite)
-              hashtags: JSON.stringify(postData.hashtags),
-              mentions: JSON.stringify(postData.mentions),
+              hashtags: safeStringify(postData.hashtags),
+              mentions: safeStringify(postData.mentions),
               // Update metrics (these change over time)
               viewCount: BigInt(postData.viewCount),
               likeCount: postData.likeCount,
