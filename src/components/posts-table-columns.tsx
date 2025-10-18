@@ -71,6 +71,7 @@ export interface TikTokPost {
     cacheAssetId?: string // Cache asset ID (for reference, usually not used directly in UI)
   }>
   publishedAt: string
+  updatedAt: string
   metricsHistory?: Array<{
     viewCount: number
     likeCount: number
@@ -549,6 +550,20 @@ export const createPostsTableColumns = ({
     cell: ({ row }) => {
       const publishedAt = row.getValue('publishedAt') as string
       const { date, time } = formatDateTime(publishedAt)
+      return (
+        <div className="text-sm whitespace-nowrap">
+          <div>{date}</div>
+          <div className="text-muted-foreground text-xs">{time}</div>
+        </div>
+      )
+    }
+  },
+  {
+    accessorKey: 'updatedAt',
+    header: createSortableHeader('Last Updated'),
+    cell: ({ row }) => {
+      const updatedAt = row.getValue('updatedAt') as string
+      const { date, time } = formatDateTime(updatedAt)
       return (
         <div className="text-sm whitespace-nowrap">
           <div>{date}</div>
