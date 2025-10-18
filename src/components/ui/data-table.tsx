@@ -35,6 +35,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { PostTypeFilter } from '@/components/PostTypeFilter'
+import { DateRangeFilter, DateRange } from '@/components/DateRangeFilter'
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
@@ -46,6 +47,10 @@ interface DataTableProps<TData, TValue> {
   contentTypeFilter?: {
     value: 'all' | 'video' | 'photo'
     onChange: (value: 'all' | 'video' | 'photo') => void
+  }
+  dateRangeFilter?: {
+    value: DateRange
+    onChange: (range: DateRange) => void
   }
   onPageChange?: (pageIndex: number, pageSize: number) => void
   onSortingChange?: (sorting: SortingState) => void
@@ -69,6 +74,7 @@ export function DataTable<TData, TValue>({
   showPagination = true,
   globalFilterFn,
   contentTypeFilter,
+  dateRangeFilter,
   onPageChange,
   onSortingChange,
   sorting: externalSorting,
@@ -242,6 +248,12 @@ export function DataTable<TData, TValue>({
 
         <div className="flex items-center gap-2 sm:ml-auto">
           {customHeaderActions}
+          {dateRangeFilter && (
+            <DateRangeFilter
+              value={dateRangeFilter.value}
+              onChange={dateRangeFilter.onChange}
+            />
+          )}
           {contentTypeFilter && (
             <PostTypeFilter
               value={contentTypeFilter.value}

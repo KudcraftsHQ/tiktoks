@@ -193,6 +193,8 @@ export async function GET(request: NextRequest) {
     const contentType = searchParams.get('contentType')
     const authorHandle = searchParams.get('authorHandle')
     const search = searchParams.get('search') || ''
+    const dateFrom = searchParams.get('dateFrom')
+    const dateTo = searchParams.get('dateTo')
 
     // Parse sorting from URL - supports multi-column sorting
     // Format: ?sort=viewCount.desc,likeCount.asc,publishedAt.desc
@@ -200,9 +202,9 @@ export async function GET(request: NextRequest) {
     const sortParam = searchParams.get('sort')
     const oldSortBy = searchParams.get('sortBy')
     const oldSortOrder = searchParams.get('sortOrder')
-    
+
     let orderBy: any
-    
+
     if (sortParam) {
       // New format: multi-column sorting
       orderBy = sortParam.split(',').map(sort => {
@@ -228,6 +230,17 @@ export async function GET(request: NextRequest) {
 
     if (authorHandle) {
       where.authorHandle = authorHandle
+    }
+
+    // Date range filtering on publishedAt
+    if (dateFrom || dateTo) {
+      where.publishedAt = {}
+      if (dateFrom) {
+        where.publishedAt.gte = new Date(dateFrom)
+      }
+      if (dateTo) {
+        where.publishedAt.lte = new Date(dateTo)
+      }
     }
 
     if (search) {

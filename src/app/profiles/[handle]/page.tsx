@@ -34,6 +34,7 @@ import { PostingActivityHeatmap } from '@/components/PostingActivityHeatmap'
 import { SortingState } from '@tanstack/react-table'
 import { ContentAnalysisSidebar } from '@/components/ContentAnalysisSidebar'
 import { cn } from '@/lib/utils'
+import { DateRange } from '@/components/DateRangeFilter'
 
 interface ProfilePostsResult {
   posts: TikTokPost[]
@@ -57,9 +58,9 @@ function ProfileDetailPageContent() {
   const sortParam = searchParams.get('sort')
   const oldSortBy = searchParams.get('sortBy')
   const oldSortOrder = searchParams.get('sortOrder')
-  
+
   let initialSorting: SortingState = []
-  
+
   if (sortParam) {
     initialSorting = sortParam.split(',').map(sort => {
       const [id, direction] = sort.trim().split('.')
@@ -67,6 +68,14 @@ function ProfileDetailPageContent() {
     })
   } else if (oldSortBy && oldSortOrder) {
     initialSorting = [{ id: oldSortBy, desc: oldSortOrder === 'desc' }]
+  }
+
+  // Parse date range from URL
+  const dateFromParam = searchParams.get('dateFrom')
+  const dateToParam = searchParams.get('dateTo')
+  const initialDateRange: DateRange = {
+    from: dateFromParam ? new Date(dateFromParam) : undefined,
+    to: dateToParam ? new Date(dateToParam) : undefined
   }
 
   const [profile, setProfile] = useState<TikTokProfile | null>(null)
@@ -84,6 +93,7 @@ function ProfileDetailPageContent() {
   const [sorting, setSorting] = useState<SortingState>(initialSorting)
   const [firstPostDate, setFirstPostDate] = useState<string | null>(null)
   const [activityLoading, setActivityLoading] = useState(false)
+  const [dateRange, setDateRange] = useState<DateRange>(initialDateRange)
 
   // Selection and Analysis sidebar state
   const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set())
@@ -97,7 +107,7 @@ function ProfileDetailPageContent() {
   // }, [selectedPosts])
 
   // Update URL with current state
-  const updateURL = useCallback((page: number, sort: SortingState) => {
+  const updateURL = useCallback((page: number, sort: SortingState, dateFilter: DateRange) => {
     const params = new URLSearchParams()
 
     if (page > 1) {
@@ -109,6 +119,14 @@ function ProfileDetailPageContent() {
         .map(s => `${s.id}.${s.desc ? 'desc' : 'asc'}`)
         .join(',')
       params.set('sort', sortParam)
+    }
+
+    // Add date range params
+    if (dateFilter.from) {
+      params.set('dateFrom', dateFilter.from.toISOString())
+    }
+    if (dateFilter.to) {
+      params.set('dateTo', dateFilter.to.toISOString())
     }
 
     const queryString = params.toString()
@@ -139,7 +157,7 @@ function ProfileDetailPageContent() {
     }
   }, [handle])
 
-  const fetchProfilePosts = useCallback(async (page: number, sort: SortingState, filter: 'all' | 'video' | 'photo') => {
+  const fetchProfilePosts = useCallback(async (page: number, sort: SortingState, filter: 'all' | 'video' | 'photo', dateFilter: DateRange) => {
     if (!profile?.id) return
 
     setLoading(true)
@@ -161,6 +179,14 @@ function ProfileDetailPageContent() {
           .map(s => `${s.id}.${s.desc ? 'desc' : 'asc'}`)
           .join(',')
         params.append('sort', sortParam)
+      }
+
+      // Add date range parameters
+      if (dateFilter.from) {
+        params.append('dateFrom', dateFilter.from.toISOString())
+      }
+      if (dateFilter.to) {
+        params.append('dateTo', dateFilter.to.toISOString())
       }
 
       const response = await fetch(`/api/tiktok/profiles/${profile.id}/posts?${params.toString()}`)
@@ -205,9 +231,9 @@ function ProfileDetailPageContent() {
 
   const handleRefresh = useCallback(() => {
     fetchProfile()
-    fetchProfilePosts(currentPage, sorting, contentTypeFilter)
+    fetchProfilePosts(currentPage, sorting, contentTypeFilter, dateRange)
     fetchActivityData()
-  }, [fetchProfile, fetchProfilePosts, fetchActivityData, currentPage, sorting, contentTypeFilter])
+  }, [fetchProfile, fetchProfilePosts, fetchActivityData, currentPage, sorting, contentTypeFilter, dateRange])
 
   const handleMonitoringToggle = useCallback(async (enabled: boolean) => {
     if (!profile?.id) return
@@ -278,9 +304,11 @@ function ProfileDetailPageContent() {
     const sortParam = searchParams.get('sort')
     const oldSortBy = searchParams.get('sortBy')
     const oldSortOrder = searchParams.get('sortOrder')
-    
+    const dateFromParam = searchParams.get('dateFrom')
+    const dateToParam = searchParams.get('dateTo')
+
     let urlSorting: SortingState = []
-    
+
     if (sortParam) {
       urlSorting = sortParam.split(',').map(sort => {
         const [id, direction] = sort.trim().split('.')
@@ -290,13 +318,22 @@ function ProfileDetailPageContent() {
       urlSorting = [{ id: oldSortBy, desc: oldSortOrder === 'desc' }]
     }
 
-    // Check if URL sorting is different from current state
-    const isDifferent = JSON.stringify(urlSorting) !== JSON.stringify(sorting)
+    const urlDateRange: DateRange = {
+      from: dateFromParam ? new Date(dateFromParam) : undefined,
+      to: dateToParam ? new Date(dateToParam) : undefined
+    }
 
-    if (isDifferent) {
+    // Check if URL state is different from current state
+    const sortingDifferent = JSON.stringify(urlSorting) !== JSON.stringify(sorting)
+    const dateDifferent = JSON.stringify(urlDateRange) !== JSON.stringify(dateRange)
+
+    if (sortingDifferent) {
       setSorting(urlSorting)
     }
-  }, [searchParams, sorting])
+    if (dateDifferent) {
+      setDateRange(urlDateRange)
+    }
+  }, [searchParams, sorting, dateRange])
 
   // Load profile and posts on mount and when filters change
   useEffect(() => {
@@ -305,9 +342,9 @@ function ProfileDetailPageContent() {
 
   useEffect(() => {
     if (profile?.id) {
-      fetchProfilePosts(currentPage, sorting, contentTypeFilter)
+      fetchProfilePosts(currentPage, sorting, contentTypeFilter, dateRange)
     }
-  }, [profile?.id, currentPage, sorting, contentTypeFilter, fetchProfilePosts])
+  }, [profile?.id, currentPage, sorting, contentTypeFilter, dateRange, fetchProfilePosts])
 
   useEffect(() => {
     fetchActivityData()
@@ -363,12 +400,12 @@ function ProfileDetailPageContent() {
       : updaterOrValue
 
     setSorting(newSorting)
-    
+
     // Update URL in a separate effect to avoid render issues
     setTimeout(() => {
-      updateURL(currentPage, newSorting)
+      updateURL(currentPage, newSorting, dateRange)
     }, 0)
-  }, [currentPage, sorting, updateURL])
+  }, [currentPage, sorting, dateRange, updateURL])
 
   // Handle page change with URL update
   // Note: DataTable calls this with the NEW pageIndex (0-indexed) after navigation
@@ -377,10 +414,21 @@ function ProfileDetailPageContent() {
     setCurrentPage(newPage)
 
     setSorting(currentSorting => {
-      updateURL(newPage, currentSorting)
+      updateURL(newPage, currentSorting, dateRange)
       return currentSorting
     })
-  }, [updateURL])
+  }, [dateRange, updateURL])
+
+  // Handle date range change with URL update
+  const handleDateRangeChange = useCallback((newDateRange: DateRange) => {
+    setDateRange(newDateRange)
+    setCurrentPage(1) // Reset to first page when filter changes
+
+    // Update URL and trigger refetch
+    setTimeout(() => {
+      updateURL(1, sorting, newDateRange)
+    }, 0)
+  }, [sorting, updateURL])
 
   if (profileLoading) {
     return (
@@ -628,6 +676,10 @@ function ProfileDetailPageContent() {
               contentTypeFilter={{
                 value: contentTypeFilter,
                 onChange: setContentTypeFilter
+              }}
+              dateRangeFilter={{
+                value: dateRange,
+                onChange: handleDateRangeChange
               }}
               onPageChange={handlePageChange}
               onSortingChange={handleSortingChange}

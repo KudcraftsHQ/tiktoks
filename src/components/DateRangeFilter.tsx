@@ -1,164 +1,228 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import * as React from 'react'
+import { Calendar as CalendarIcon, X } from 'lucide-react'
+import { format, startOfDay, endOfDay, subDays, subMonths, subYears } from 'date-fns'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent } from '@/components/ui/card'
-import { Calendar, ChevronDown } from 'lucide-react'
+import { Calendar } from '@/components/ui/calendar'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 
-type DateRangeValue = 'all' | 'today' | 'week' | 'month' | 'quarter' | 'custom'
-
-interface DateRangeFilterProps {
-  value: DateRangeValue
-  customStart?: Date
-  customEnd?: Date
-  onChange: (value: DateRangeValue, customStart?: Date, customEnd?: Date) => void
+export interface DateRange {
+  from: Date | undefined
+  to: Date | undefined
 }
 
-const dateOptions = [
-  { value: 'all' as const, label: 'All Time' },
-  { value: 'today' as const, label: 'Today' },
-  { value: 'week' as const, label: 'This Week' },
-  { value: 'month' as const, label: 'This Month' },
-  { value: 'quarter' as const, label: 'Last 3 Months' },
-  { value: 'custom' as const, label: 'Custom Range' },
+interface DateRangeFilterProps {
+  value: DateRange
+  onChange: (range: DateRange) => void
+  className?: string
+}
+
+const DATE_PRESETS = [
+  {
+    label: 'Today',
+    getValue: () => ({
+      from: startOfDay(new Date()),
+      to: endOfDay(new Date())
+    })
+  },
+  {
+    label: 'Yesterday',
+    getValue: () => ({
+      from: startOfDay(subDays(new Date(), 1)),
+      to: endOfDay(subDays(new Date(), 1))
+    })
+  },
+  {
+    label: 'Last 7 days',
+    getValue: () => ({
+      from: startOfDay(subDays(new Date(), 7)),
+      to: endOfDay(new Date())
+    })
+  },
+  {
+    label: 'Last 30 days',
+    getValue: () => ({
+      from: startOfDay(subDays(new Date(), 30)),
+      to: endOfDay(new Date())
+    })
+  },
+  {
+    label: 'Last 90 days',
+    getValue: () => ({
+      from: startOfDay(subDays(new Date(), 90)),
+      to: endOfDay(new Date())
+    })
+  },
+  {
+    label: 'Last year',
+    getValue: () => ({
+      from: startOfDay(subYears(new Date(), 1)),
+      to: endOfDay(new Date())
+    })
+  }
 ]
 
-export default function DateRangeFilter({ 
-  value, 
-  customStart, 
-  customEnd, 
-  onChange 
-}: DateRangeFilterProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [tempStart, setTempStart] = useState('')
-  const [tempEnd, setTempEnd] = useState('')
-  const dropdownRef = useRef<HTMLDivElement>(null)
+export function DateRangeFilter({ value, onChange, className }: DateRangeFilterProps) {
+  const [isOpen, setIsOpen] = React.useState(false)
+  const [tempRange, setTempRange] = React.useState<DateRange>(value)
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
-      }
-    }
+  // Sync temp range when value changes from external source (e.g., URL)
+  React.useEffect(() => {
+    setTempRange(value)
+  }, [value])
 
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  const handlePresetClick = (preset: typeof DATE_PRESETS[0]) => {
+    const range = preset.getValue()
+    setTempRange(range)
+    onChange(range)
+    setIsOpen(false)
+  }
 
-  useEffect(() => {
-    if (customStart) {
-      setTempStart(customStart.toISOString().split('T')[0])
+  const handleCalendarSelect = (range: DateRange | undefined) => {
+    if (range) {
+      setTempRange(range)
     }
-    if (customEnd) {
-      setTempEnd(customEnd.toISOString().split('T')[0])
-    }
-  }, [customStart, customEnd])
+  }
 
-  const handlePresetSelect = (selectedValue: DateRangeValue) => {
-    if (selectedValue === 'custom') {
-      onChange(selectedValue, customStart, customEnd)
-    } else {
-      onChange(selectedValue)
-    }
-    if (selectedValue !== 'custom') {
+  const handleApply = () => {
+    // Ensure we have both from and to dates
+    if (tempRange.from && tempRange.to) {
+      onChange({
+        from: startOfDay(tempRange.from),
+        to: endOfDay(tempRange.to)
+      })
+      setIsOpen(false)
+    } else if (tempRange.from) {
+      // If only from is selected, set to as the same day
+      onChange({
+        from: startOfDay(tempRange.from),
+        to: endOfDay(tempRange.from)
+      })
       setIsOpen(false)
     }
   }
 
-  const handleCustomDateChange = () => {
-    const start = tempStart ? new Date(tempStart) : undefined
-    const end = tempEnd ? new Date(tempEnd) : undefined
-    onChange('custom', start, end)
+  const handleClear = () => {
+    const emptyRange = { from: undefined, to: undefined }
+    setTempRange(emptyRange)
+    onChange(emptyRange)
+    setIsOpen(false)
   }
 
-  const getDisplayLabel = () => {
-    const option = dateOptions.find(opt => opt.value === value)
-    if (value === 'custom' && customStart && customEnd) {
-      return `${customStart.toLocaleDateString()} - ${customEnd.toLocaleDateString()}`
+  const hasActiveFilter = value.from || value.to
+
+  const getDisplayText = () => {
+    if (!value.from && !value.to) {
+      return 'Filter by date'
     }
-    if (value === 'custom' && (customStart || customEnd)) {
-      return 'Custom Range (incomplete)'
+
+    // Check if it matches a preset
+    for (const preset of DATE_PRESETS) {
+      const presetRange = preset.getValue()
+      if (
+        value.from &&
+        value.to &&
+        Math.abs(value.from.getTime() - presetRange.from.getTime()) < 1000 &&
+        Math.abs(value.to.getTime() - presetRange.to.getTime()) < 1000
+      ) {
+        return preset.label
+      }
     }
-    return option?.label || 'All Time'
+
+    // Custom range
+    if (value.from && value.to) {
+      return `${format(value.from, 'MMM d, yyyy')} - ${format(value.to, 'MMM d, yyyy')}`
+    }
+
+    if (value.from) {
+      return `From ${format(value.from, 'MMM d, yyyy')}`
+    }
+
+    return 'Filter by date'
   }
 
   return (
-    <div className="relative" ref={dropdownRef}>
-      <label className="text-sm font-medium text-foreground mb-2 block">
-        Date Range
-      </label>
-      
-      {/* Dropdown Trigger */}
-      <Button
-        variant="outline"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full justify-between"
-      >
-        <span className="flex items-center gap-2">
-          <Calendar className="h-4 w-4" />
-          {getDisplayLabel()}
-        </span>
-        <ChevronDown className="h-4 w-4" />
-      </Button>
-
-      {/* Dropdown Content */}
-      {isOpen && (
-        <Card className="absolute top-full left-0 right-0 mt-1 z-50">
-          <CardContent className="p-3">
-            <div className="space-y-2">
-              {dateOptions.map(option => (
-                <div key={option.value}>
-                  <div
-                    onClick={() => handlePresetSelect(option.value)}
-                    className={`flex items-center p-2 rounded-sm hover:bg-accent cursor-pointer ${
-                      value === option.value ? 'bg-accent' : ''
-                    }`}
-                  >
-                    <div className={`w-4 h-4 border rounded-full mr-2 ${
-                      value === option.value 
-                        ? 'bg-primary border-primary' 
-                        : 'border-muted-foreground'
-                    }`}>
-                      {value === option.value && (
-                        <div className="w-2 h-2 bg-primary-foreground rounded-full m-0.5" />
-                      )}
-                    </div>
-                    <span className="text-sm">{option.label}</span>
-                  </div>
-                  
-                  {/* Custom Date Inputs */}
-                  {option.value === 'custom' && value === 'custom' && (
-                    <div className="ml-6 mt-2 space-y-2">
-                      <div className="flex gap-2">
-                        <div className="flex-1">
-                          <label className="text-xs text-muted-foreground">From</label>
-                          <Input
-                            type="date"
-                            value={tempStart}
-                            onChange={(e) => setTempStart(e.target.value)}
-                            onBlur={handleCustomDateChange}
-                            className="mt-1"
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <label className="text-xs text-muted-foreground">To</label>
-                          <Input
-                            type="date"
-                            value={tempEnd}
-                            onChange={(e) => setTempEnd(e.target.value)}
-                            onBlur={handleCustomDateChange}
-                            className="mt-1"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+    <div className={cn('flex items-center gap-2', className)}>
+      <Popover open={isOpen} onOpenChange={setIsOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant={hasActiveFilter ? 'default' : 'outline'}
+            size="sm"
+            className={cn(
+              'justify-start text-left font-normal',
+              !hasActiveFilter && 'text-muted-foreground'
+            )}
+          >
+            <CalendarIcon className="mr-2 h-4 w-4" />
+            {getDisplayText()}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <div className="flex">
+            {/* Presets */}
+            <div className="flex flex-col gap-1 border-r p-3">
+              <div className="text-sm font-semibold mb-2">Presets</div>
+              {DATE_PRESETS.map((preset) => (
+                <Button
+                  key={preset.label}
+                  variant="ghost"
+                  size="sm"
+                  className="justify-start font-normal"
+                  onClick={() => handlePresetClick(preset)}
+                >
+                  {preset.label}
+                </Button>
               ))}
             </div>
-          </CardContent>
-        </Card>
+
+            {/* Calendar */}
+            <div className="p-3">
+              <div className="text-sm font-semibold mb-2">Custom Range</div>
+              <Calendar
+                initialFocus
+                mode="range"
+                defaultMonth={tempRange?.from}
+                selected={tempRange}
+                onSelect={handleCalendarSelect}
+                numberOfMonths={2}
+              />
+              <div className="flex justify-end gap-2 mt-3 pt-3 border-t">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClear}
+                >
+                  Clear
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleApply}
+                  disabled={!tempRange.from}
+                >
+                  Apply
+                </Button>
+              </div>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
+
+      {/* Clear filter button when active */}
+      {hasActiveFilter && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 px-2"
+          onClick={handleClear}
+        >
+          <X className="h-4 w-4" />
+        </Button>
       )}
     </div>
   )

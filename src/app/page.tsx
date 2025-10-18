@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 import { SortingState } from '@tanstack/react-table'
 import { ContentAnalysisSidebar } from '@/components/ContentAnalysisSidebar'
 import { cn } from '@/lib/utils'
+import { DateRange } from '@/components/DateRangeFilter'
 
 interface PostsResponse {
   posts: TikTokPost[]
@@ -39,9 +40,9 @@ function PostsPageContent() {
   const sortParam = searchParams.get('sort')
   const oldSortBy = searchParams.get('sortBy')
   const oldSortOrder = searchParams.get('sortOrder')
-  
+
   let initialSorting: SortingState = []
-  
+
   if (sortParam) {
     // New format: multi-column sorting
     initialSorting = sortParam.split(',').map(sort => {
@@ -54,6 +55,14 @@ function PostsPageContent() {
   }
   // Default: no sorting (let API use its default)
 
+  // Parse date range from URL
+  const dateFromParam = searchParams.get('dateFrom')
+  const dateToParam = searchParams.get('dateTo')
+  const initialDateRange: DateRange = {
+    from: dateFromParam ? new Date(dateFromParam) : undefined,
+    to: dateToParam ? new Date(dateToParam) : undefined
+  }
+
   const [posts, setPosts] = useState<TikTokPost[]>([])
   const [totalPosts, setTotalPosts] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
@@ -61,6 +70,7 @@ function PostsPageContent() {
   const [pageSize, setPageSize] = useState(25)
   const [sorting, setSorting] = useState<SortingState>(initialSorting)
   const [contentTypeFilter, setContentTypeFilter] = useState<'all' | 'video' | 'photo'>('all')
+  const [dateRange, setDateRange] = useState<DateRange>(initialDateRange)
 
   // Selection and Analysis sidebar state
   const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set())
@@ -74,7 +84,7 @@ function PostsPageContent() {
   // }, [selectedPosts])
 
   // Update URL with current state
-  const updateURL = useCallback((page: number, sort: SortingState) => {
+  const updateURL = useCallback((page: number, sort: SortingState, dateFilter: DateRange) => {
     const params = new URLSearchParams()
 
     if (page > 1) {
@@ -89,6 +99,14 @@ function PostsPageContent() {
       params.set('sort', sortParam)
     }
 
+    // Add date range params
+    if (dateFilter.from) {
+      params.set('dateFrom', dateFilter.from.toISOString())
+    }
+    if (dateFilter.to) {
+      params.set('dateTo', dateFilter.to.toISOString())
+    }
+
     const queryString = params.toString()
     const newUrl = queryString ? `?${queryString}` : '/'
 
@@ -96,7 +114,7 @@ function PostsPageContent() {
     router.push(newUrl, { scroll: false })
   }, [router])
 
-  const fetchPosts = useCallback(async (page: number, limit: number, sort: SortingState, filter: 'all' | 'video' | 'photo') => {
+  const fetchPosts = useCallback(async (page: number, limit: number, sort: SortingState, filter: 'all' | 'video' | 'photo', dateFilter: DateRange) => {
     setIsLoading(true)
     try {
       const params = new URLSearchParams({
@@ -115,6 +133,14 @@ function PostsPageContent() {
           .map(s => `${s.id}.${s.desc ? 'desc' : 'asc'}`)
           .join(',')
         params.append('sort', sortParam)
+      }
+
+      // Add date range parameters
+      if (dateFilter.from) {
+        params.append('dateFrom', dateFilter.from.toISOString())
+      }
+      if (dateFilter.to) {
+        params.append('dateTo', dateFilter.to.toISOString())
       }
 
       const response = await fetch(`/api/tiktok/posts?${params}`)
@@ -145,10 +171,10 @@ function PostsPageContent() {
 
     // Update URL and fetch in a separate effect to avoid render issues
     setTimeout(() => {
-      updateURL(currentPage, newSorting)
-      fetchPosts(currentPage, pageSize, newSorting, contentTypeFilter)
+      updateURL(currentPage, newSorting, dateRange)
+      fetchPosts(currentPage, pageSize, newSorting, contentTypeFilter, dateRange)
     }, 0)
-  }, [currentPage, pageSize, sorting, contentTypeFilter, updateURL, fetchPosts])
+  }, [currentPage, pageSize, sorting, contentTypeFilter, dateRange, updateURL, fetchPosts])
 
   // Handle page change with URL update
   const handlePageChange = useCallback((pageIndex: number, newPageSize: number) => {
@@ -157,17 +183,31 @@ function PostsPageContent() {
     setPageSize(newPageSize)
 
     setSorting(currentSorting => {
-      updateURL(newPage, currentSorting)
-      fetchPosts(newPage, newPageSize, currentSorting, contentTypeFilter)
+      updateURL(newPage, currentSorting, dateRange)
+      fetchPosts(newPage, newPageSize, currentSorting, contentTypeFilter, dateRange)
       return currentSorting
     })
-  }, [contentTypeFilter, updateURL, fetchPosts])
+  }, [contentTypeFilter, dateRange, updateURL, fetchPosts])
+
+  // Handle date range change with URL update
+  const handleDateRangeChange = useCallback((newDateRange: DateRange) => {
+    setDateRange(newDateRange)
+    setCurrentPage(1) // Reset to first page when filter changes
+
+    // Update URL and fetch
+    setTimeout(() => {
+      updateURL(1, sorting, newDateRange)
+      fetchPosts(1, pageSize, sorting, contentTypeFilter, newDateRange)
+    }, 0)
+  }, [pageSize, sorting, contentTypeFilter, updateURL, fetchPosts])
 
   // Sync state from URL params (for browser back/forward)
   useEffect(() => {
     const sortParam = searchParams.get('sort')
     const oldSortBy = searchParams.get('sortBy')
     const oldSortOrder = searchParams.get('sortOrder')
+    const dateFromParam = searchParams.get('dateFrom')
+    const dateToParam = searchParams.get('dateTo')
 
     let urlSorting: SortingState = []
 
@@ -180,23 +220,30 @@ function PostsPageContent() {
       urlSorting = [{ id: oldSortBy, desc: oldSortOrder === 'desc' }]
     }
 
-    // Check if URL sorting is different from current state
-    const isDifferent = JSON.stringify(urlSorting) !== JSON.stringify(sorting)
-
-    if (isDifferent) {
-      setSorting(urlSorting)
-      fetchPosts(currentPage, pageSize, urlSorting, contentTypeFilter)
+    const urlDateRange: DateRange = {
+      from: dateFromParam ? new Date(dateFromParam) : undefined,
+      to: dateToParam ? new Date(dateToParam) : undefined
     }
-  }, [searchParams, sorting, currentPage, pageSize, contentTypeFilter, fetchPosts])
+
+    // Check if URL state is different from current state
+    const sortingDifferent = JSON.stringify(urlSorting) !== JSON.stringify(sorting)
+    const dateDifferent = JSON.stringify(urlDateRange) !== JSON.stringify(dateRange)
+
+    if (sortingDifferent || dateDifferent) {
+      if (sortingDifferent) setSorting(urlSorting)
+      if (dateDifferent) setDateRange(urlDateRange)
+      fetchPosts(currentPage, pageSize, urlSorting, contentTypeFilter, urlDateRange)
+    }
+  }, [searchParams, sorting, dateRange, currentPage, pageSize, contentTypeFilter, fetchPosts])
 
   // Initial fetch
   useEffect(() => {
-    fetchPosts(initialPage, pageSize, initialSorting, contentTypeFilter)
+    fetchPosts(initialPage, pageSize, initialSorting, contentTypeFilter, initialDateRange)
   }, [])
 
   // Refetch when content type filter changes
   useEffect(() => {
-    fetchPosts(currentPage, pageSize, sorting, contentTypeFilter)
+    fetchPosts(currentPage, pageSize, sorting, contentTypeFilter, dateRange)
   }, [contentTypeFilter])
 
   // Get selected posts data for sidebar
@@ -247,6 +294,10 @@ function PostsPageContent() {
             contentTypeFilter={{
               value: contentTypeFilter,
               onChange: setContentTypeFilter
+            }}
+            dateRangeFilter={{
+              value: dateRange,
+              onChange: handleDateRangeChange
             }}
             onPageChange={handlePageChange}
             onSortingChange={handleSortingChange}

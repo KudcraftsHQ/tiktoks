@@ -19,6 +19,7 @@ import { PostAnalyticsSheet } from '@/components/PostAnalyticsSheet'
 import { SortingState } from '@tanstack/react-table'
 import { FileText, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { DateRange } from '@/components/DateRangeFilter'
 
 interface PostsTableProps {
   posts: TikTokPost[]
@@ -26,6 +27,10 @@ interface PostsTableProps {
   contentTypeFilter?: {
     value: 'all' | 'video' | 'photo'
     onChange: (value: 'all' | 'video' | 'photo') => void
+  }
+  dateRangeFilter?: {
+    value: DateRange
+    onChange: (range: DateRange) => void
   }
   onPageChange?: (pageIndex: number, pageSize: number) => void
   onSortingChange?: (sorting: SortingState) => void
@@ -42,6 +47,7 @@ export function PostsTable({
   posts,
   totalPosts,
   contentTypeFilter,
+  dateRangeFilter,
   onPageChange,
   onSortingChange,
   sorting,
@@ -256,6 +262,7 @@ export function PostsTable({
           searchPlaceholder="Search by author, description..."
           showPagination={true}
           contentTypeFilter={contentTypeFilter}
+          dateRangeFilter={dateRangeFilter}
           onPageChange={onPageChange}
           onSortingChange={onSortingChange}
           sorting={sorting}

@@ -4,15 +4,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { X, Filter } from 'lucide-react'
 import AuthorFilter from './AuthorFilter'
-import DateRangeFilter from './DateRangeFilter'
+import { DateRangeFilter, type DateRange } from './DateRangeFilter'
 import ImageCountFilter from './ImageCountFilter'
 import SortControls from './SortControls'
 
 export interface FilterState {
   authors: string[]
-  dateRange: 'all' | 'today' | 'week' | 'month' | 'quarter' | 'custom'
-  customDateStart?: Date
-  customDateEnd?: Date
+  dateRange: DateRange
   imageCount: {
     min?: number
     max?: number
@@ -37,7 +35,7 @@ export default function FilterPanel({
   const getActiveFilterCount = () => {
     let count = 0
     if (filters.authors.length > 0) count++
-    if (filters.dateRange !== 'all') count++
+    if (filters.dateRange.from || filters.dateRange.to) count++
     if (filters.imageCount.min || filters.imageCount.max) count++
     if (filters.sortBy !== 'newest') count++
     return count
@@ -46,7 +44,7 @@ export default function FilterPanel({
   const clearAllFilters = () => {
     onFiltersChange({
       authors: [],
-      dateRange: 'all',
+      dateRange: { from: undefined, to: undefined },
       imageCount: {},
       sortBy: 'newest'
     })
@@ -95,14 +93,10 @@ export default function FilterPanel({
         <div>
           <DateRangeFilter
             value={filters.dateRange}
-            customStart={filters.customDateStart}
-            customEnd={filters.customDateEnd}
-            onChange={(dateRange, customStart, customEnd) =>
+            onChange={(dateRange) =>
               onFiltersChange({
                 ...filters,
-                dateRange,
-                customDateStart: customStart,
-                customDateEnd: customEnd
+                dateRange
               })
             }
           />

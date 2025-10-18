@@ -15,6 +15,8 @@ export async function GET(
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100)
     const contentType = searchParams.get('contentType')
     const search = searchParams.get('search') || ''
+    const dateFrom = searchParams.get('dateFrom')
+    const dateTo = searchParams.get('dateTo')
     const includeHistory = searchParams.get('includeHistory') !== 'false' // Default to true
 
     // Parse sorting from URL - supports multi-column sorting
@@ -23,9 +25,9 @@ export async function GET(
     const sortParam = searchParams.get('sort')
     const oldSortBy = searchParams.get('sortBy')
     const oldSortOrder = searchParams.get('sortOrder')
-    
+
     let orderBy: any
-    
+
     if (sortParam) {
       // New format: multi-column sorting
       orderBy = sortParam.split(',').map(sort => {
@@ -47,6 +49,17 @@ export async function GET(
 
     if (contentType && ['video', 'photo'].includes(contentType)) {
       where.contentType = contentType
+    }
+
+    // Date range filtering on publishedAt
+    if (dateFrom || dateTo) {
+      where.publishedAt = {}
+      if (dateFrom) {
+        where.publishedAt.gte = new Date(dateFrom)
+      }
+      if (dateTo) {
+        where.publishedAt.lte = new Date(dateTo)
+      }
     }
 
     if (search) {
