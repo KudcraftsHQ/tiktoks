@@ -45,8 +45,9 @@ ENV NEXT_PUBLIC_MIDTRANS_CLIENT_KEY=${NEXT_PUBLIC_MIDTRANS_CLIENT_KEY}
 ENV NEXT_PUBLIC_MIDTRANS_BASE_URL=${NEXT_PUBLIC_MIDTRANS_BASE_URL}
 ENV NEXT_PUBLIC_MIDTRANS_API_BASE_URL=${NEXT_PUBLIC_MIDTRANS_API_BASE_URL}
 
-# Build with Next.js cache mount
-RUN --mount=type=cache,target=/app/.next/cache \
+# Build with Next.js cache mount and explicit cache IDs
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    --mount=type=cache,id=next-build-cache,target=/app/.next/cache \
     pnpm run build
 
 FROM base AS runner
