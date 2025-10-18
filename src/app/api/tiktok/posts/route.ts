@@ -340,6 +340,28 @@ export async function GET(request: NextRequest) {
         })
       }
 
+      // Parse hashtags and mentions from JSON strings
+      let hashtags = []
+      let mentions = []
+
+      try {
+        hashtags = typeof post.hashtags === 'string'
+          ? JSON.parse(post.hashtags || '[]')
+          : (Array.isArray(post.hashtags) ? post.hashtags : [])
+      } catch (error) {
+        console.warn('Failed to parse hashtags for post:', post.id, error)
+        hashtags = []
+      }
+
+      try {
+        mentions = typeof post.mentions === 'string'
+          ? JSON.parse(post.mentions || '[]')
+          : (Array.isArray(post.mentions) ? post.mentions : [])
+      } catch (error) {
+        console.warn('Failed to parse mentions for post:', post.id, error)
+        mentions = []
+      }
+
       return {
         ...post,
         viewCount: post.viewCount?.toString() || '0',
@@ -347,7 +369,9 @@ export async function GET(request: NextRequest) {
         coverUrl: presignedCoverUrls[index],
         musicUrl: presignedMusicUrls[index],
         authorAvatar: presignedAvatarUrls[index],
-        images: images
+        images: images,
+        hashtags: hashtags,
+        mentions: mentions
       }
     })
 

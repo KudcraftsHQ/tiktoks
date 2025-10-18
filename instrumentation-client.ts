@@ -8,7 +8,8 @@
 import * as Sentry from "@sentry/nextjs";
 
 Sentry.init({
-  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+  // Use environment variable if available, fallback to hardcoded DSN
+  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN || "https://29de806860ecdb2fa86f5b031a1e66cb@o1127849.ingest.us.sentry.io/4510185243738112",
 
   // Adjust this value in production, or use tracesSampler for greater control
   tracesSampleRate: 1.0,
@@ -22,8 +23,8 @@ Sentry.init({
   // - User info
   sendDefaultPii: true,
 
-  // Environment detection
-  environment: process.env.NODE_ENV || "development",
+  // Environment detection (default to production if not specified)
+  environment: process.env.NODE_ENV || "production",
 
   // Integrations for enhanced error tracking
   integrations: [
@@ -38,13 +39,22 @@ Sentry.init({
   replaysSessionSampleRate: 0.1, // 10% of sessions
   replaysOnErrorSampleRate: 1.0, // 100% of sessions with errors
 
-  // You can filter which errors are sent to Sentry
-  beforeSend(event, hint) {
-    // Don't send errors in development unless you want to test
+  // Filter which errors are sent to Sentry
+  beforeSend(event, _hint) {
+    // Always log errors to console for debugging
     if (process.env.NODE_ENV === "development") {
-      console.log("Sentry Error (dev - not sent):", event);
-      return null;
+      console.log("🐛 Sentry Client Error (dev - not sent to Sentry):", {
+        message: event.message,
+        exception: event.exception,
+        level: event.level,
+        tags: event.tags,
+        contexts: event.contexts
+      });
+      return null; // Don't send to Sentry in development
     }
+
+    // In production, log that we're sending to Sentry
+    console.log("📡 Sending error to Sentry:", event.message || event.exception);
     return event;
   },
 });

@@ -31,7 +31,7 @@ export function initSentryWorker() {
     environment: process.env.NODE_ENV || "development",
 
     // You can filter which errors are sent to Sentry
-    beforeSend(event, hint) {
+    beforeSend(event, _hint) {
       // Don't send errors in development unless you want to test
       if (process.env.NODE_ENV === "development") {
         console.log("Sentry Error (dev - not sent):", event);

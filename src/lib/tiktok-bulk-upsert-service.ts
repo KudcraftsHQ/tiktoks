@@ -20,6 +20,23 @@ function chunkArray<T>(array: T[], size: number): T[][] {
 }
 
 /**
+ * Sanitize a string to remove problematic characters and escape sequences
+ */
+function sanitizeString(str: string | null | undefined): string | null | undefined {
+  if (!str || typeof str !== 'string') return str
+
+  return str
+    // Remove control characters
+    .replace(/[\x00-\x1F\x7F]/g, '')
+    // Remove invalid hex escape sequences (e.g., \x followed by non-hex or incomplete)
+    .replace(/\\x(?![0-9A-Fa-f]{2})/g, '')
+    // Remove lone backslashes that aren't part of valid escape sequences
+    .replace(/\\(?!["\\/bfnrtu])/g, '')
+    // Remove any remaining problematic Unicode sequences
+    .replace(/[\uD800-\uDFFF]/g, '')
+}
+
+/**
  * Safely stringify data with proper Unicode handling
  */
 function safeStringify(data: any): string {
@@ -27,8 +44,7 @@ function safeStringify(data: any): string {
     // Use replacer to handle potentially problematic characters
     return JSON.stringify(data, (key, value) => {
       if (typeof value === 'string') {
-        // Ensure all strings are valid UTF-8
-        return value.replace(/[\x00-\x1F\x7F]/g, '')
+        return sanitizeString(value)
       }
       return value
     })
@@ -223,15 +239,15 @@ export class TikTokBulkUpsertService {
         where: { handle: profileData.handle },
         create: {
           handle: profileData.handle,
-          nickname: profileData.nickname,
+          nickname: sanitizeString(profileData.nickname),
           avatarId: profileAvatarId,
-          bio: profileData.bio,
+          bio: sanitizeString(profileData.bio),
           verified: profileData.verified || false
         },
         update: {
-          nickname: profileData.nickname,
+          nickname: sanitizeString(profileData.nickname),
           avatarId: profileAvatarId,
-          bio: profileData.bio,
+          bio: sanitizeString(profileData.bio),
           verified: profileData.verified || false,
           updatedAt: new Date()
         }
@@ -262,9 +278,9 @@ export class TikTokBulkUpsertService {
               profileId: profile.id,
               tiktokUrl: postData.tiktokUrl,
               contentType: postData.contentType,
-              title: postData.title,
-              description: postData.description,
-              authorNickname: postData.authorNickname,
+              title: sanitizeString(postData.title),
+              description: sanitizeString(postData.description),
+              authorNickname: sanitizeString(postData.authorNickname),
               authorHandle: postData.authorHandle,
               authorAvatarId: cachedMedia.cachedAuthorAvatar,
               hashtags: safeStringify(postData.hashtags),
@@ -286,9 +302,9 @@ export class TikTokBulkUpsertService {
             const postUpdateData = {
               tiktokUrl: postData.tiktokUrl,
               contentType: postData.contentType,
-              title: postData.title,
-              description: postData.description,
-              authorNickname: postData.authorNickname,
+              title: sanitizeString(postData.title),
+              description: sanitizeString(postData.description),
+              authorNickname: sanitizeString(postData.authorNickname),
               authorHandle: postData.authorHandle,
               // Reuse existing cache IDs for updates (don't overwrite)
               hashtags: safeStringify(postData.hashtags),
@@ -304,18 +320,55 @@ export class TikTokBulkUpsertService {
               updatedAt: new Date()
             }
 
-            await tx.tiktokPost.upsert({
-              where: { tiktokId: postData.tiktokId },
-              create: postCreateData,
-              update: postUpdateData
-            })
+            try {
+              await tx.tiktokPost.upsert({
+                where: { tiktokId: postData.tiktokId },
+                create: postCreateData,
+                update: postUpdateData
+              })
 
-            if (isNew) {
-              createdCount++
-              console.log(`➕ [BulkUpsertService] Created post: ${postData.tiktokId}`)
-            } else {
-              updatedCount++
-              console.log(`📝 [BulkUpsertService] Updated post: ${postData.tiktokId}`)
+              if (isNew) {
+                createdCount++
+                console.log(`➕ [BulkUpsertService] Created post: ${postData.tiktokId}`)
+              } else {
+                updatedCount++
+                console.log(`📝 [BulkUpsertService] Updated post: ${postData.tiktokId}`)
+              }
+            } catch (upsertError) {
+              console.error(`❌ [BulkUpsertService] Failed to upsert post ${postData.tiktokId}:`, upsertError)
+
+              // Capture error with full context in Sentry
+              try {
+                const Sentry = await import('@sentry/node')
+                Sentry.withScope((scope) => {
+                  scope.setTag('error-type', 'post-upsert-failed')
+                  scope.setTag('tiktok-id', postData.tiktokId)
+                  scope.setTag('content-type', postData.contentType)
+                  scope.setContext('post-data', {
+                    tiktokId: postData.tiktokId,
+                    tiktokUrl: postData.tiktokUrl,
+                    contentType: postData.contentType,
+                    title: postData.title,
+                    description: postData.description,
+                    authorHandle: postData.authorHandle,
+                    hashtags: postData.hashtags,
+                    mentions: postData.mentions,
+                    isNew
+                  })
+                  scope.setContext('sanitized-data', {
+                    title: sanitizeString(postData.title),
+                    description: sanitizeString(postData.description),
+                    hashtags: safeStringify(postData.hashtags),
+                    mentions: safeStringify(postData.mentions)
+                  })
+                  Sentry.captureException(upsertError)
+                })
+              } catch (sentryError) {
+                console.error('Failed to send error to Sentry:', sentryError)
+              }
+
+              // Re-throw to fail the transaction
+              throw upsertError
             }
           })
         )

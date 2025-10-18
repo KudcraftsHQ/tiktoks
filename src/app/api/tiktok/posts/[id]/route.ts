@@ -73,6 +73,28 @@ export async function GET(
       imageUrls = await cacheAssetService.getUrls(cacheAssetIds)
     }
 
+    // Parse hashtags and mentions from JSON strings
+    let hashtags = []
+    let mentions = []
+
+    try {
+      hashtags = typeof post.hashtags === 'string'
+        ? JSON.parse(post.hashtags || '[]')
+        : (Array.isArray(post.hashtags) ? post.hashtags : [])
+    } catch (error) {
+      console.warn('Failed to parse hashtags for post:', post.id, error)
+      hashtags = []
+    }
+
+    try {
+      mentions = typeof post.mentions === 'string'
+        ? JSON.parse(post.mentions || '[]')
+        : (Array.isArray(post.mentions) ? post.mentions : [])
+    } catch (error) {
+      console.warn('Failed to parse mentions for post:', post.id, error)
+      mentions = []
+    }
+
     // Format the response
     const response = {
       id: post.id,
@@ -102,8 +124,8 @@ export async function GET(
       ocrProcessedAt: post.ocrProcessedAt,
 
       // Hashtags and mentions
-      hashtags: post.hashtags,
-      mentions: post.mentions,
+      hashtags: hashtags,
+      mentions: mentions,
 
       // Engagement metrics
       viewCount: post.viewCount ? post.viewCount.toString() : null,
