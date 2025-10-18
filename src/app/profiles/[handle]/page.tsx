@@ -393,6 +393,10 @@ function ProfileDetailPageContent() {
     setSelectedPosts(new Set())
   }
 
+  const handleRestorePosts = (postIds: string[]) => {
+    setSelectedPosts(new Set(postIds))
+  }
+
   // Handle sorting change with URL update
   const handleSortingChange = useCallback((updaterOrValue: SortingState | ((old: SortingState) => SortingState)) => {
     const newSorting = typeof updaterOrValue === 'function'
@@ -721,6 +725,7 @@ function ProfileDetailPageContent() {
         selectedPosts={selectedPostsData}
         onRemovePost={handleRemovePost}
         onClearSelection={handleClearSelection}
+        onRestorePosts={handleRestorePosts}
       />
     </div>
   )

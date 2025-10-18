@@ -347,6 +347,24 @@ model ProfileMonitoringLog {
   @@index([status])
 }
 
+// AI Conversations for chat with data feature
+
+model Conversation {
+  id               String   @id @default(cuid())
+  title            String?
+  selectedPostIds  String[]
+  messages         Json     // Array of Message objects
+  currentModel     String   @default("gemini-2.5-flash")
+  totalInputTokens  Int     @default(0)
+  totalOutputTokens Int     @default(0)
+  totalCost        Float    @default(0.0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("conversations")
+  @@index([updatedAt])
+}
+
 // TikTok Upload Accounts for OAuth-connected accounts used as upload destinations
 
 model TiktokUploadAccount {
