@@ -117,6 +117,9 @@ export async function POST(request: NextRequest) {
     let streamedText = ""
     let thinkingContent = ""
 
+    // Estimate user prompt tokens (rough approximation: ~4 chars per token)
+    const estimatedUserPromptTokens = Math.ceil(prompt.length / 4)
+
     // Create a ReadableStream to send to the client
     const customStream = new ReadableStream({
       async start(controller) {
@@ -145,16 +148,24 @@ export async function POST(request: NextRequest) {
 
           // Extract usage metadata from result
           const usage = await result.usage
-          const inputTokens = (usage as any)?.promptTokens || (usage as any)?.input_tokens || 0
+          const totalInputTokens = (usage as any)?.promptTokens || (usage as any)?.input_tokens || 0
           const outputTokens = (usage as any)?.completionTokens || (usage as any)?.output_tokens || 0
-          const cost = calculateCost(model, inputTokens, outputTokens)
 
-          // Send usage information
+          // Calculate context tokens (everything except the user's current prompt)
+          // This includes previous messages, OCR data, and system prompt
+          const contextTokens = Math.max(0, totalInputTokens - estimatedUserPromptTokens)
+
+          // Calculate costs for each part
+          const contextCost = calculateCost(model, contextTokens, 0)
+          const responseCost = calculateCost(model, 0, outputTokens)
+          const totalCost = contextCost + responseCost
+
+          // Send usage information (total tokens consumed in this API call)
           const usageData = JSON.stringify({
             type: "usage",
-            inputTokens,
+            inputTokens: totalInputTokens,
             outputTokens,
-            cost,
+            cost: totalCost,
           })
           controller.enqueue(encoder.encode(`data: ${usageData}\n\n`))
 
@@ -163,24 +174,26 @@ export async function POST(request: NextRequest) {
             existingConversation?.title ||
             prompt.substring(0, 50).trim() + "..."
 
-          const newMessage: Message = {
+          // User message contains the context (previous messages + OCR data + system prompt)
+          const userMessage: Message = {
             role: "user",
             content: prompt,
             model,
-            inputTokens: 0,
+            inputTokens: contextTokens,
             outputTokens: 0,
-            cost: 0,
+            cost: contextCost,
             timestamp: new Date().toISOString(),
           }
 
+          // Assistant message contains only the response tokens and cost
           const assistantMessage: Message = {
             role: "assistant",
             content: streamedText,
             thinking: thinkingContent || undefined,
             model,
-            inputTokens,
+            inputTokens: 0, // Assistant doesn't consume input tokens, only outputs
             outputTokens,
-            cost,
+            cost: responseCost,
             timestamp: new Date().toISOString(),
           }
 
@@ -200,13 +213,13 @@ export async function POST(request: NextRequest) {
                 timestamp: m.timestamp,
               })),
               {
-                role: newMessage.role,
-                content: newMessage.content,
-                model: newMessage.model,
-                inputTokens: newMessage.inputTokens,
-                outputTokens: newMessage.outputTokens,
-                cost: newMessage.cost,
-                timestamp: newMessage.timestamp,
+                role: userMessage.role,
+                content: userMessage.content,
+                model: userMessage.model,
+                inputTokens: userMessage.inputTokens,
+                outputTokens: userMessage.outputTokens,
+                cost: userMessage.cost,
+                timestamp: userMessage.timestamp,
               },
               {
                 role: assistantMessage.role,
@@ -219,12 +232,14 @@ export async function POST(request: NextRequest) {
                 timestamp: assistantMessage.timestamp,
               },
             ]
+            // Only add the cost from THIS API call (context + response)
+            // Don't re-add previous message costs since they're already in totalCost
             const newTotalInputTokens =
-              existingConversation.totalInputTokens + inputTokens
+              existingConversation.totalInputTokens + contextTokens
             const newTotalOutputTokens =
               existingConversation.totalOutputTokens + outputTokens
             const newTotalCost =
-              (existingConversation.totalCost || 0) + cost
+              (existingConversation.totalCost || 0) + totalCost
 
             savedConversation = await prisma.conversation.update({
               where: { id: conversationId },
@@ -241,13 +256,13 @@ export async function POST(request: NextRequest) {
             // Create new conversation
             const messagesData: Record<string, any>[] = [
               {
-                role: newMessage.role,
-                content: newMessage.content,
-                model: newMessage.model,
-                inputTokens: newMessage.inputTokens,
-                outputTokens: newMessage.outputTokens,
-                cost: newMessage.cost,
-                timestamp: newMessage.timestamp,
+                role: userMessage.role,
+                content: userMessage.content,
+                model: userMessage.model,
+                inputTokens: userMessage.inputTokens,
+                outputTokens: userMessage.outputTokens,
+                cost: userMessage.cost,
+                timestamp: userMessage.timestamp,
               },
               {
                 role: assistantMessage.role,
@@ -266,9 +281,9 @@ export async function POST(request: NextRequest) {
                 selectedPostIds: postIds,
                 messages: messagesData,
                 currentModel: model,
-                totalInputTokens: inputTokens,
+                totalInputTokens: contextTokens,
                 totalOutputTokens: outputTokens,
-                totalCost: cost,
+                totalCost: totalCost,
               },
             })
           }
@@ -285,7 +300,7 @@ export async function POST(request: NextRequest) {
           controller.close()
 
           console.log(
-            `✅ [Analysis] Completed analysis (${inputTokens} input, ${outputTokens} output tokens, ${formatCost(cost)})`
+            `✅ [Analysis] Completed analysis (${contextTokens} context, ${outputTokens} output tokens, ${formatCost(totalCost)})`
           )
         } catch (error) {
           console.error("❌ [Analysis] Stream error:", error)
