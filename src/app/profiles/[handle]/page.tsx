@@ -22,7 +22,8 @@ import {
   Play,
   Eye,
   ChevronLeft,
-  Sparkles
+  Sparkles,
+  Clipboard
 } from 'lucide-react'
 import { TikTokPost } from '@/components/posts-table-columns'
 import { TikTokProfile } from '@/components/profiles-table-columns'
@@ -36,6 +37,12 @@ import { ContentAnalysisSidebar } from '@/components/ContentAnalysisSidebar'
 import { cn } from '@/lib/utils'
 import { DateRange } from '@/components/DateRangeFilter'
 import { PostingTimeChart, PostingTimeChartData, PostingTimeChartBestTime } from '@/components/PostingTimeChart'
+import {
+  calculateAggregateMetrics,
+  calculateTimeAnalysis,
+  calculateActivityData,
+  getFirstPostDate
+} from '@/lib/metrics-calculator'
 
 interface ProfilePostsResult {
   posts: TikTokPost[]
@@ -118,6 +125,50 @@ function ProfileDetailPageContent() {
   //     setIsAnalysisSidebarOpen(false)
   //   }
   // }, [selectedPosts])
+
+  // Compute metrics from selected posts when selection exists
+  const selectedPostsForMetrics = useMemo(() => {
+    if (selectedPosts.size === 0) return null
+    return posts.filter(p => selectedPosts.has(p.id))
+  }, [posts, selectedPosts])
+
+  // Display metrics: use selected posts metrics if available, otherwise use profile-level metrics
+  const displayMetrics = useMemo(() => {
+    if (!selectedPostsForMetrics) {
+      // Use profile-level metrics
+      return {
+        totalPosts: profile?.totalPosts || 0,
+        totalViews: parseInt(profile?.totalViews?.toString() || '0'),
+        totalLikes: parseInt(profile?.totalLikes?.toString() || '0'),
+        totalComments: parseInt(profile?.totalComments?.toString() || '0'),
+        totalShares: parseInt(profile?.totalShares?.toString() || '0'),
+        avgViews: profile?.totalPosts && profile.totalPosts > 0
+          ? Math.round(parseInt(profile.totalViews?.toString() || '0') / profile.totalPosts)
+          : 0
+      }
+    }
+    return calculateAggregateMetrics(selectedPostsForMetrics)
+  }, [selectedPostsForMetrics, profile])
+
+  // Display time analysis: use selected posts data if available
+  const displayTimeAnalysis = useMemo(() => {
+    if (!selectedPostsForMetrics) return timeAnalysisData
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const result = calculateTimeAnalysis(selectedPostsForMetrics, timezone)
+    return result
+  }, [selectedPostsForMetrics, timeAnalysisData])
+
+  // Display activity data: use selected posts data if available
+  const displayActivityData = useMemo(() => {
+    if (!selectedPostsForMetrics) return activityData
+    return calculateActivityData(selectedPostsForMetrics)
+  }, [selectedPostsForMetrics, activityData])
+
+  // Display first post date: use selected posts data if available
+  const displayFirstPostDate = useMemo(() => {
+    if (!selectedPostsForMetrics) return firstPostDate
+    return getFirstPostDate(selectedPostsForMetrics)
+  }, [selectedPostsForMetrics, firstPostDate])
 
   // Update URL with current state
   const updateURL = useCallback((page: number, sort: SortingState, dateFilter: DateRange) => {
@@ -449,6 +500,71 @@ function ProfileDetailPageContent() {
     setSelectedPosts(new Set(postIds))
   }
 
+  const [isCopyingToClipboard, setIsCopyingToClipboard] = useState(false)
+
+  const handleCopyToClipboard = useCallback(async () => {
+    if (selectedPosts.size === 0) return
+
+    setIsCopyingToClipboard(true)
+    try {
+      // Filter selected posts from the posts array
+      const selectedPostsData = posts.filter(p => selectedPosts.has(p.id))
+
+      // Format posts data
+      const formattedPosts = selectedPostsData.map(post => ({
+        id: post.id,
+        description: post.description || '',
+        contentType: post.contentType,
+        createTime: post.publishedAt,
+        metrics: {
+          views: post.viewCount || 0,
+          likes: post.likeCount || 0,
+          comments: post.commentCount || 0,
+          shares: post.shareCount || 0,
+          plays: post.duration ? Math.ceil(post.viewCount / (post.duration / 60)) : 0
+        },
+        author: {
+          handle: post.authorHandle || 'unknown',
+          avatarId: post.authorAvatarId || null
+        },
+        media: {
+          videoId: post.videoId || null,
+          coverId: post.coverId || null,
+          musicId: post.musicId || null,
+          images: (post.images || []).map(img => ({
+            imageId: img.cacheAssetId || null,
+            ocrText: post.ocrTexts?.[img.cacheAssetId] || undefined
+          }))
+        },
+        ocrText: post.ocrTexts ? Object.values(post.ocrTexts).filter(Boolean).join('\n') : null
+      }))
+
+      // Create JSON data structure
+      const clipboardData = {
+        posts: formattedPosts,
+        summary: {
+          totalPosts: formattedPosts.length,
+          exportedAt: new Date().toISOString()
+        }
+      }
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(JSON.stringify(clipboardData, null, 2))
+
+      // Show success toast
+      toast.success(`Copied ${selectedPosts.size} post${selectedPosts.size !== 1 ? 's' : ''} to clipboard`, {
+        description: 'Post data is ready to paste'
+      })
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error)
+      toast.error('Failed to copy to clipboard', {
+        description: 'Please try again'
+      })
+    } finally {
+      setIsCopyingToClipboard(false)
+    }
+  }, [selectedPosts, posts])
+
   // Handle sorting change with URL update
   const handleSortingChange = useCallback((updaterOrValue: SortingState | ((old: SortingState) => SortingState)) => {
     const newSorting = typeof updaterOrValue === 'function'
@@ -603,7 +719,16 @@ function ProfileDetailPageContent() {
           </div>
         }
       headerActions={
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={handleCopyToClipboard}
+            disabled={selectedPosts.size === 0 || isCopyingToClipboard}
+            size="sm"
+          >
+            <Clipboard className="h-4 w-4 mr-2" />
+            Copy {selectedPosts.size > 0 && `(${selectedPosts.size})`}
+          </Button>
           <Button
             variant={isAnalysisSidebarOpen ? "default" : "outline"}
             onClick={() => setIsAnalysisSidebarOpen(!isAnalysisSidebarOpen)}
@@ -654,7 +779,7 @@ function ProfileDetailPageContent() {
                 </div>
                 <span className="text-sm text-muted-foreground">Posts</span>
               </div>
-              <div className="text-2xl font-bold">{formatNumber(profile.totalPosts)}</div>
+              <div className="text-2xl font-bold">{formatNumber(displayMetrics.totalPosts)}</div>
             </div>
             <div className="rounded-lg border border-border bg-card p-3">
               <div className="flex items-center gap-2 mb-2">
@@ -663,7 +788,7 @@ function ProfileDetailPageContent() {
                 </div>
                 <span className="text-sm text-muted-foreground">Views</span>
               </div>
-              <div className="text-2xl font-bold">{formatNumber(parseInt(profile.totalViews?.toString() || '0'))}</div>
+              <div className="text-2xl font-bold">{formatNumber(displayMetrics.totalViews)}</div>
             </div>
             <div className="rounded-lg border border-border bg-card p-3">
               <div className="flex items-center gap-2 mb-2">
@@ -673,9 +798,7 @@ function ProfileDetailPageContent() {
                 <span className="text-sm text-muted-foreground">Avg Views</span>
               </div>
               <div className="text-2xl font-bold">
-                {profile.totalPosts && profile.totalPosts > 0
-                  ? formatNumber(Math.round(parseInt(profile.totalViews?.toString() || '0') / profile.totalPosts))
-                  : '0'}
+                {formatNumber(displayMetrics.avgViews)}
               </div>
             </div>
             <div className="rounded-lg border border-border bg-card p-3">
@@ -685,7 +808,7 @@ function ProfileDetailPageContent() {
                 </div>
                 <span className="text-sm text-muted-foreground">Likes</span>
               </div>
-              <div className="text-2xl font-bold">{formatNumber(parseInt(profile.totalLikes?.toString() || '0'))}</div>
+              <div className="text-2xl font-bold">{formatNumber(displayMetrics.totalLikes)}</div>
             </div>
             <div className="rounded-lg border border-border bg-card p-3">
               <div className="flex items-center gap-2 mb-2">
@@ -694,7 +817,7 @@ function ProfileDetailPageContent() {
                 </div>
                 <span className="text-sm text-muted-foreground">Comments</span>
               </div>
-              <div className="text-2xl font-bold">{formatNumber(parseInt(profile.totalComments?.toString() || '0'))}</div>
+              <div className="text-2xl font-bold">{formatNumber(displayMetrics.totalComments)}</div>
             </div>
             <div className="rounded-lg border border-border bg-card p-3">
               <div className="flex items-center gap-2 mb-2">
@@ -703,7 +826,7 @@ function ProfileDetailPageContent() {
                 </div>
                 <span className="text-sm text-muted-foreground">Saved</span>
               </div>
-              <div className="text-2xl font-bold">{formatNumber(parseInt(profile.totalShares?.toString() || '0'))}</div>
+              <div className="text-2xl font-bold">{formatNumber(displayMetrics.totalShares)}</div>
             </div>
           </div>
 
@@ -721,7 +844,7 @@ function ProfileDetailPageContent() {
                 </div>
               </div>
             ) : (
-              <PostingActivityHeatmap data={activityData} firstPostDate={firstPostDate} />
+              <PostingActivityHeatmap data={displayActivityData} firstPostDate={displayFirstPostDate} />
             )}
             {/* Posting Time Analysis Chart */}
             {timeAnalysisLoading ? (
@@ -735,10 +858,10 @@ function ProfileDetailPageContent() {
                   </div>
                 </div>
               </div>
-            ) : timeAnalysisData ? (
+            ) : displayTimeAnalysis ? (
               <PostingTimeChart
-                data={timeAnalysisData.hourlyData}
-                bestTimes={timeAnalysisData.bestTimes}
+                data={displayTimeAnalysis.hourlyData}
+                bestTimes={displayTimeAnalysis.bestTimes}
                 loading={false}
               />
             ) : null}

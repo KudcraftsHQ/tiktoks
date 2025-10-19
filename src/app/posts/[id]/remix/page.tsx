@@ -529,7 +529,7 @@ export default function RemixPage({ params }: RemixPageProps) {
                             {/* Text Content */}
                             <div className="bg-muted/30 rounded p-2 text-xs">
                               <p className="text-foreground leading-relaxed">
-                                {slide.text ? slide.text.substring(0, 150) + (slide.text.length > 150 ? '...' : '') : 'No text available'}
+                                {slide.text || 'No text available'}
                               </p>
                             </div>
                           </div>

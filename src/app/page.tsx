@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +10,7 @@ import {
   Eye,
   Heart,
   Users,
+  Clipboard,
 } from 'lucide-react'
 import { PostsTable } from '@/components/PostsTable'
 import { Card, CardContent } from '@/components/ui/card'
@@ -23,6 +24,12 @@ import { cn } from '@/lib/utils'
 import { DateRange } from '@/components/DateRangeFilter'
 import { PostingTimeChart, PostingTimeChartData, PostingTimeChartBestTime } from '@/components/PostingTimeChart'
 import { PostingActivityHeatmap } from '@/components/PostingActivityHeatmap'
+import {
+  calculateAggregateMetrics,
+  calculateTimeAnalysis,
+  calculateActivityData,
+  getFirstPostDate
+} from '@/lib/metrics-calculator'
 
 interface PostsResponse {
   posts: TikTokPost[]
@@ -116,6 +123,38 @@ function PostsPageContent() {
   //     setIsAnalysisSidebarOpen(false)
   //   }
   // }, [selectedPosts])
+
+  // Compute metrics from selected posts when selection exists
+  const selectedPostsForMetrics = useMemo(() => {
+    if (selectedPosts.size === 0) return null
+    return posts.filter(p => selectedPosts.has(p.id))
+  }, [posts, selectedPosts])
+
+  // Display metrics: use selected posts metrics if available, otherwise use all posts metrics
+  const displayMetrics = useMemo(() => {
+    if (!selectedPostsForMetrics) return aggregateMetrics
+    return calculateAggregateMetrics(selectedPostsForMetrics)
+  }, [selectedPostsForMetrics, aggregateMetrics])
+
+  // Display time analysis: use selected posts data if available
+  const displayTimeAnalysis = useMemo(() => {
+    if (!selectedPostsForMetrics) return timeAnalysis
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const result = calculateTimeAnalysis(selectedPostsForMetrics, timezone)
+    return result
+  }, [selectedPostsForMetrics, timeAnalysis])
+
+  // Display activity data: use selected posts data if available
+  const displayActivityData = useMemo(() => {
+    if (!selectedPostsForMetrics) return activityData
+    return calculateActivityData(selectedPostsForMetrics)
+  }, [selectedPostsForMetrics, activityData])
+
+  // Display first post date: use selected posts data if available
+  const displayFirstPostDate = useMemo(() => {
+    if (!selectedPostsForMetrics) return firstPostDate
+    return getFirstPostDate(selectedPostsForMetrics)
+  }, [selectedPostsForMetrics, firstPostDate])
 
   // Update URL with current state
   const updateURL = useCallback((page: number, sort: SortingState, dateFilter: DateRange) => {
@@ -323,6 +362,71 @@ function PostsPageContent() {
     setSelectedPosts(new Set())
   }
 
+  const [isCopyingToClipboard, setIsCopyingToClipboard] = useState(false)
+
+  const handleCopyToClipboard = useCallback(async () => {
+    if (selectedPosts.size === 0) return
+
+    setIsCopyingToClipboard(true)
+    try {
+      // Filter selected posts from the posts array
+      const selectedPostsData = posts.filter(p => selectedPosts.has(p.id))
+
+      // Format posts data
+      const formattedPosts = selectedPostsData.map(post => ({
+        id: post.id,
+        description: post.description || '',
+        contentType: post.contentType,
+        createTime: post.publishedAt,
+        metrics: {
+          views: post.viewCount || 0,
+          likes: post.likeCount || 0,
+          comments: post.commentCount || 0,
+          shares: post.shareCount || 0,
+          plays: post.duration ? Math.ceil(post.viewCount / (post.duration / 60)) : 0
+        },
+        author: {
+          handle: post.authorHandle || 'unknown',
+          avatarId: post.authorAvatarId || null
+        },
+        media: {
+          videoId: post.videoId || null,
+          coverId: post.coverId || null,
+          musicId: post.musicId || null,
+          images: (post.images || []).map(img => ({
+            imageId: img.cacheAssetId || null,
+            ocrText: post.ocrTexts?.[img.cacheAssetId] || undefined
+          }))
+        },
+        ocrText: post.ocrTexts ? Object.values(post.ocrTexts).filter(Boolean).join('\n') : null
+      }))
+
+      // Create JSON data structure
+      const clipboardData = {
+        posts: formattedPosts,
+        summary: {
+          totalPosts: formattedPosts.length,
+          exportedAt: new Date().toISOString()
+        }
+      }
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(JSON.stringify(clipboardData, null, 2))
+
+      // Show success toast
+      toast.success(`Copied ${selectedPosts.size} post${selectedPosts.size !== 1 ? 's' : ''} to clipboard`, {
+        description: 'Post data is ready to paste'
+      })
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error)
+      toast.error('Failed to copy to clipboard', {
+        description: 'Please try again'
+      })
+    } finally {
+      setIsCopyingToClipboard(false)
+    }
+  }, [selectedPosts, posts])
+
   const formatNumber = (num?: number | null): string => {
     if (!num) return '0'
     if (num >= 1000000) {
@@ -341,20 +445,31 @@ function PostsPageContent() {
           title="TikTok Posts"
           description="Manage your imported TikTok content and create remixes"
           headerActions={
-            <Button
-              variant={isAnalysisSidebarOpen ? "default" : "outline"}
-              onClick={() => setIsAnalysisSidebarOpen(!isAnalysisSidebarOpen)}
-              className="w-full sm:w-auto"
-            >
-              <Sparkles className="h-4 w-4 mr-2" />
-              Chat with Data {selectedPosts.size > 0 && `(${selectedPosts.size})`}
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <Button
+                variant="outline"
+                onClick={handleCopyToClipboard}
+                disabled={selectedPosts.size === 0 || isCopyingToClipboard}
+                className="w-full sm:w-auto"
+              >
+                <Clipboard className="h-4 w-4 mr-2" />
+                Copy to Clipboard {selectedPosts.size > 0 && `(${selectedPosts.size})`}
+              </Button>
+              <Button
+                variant={isAnalysisSidebarOpen ? "default" : "outline"}
+                onClick={() => setIsAnalysisSidebarOpen(!isAnalysisSidebarOpen)}
+                className="w-full sm:w-auto"
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                Chat with Data {selectedPosts.size > 0 && `(${selectedPosts.size})`}
+              </Button>
+            </div>
           }
         >
           {/* Metrics and Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr_1fr] gap-4">
             {/* Metrics Grid - 2x3 */}
-            {isLoading && !aggregateMetrics ? (
+            {isLoading && !displayMetrics ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {[...Array(6)].map((_, i) => (
                   <div key={i} className="rounded-lg border border-border bg-card p-3">
@@ -375,7 +490,7 @@ function PostsPageContent() {
                     </div>
                     <span className="text-sm text-muted-foreground">Posts</span>
                   </div>
-                  <div className="text-2xl font-bold">{formatNumber(aggregateMetrics?.totalPosts)}</div>
+                  <div className="text-2xl font-bold">{formatNumber(displayMetrics?.totalPosts)}</div>
                 </div>
                 <div className="rounded-lg border border-border bg-card p-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -384,7 +499,7 @@ function PostsPageContent() {
                     </div>
                     <span className="text-sm text-muted-foreground">Views</span>
                   </div>
-                  <div className="text-2xl font-bold">{formatNumber(aggregateMetrics?.totalViews)}</div>
+                  <div className="text-2xl font-bold">{formatNumber(displayMetrics?.totalViews)}</div>
                 </div>
                 <div className="rounded-lg border border-border bg-card p-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -393,7 +508,7 @@ function PostsPageContent() {
                     </div>
                     <span className="text-sm text-muted-foreground">Avg Views</span>
                   </div>
-                  <div className="text-2xl font-bold">{formatNumber(aggregateMetrics?.avgViews)}</div>
+                  <div className="text-2xl font-bold">{formatNumber(displayMetrics?.avgViews)}</div>
                 </div>
                 <div className="rounded-lg border border-border bg-card p-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -402,7 +517,7 @@ function PostsPageContent() {
                     </div>
                     <span className="text-sm text-muted-foreground">Likes</span>
                   </div>
-                  <div className="text-2xl font-bold">{formatNumber(aggregateMetrics?.totalLikes)}</div>
+                  <div className="text-2xl font-bold">{formatNumber(displayMetrics?.totalLikes)}</div>
                 </div>
                 <div className="rounded-lg border border-border bg-card p-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -411,7 +526,7 @@ function PostsPageContent() {
                     </div>
                     <span className="text-sm text-muted-foreground">Comments</span>
                   </div>
-                  <div className="text-2xl font-bold">{formatNumber(aggregateMetrics?.totalComments)}</div>
+                  <div className="text-2xl font-bold">{formatNumber(displayMetrics?.totalComments)}</div>
                 </div>
                 <div className="rounded-lg border border-border bg-card p-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -420,19 +535,19 @@ function PostsPageContent() {
                     </div>
                     <span className="text-sm text-muted-foreground">Saved</span>
                   </div>
-                  <div className="text-2xl font-bold">{formatNumber(aggregateMetrics?.totalShares)}</div>
+                  <div className="text-2xl font-bold">{formatNumber(displayMetrics?.totalShares)}</div>
                 </div>
               </div>
             )}
 
             {/* Posting Activity Heatmap */}
-            <PostingActivityHeatmap data={activityData} firstPostDate={firstPostDate} />
+            <PostingActivityHeatmap data={displayActivityData} firstPostDate={displayFirstPostDate} />
 
             {/* Posting Time Chart */}
             <PostingTimeChart
-              data={timeAnalysis?.hourlyData || []}
-              bestTimes={timeAnalysis?.bestTimes || []}
-              loading={isLoading && !timeAnalysis}
+              data={displayTimeAnalysis?.hourlyData || []}
+              bestTimes={displayTimeAnalysis?.bestTimes || []}
+              loading={isLoading && !displayTimeAnalysis}
             />
           </div>
 
