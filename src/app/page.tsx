@@ -6,6 +6,10 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
   Sparkles,
+  Video,
+  Eye,
+  Heart,
+  Users,
 } from 'lucide-react'
 import { PostsTable } from '@/components/PostsTable'
 import { Card, CardContent } from '@/components/ui/card'
@@ -17,6 +21,8 @@ import { SortingState } from '@tanstack/react-table'
 import { ContentAnalysisSidebar } from '@/components/ContentAnalysisSidebar'
 import { cn } from '@/lib/utils'
 import { DateRange } from '@/components/DateRangeFilter'
+import { PostingTimeChart, PostingTimeChartData, PostingTimeChartBestTime } from '@/components/PostingTimeChart'
+import { PostingActivityHeatmap } from '@/components/PostingActivityHeatmap'
 
 interface PostsResponse {
   posts: TikTokPost[]
@@ -24,6 +30,20 @@ interface PostsResponse {
   total: number
   page: number
   limit: number
+  timeAnalysis?: {
+    hourlyData: PostingTimeChartData[]
+    bestTimes: PostingTimeChartBestTime[]
+  }
+  aggregateMetrics?: {
+    totalPosts: number
+    totalViews: number
+    totalLikes: number
+    totalComments: number
+    totalShares: number
+    avgViews: number
+  }
+  activityData?: Array<{ date: string; count: number }>
+  firstPostDate?: string | null
   error?: string
 }
 
@@ -71,6 +91,20 @@ function PostsPageContent() {
   const [sorting, setSorting] = useState<SortingState>(initialSorting)
   const [contentTypeFilter, setContentTypeFilter] = useState<'all' | 'video' | 'photo'>('all')
   const [dateRange, setDateRange] = useState<DateRange>(initialDateRange)
+  const [timeAnalysis, setTimeAnalysis] = useState<{
+    hourlyData: PostingTimeChartData[]
+    bestTimes: PostingTimeChartBestTime[]
+  } | null>(null)
+  const [aggregateMetrics, setAggregateMetrics] = useState<{
+    totalPosts: number
+    totalViews: number
+    totalLikes: number
+    totalComments: number
+    totalShares: number
+    avgViews: number
+  } | null>(null)
+  const [activityData, setActivityData] = useState<Array<{ date: string; count: number }>>([])
+  const [firstPostDate, setFirstPostDate] = useState<string | null>(null)
 
   // Selection and Analysis sidebar state
   const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set())
@@ -117,9 +151,15 @@ function PostsPageContent() {
   const fetchPosts = useCallback(async (page: number, limit: number, sort: SortingState, filter: 'all' | 'video' | 'photo', dateFilter: DateRange) => {
     setIsLoading(true)
     try {
+      // Get client timezone
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
       const params = new URLSearchParams({
         page: page.toString(),
-        limit: limit.toString()
+        limit: limit.toString(),
+        includeTimeAnalysis: 'true',
+        includeActivityData: 'true',
+        timezone: timezone
       })
 
       // Add content type filter
@@ -152,10 +192,23 @@ function PostsPageContent() {
 
       setPosts(data.posts || [])
       setTotalPosts(data.total || 0)
+      if (data.timeAnalysis) {
+        setTimeAnalysis(data.timeAnalysis)
+      }
+      if (data.aggregateMetrics) {
+        setAggregateMetrics(data.aggregateMetrics)
+      }
+      if (data.activityData) {
+        setActivityData(data.activityData)
+      }
+      if (data.firstPostDate !== undefined) {
+        setFirstPostDate(data.firstPostDate)
+      }
     } catch (error) {
       console.error('Failed to fetch posts:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to fetch posts')
       setPosts([])
+      setTimeAnalysis(null)
     } finally {
       setIsLoading(false)
     }
@@ -270,6 +323,16 @@ function PostsPageContent() {
     setSelectedPosts(new Set())
   }
 
+  const formatNumber = (num?: number | null): string => {
+    if (!num) return '0'
+    if (num >= 1000000) {
+      return `${(num / 1000000).toFixed(1)}M`
+    } else if (num >= 1000) {
+      return `${(num / 1000).toFixed(1)}K`
+    }
+    return num.toString()
+  }
+
   return (
     <div className="flex h-screen w-full">
       {/* Main content area */}
@@ -288,6 +351,92 @@ function PostsPageContent() {
             </Button>
           }
         >
+          {/* Metrics and Charts Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr_1fr] gap-4">
+            {/* Metrics Grid - 2x3 */}
+            {isLoading && !aggregateMetrics ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="rounded-lg border border-border bg-card p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-muted animate-pulse" />
+                      <div className="h-4 w-16 bg-muted animate-pulse rounded" />
+                    </div>
+                    <div className="h-8 w-20 bg-muted animate-pulse rounded" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                      <Video className="w-4 h-4 text-purple-500" />
+                    </div>
+                    <span className="text-sm text-muted-foreground">Posts</span>
+                  </div>
+                  <div className="text-2xl font-bold">{formatNumber(aggregateMetrics?.totalPosts)}</div>
+                </div>
+                <div className="rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                      <Eye className="w-4 h-4 text-blue-500" />
+                    </div>
+                    <span className="text-sm text-muted-foreground">Views</span>
+                  </div>
+                  <div className="text-2xl font-bold">{formatNumber(aggregateMetrics?.totalViews)}</div>
+                </div>
+                <div className="rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center">
+                      <Eye className="w-4 h-4 text-pink-500" />
+                    </div>
+                    <span className="text-sm text-muted-foreground">Avg Views</span>
+                  </div>
+                  <div className="text-2xl font-bold">{formatNumber(aggregateMetrics?.avgViews)}</div>
+                </div>
+                <div className="rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center">
+                      <Heart className="w-4 h-4 text-red-500" />
+                    </div>
+                    <span className="text-sm text-muted-foreground">Likes</span>
+                  </div>
+                  <div className="text-2xl font-bold">{formatNumber(aggregateMetrics?.totalLikes)}</div>
+                </div>
+                <div className="rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center">
+                      <Heart className="w-4 h-4 text-orange-500" />
+                    </div>
+                    <span className="text-sm text-muted-foreground">Comments</span>
+                  </div>
+                  <div className="text-2xl font-bold">{formatNumber(aggregateMetrics?.totalComments)}</div>
+                </div>
+                <div className="rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+                      <Users className="w-4 h-4 text-green-500" />
+                    </div>
+                    <span className="text-sm text-muted-foreground">Saved</span>
+                  </div>
+                  <div className="text-2xl font-bold">{formatNumber(aggregateMetrics?.totalShares)}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Posting Activity Heatmap */}
+            <PostingActivityHeatmap data={activityData} firstPostDate={firstPostDate} />
+
+            {/* Posting Time Chart */}
+            <PostingTimeChart
+              data={timeAnalysis?.hourlyData || []}
+              bestTimes={timeAnalysis?.bestTimes || []}
+              loading={isLoading && !timeAnalysis}
+            />
+          </div>
+
+          {/* Posts Table */}
           <PostsTable
             posts={posts}
             totalPosts={totalPosts}

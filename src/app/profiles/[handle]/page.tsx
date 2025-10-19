@@ -35,6 +35,7 @@ import { SortingState } from '@tanstack/react-table'
 import { ContentAnalysisSidebar } from '@/components/ContentAnalysisSidebar'
 import { cn } from '@/lib/utils'
 import { DateRange } from '@/components/DateRangeFilter'
+import { PostingTimeChart, PostingTimeChartData, PostingTimeChartBestTime } from '@/components/PostingTimeChart'
 
 interface ProfilePostsResult {
   posts: TikTokPost[]
@@ -43,6 +44,13 @@ interface ProfilePostsResult {
   page: number
   limit: number
   error?: string
+}
+
+interface TimeAnalysisResult {
+  data: {
+    hourlyData: PostingTimeChartData[]
+    bestTimes: PostingTimeChartBestTime[]
+  }
 }
 
 function ProfileDetailPageContent() {
@@ -94,6 +102,11 @@ function ProfileDetailPageContent() {
   const [firstPostDate, setFirstPostDate] = useState<string | null>(null)
   const [activityLoading, setActivityLoading] = useState(false)
   const [dateRange, setDateRange] = useState<DateRange>(initialDateRange)
+  const [timeAnalysisData, setTimeAnalysisData] = useState<{
+    hourlyData: PostingTimeChartData[]
+    bestTimes: PostingTimeChartBestTime[]
+  } | null>(null)
+  const [timeAnalysisLoading, setTimeAnalysisLoading] = useState(false)
 
   // Selection and Analysis sidebar state
   const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set())
@@ -229,11 +242,46 @@ function ProfileDetailPageContent() {
     }
   }, [profile?.id])
 
+  const fetchTimeAnalysisData = useCallback(async () => {
+    if (!profile?.id) return
+
+    setTimeAnalysisLoading(true)
+    try {
+      // Get client timezone
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+      const params = new URLSearchParams({
+        timezone: timezone
+      })
+      if (dateRange.from) {
+        params.append('dateFrom', dateRange.from.toISOString())
+      }
+      if (dateRange.to) {
+        params.append('dateTo', dateRange.to.toISOString())
+      }
+
+      const response = await fetch(`/api/tiktok/profiles/${profile.id}/time-analysis?${params}`)
+      const result: TimeAnalysisResult = await response.json()
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch time analysis data')
+      }
+
+      setTimeAnalysisData(result.data || null)
+    } catch (err) {
+      console.error('Failed to fetch time analysis data:', err)
+      setTimeAnalysisData(null)
+    } finally {
+      setTimeAnalysisLoading(false)
+    }
+  }, [profile?.id, dateRange])
+
   const handleRefresh = useCallback(() => {
     fetchProfile()
     fetchProfilePosts(currentPage, sorting, contentTypeFilter, dateRange)
     fetchActivityData()
-  }, [fetchProfile, fetchProfilePosts, fetchActivityData, currentPage, sorting, contentTypeFilter, dateRange])
+    fetchTimeAnalysisData()
+  }, [fetchProfile, fetchProfilePosts, fetchActivityData, fetchTimeAnalysisData, currentPage, sorting, contentTypeFilter, dateRange])
 
   const handleMonitoringToggle = useCallback(async (enabled: boolean) => {
     if (!profile?.id) return
@@ -349,6 +397,10 @@ function ProfileDetailPageContent() {
   useEffect(() => {
     fetchActivityData()
   }, [fetchActivityData])
+
+  useEffect(() => {
+    fetchTimeAnalysisData()
+  }, [fetchTimeAnalysisData])
 
   const formatNumber = (num?: number | null): string => {
     if (!num) return '0'
@@ -590,9 +642,11 @@ function ProfileDetailPageContent() {
     >
       <div className="h-full grid grid-rows-[auto_1fr] min-h-0 gap-4">
         {/* Profile Metrics and Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-4">
-          {/* Metrics Grid - 2x3 */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="space-y-4">
+          {/* Metrics Grid and Heatmap Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr_1fr] gap-4">
+            {/* Metrics Grid - 2x3 */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <div className="rounded-lg border border-border bg-card p-3">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
@@ -653,22 +707,42 @@ function ProfileDetailPageContent() {
             </div>
           </div>
 
-          {/* Posting Activity Heatmap */}
-          {activityLoading ? (
-            <div className="h-full rounded-lg border border-border bg-card">
-              <div className="p-4 pb-3">
-                <div className="h-6 w-32 bg-muted animate-pulse rounded" />
-              </div>
-              <div className="p-4 pt-0">
-                <div className="space-y-2">
-                  <div className="h-4 w-full bg-muted animate-pulse rounded" />
-                  <div className="h-24 w-full bg-muted animate-pulse rounded" />
+            {/* Posting Activity Heatmap */}
+            {activityLoading ? (
+              <div className="h-full rounded-lg border border-border bg-card">
+                <div className="p-4 pb-3">
+                  <div className="h-6 w-32 bg-muted animate-pulse rounded" />
+                </div>
+                <div className="p-4 pt-0">
+                  <div className="space-y-2">
+                    <div className="h-4 w-full bg-muted animate-pulse rounded" />
+                    <div className="h-24 w-full bg-muted animate-pulse rounded" />
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : (
-            <PostingActivityHeatmap data={activityData} firstPostDate={firstPostDate} />
-          )}
+            ) : (
+              <PostingActivityHeatmap data={activityData} firstPostDate={firstPostDate} />
+            )}
+            {/* Posting Time Analysis Chart */}
+            {timeAnalysisLoading ? (
+              <div className="rounded-lg border border-border bg-card">
+                <div className="p-4 pb-3">
+                  <div className="h-6 w-40 bg-muted animate-pulse rounded" />
+                </div>
+                <div className="p-4 pt-0">
+                  <div className="space-y-2">
+                    <div className="h-24 w-full bg-muted animate-pulse rounded" />
+                  </div>
+                </div>
+              </div>
+            ) : timeAnalysisData ? (
+              <PostingTimeChart
+                data={timeAnalysisData.hourlyData}
+                bestTimes={timeAnalysisData.bestTimes}
+                loading={false}
+              />
+            ) : null}
+          </div>
         </div>
 
         {/* Posts Table - Takes remaining height, filter is inside */}

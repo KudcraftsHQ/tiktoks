@@ -195,6 +195,9 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || ''
     const dateFrom = searchParams.get('dateFrom')
     const dateTo = searchParams.get('dateTo')
+    const includeTimeAnalysis = searchParams.get('includeTimeAnalysis') === 'true'
+    const includeActivityData = searchParams.get('includeActivityData') === 'true'
+    const timezone = searchParams.get('timezone') || 'UTC' // Client's IANA timezone (e.g., 'Asia/Jakarta')
 
     // Parse sorting from URL - supports multi-column sorting
     // Format: ?sort=viewCount.desc,likeCount.asc,publishedAt.desc
@@ -388,13 +391,172 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({
+    // Calculate aggregate metrics from all posts matching filters
+    const aggregateResult = await prisma.tiktokPost.aggregate({
+      where,
+      _count: {
+        id: true
+      },
+      _sum: {
+        viewCount: true,
+        likeCount: true,
+        commentCount: true,
+        shareCount: true
+      }
+    })
+
+    const aggregateMetrics = {
+      totalPosts: aggregateResult._count.id || 0,
+      totalViews: Number(aggregateResult._sum.viewCount || 0),
+      totalLikes: aggregateResult._sum.likeCount || 0,
+      totalComments: aggregateResult._sum.commentCount || 0,
+      totalShares: aggregateResult._sum.shareCount || 0,
+      avgViews: aggregateResult._count.id
+        ? Math.round(Number(aggregateResult._sum.viewCount || 0) / aggregateResult._count.id)
+        : 0
+    }
+
+    // Calculate activity data if requested (for heatmap)
+    let activityData
+    let firstPostDate = null
+    if (includeActivityData) {
+      // Get the earliest post date for context
+      const earliestPost = await prisma.tiktokPost.findFirst({
+        where,
+        select: {
+          publishedAt: true
+        },
+        orderBy: {
+          publishedAt: 'asc'
+        }
+      })
+
+      if (earliestPost?.publishedAt) {
+        firstPostDate = earliestPost.publishedAt.toISOString()
+      }
+
+      // Group posts by date
+      const allPostsForActivity = await prisma.tiktokPost.findMany({
+        where,
+        select: {
+          publishedAt: true
+        }
+      })
+
+      // Create date map
+      const dateMap = new Map<string, number>()
+      allPostsForActivity.forEach(post => {
+        if (!post.publishedAt) return
+        const dateKey = post.publishedAt.toISOString().split('T')[0]
+        dateMap.set(dateKey, (dateMap.get(dateKey) || 0) + 1)
+      })
+
+      activityData = Array.from(dateMap.entries()).map(([date, count]) => ({
+        date,
+        count
+      }))
+    }
+
+    // Calculate time analysis if requested
+    let timeAnalysis
+    if (includeTimeAnalysis) {
+      // Fetch all posts (not paginated) for time analysis
+      const allPosts = await prisma.tiktokPost.findMany({
+        where,
+        select: {
+          publishedAt: true,
+          viewCount: true,
+          likeCount: true,
+          commentCount: true
+        }
+      })
+
+      // Group by hour in user's local timezone
+      const hourlyMap = new Map<number, {
+        postCount: number
+        totalViews: number
+        totalLikes: number
+        totalComments: number
+      }>()
+
+      allPosts.forEach(post => {
+        if (!post.publishedAt) return
+
+        // Convert to user's timezone to extract hour
+        // Use Intl.DateTimeFormat with the client's timezone
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: timezone,
+          hour: 'numeric',
+          hour12: false
+        })
+        const parts = formatter.formatToParts(post.publishedAt)
+        const hourPart = parts.find(part => part.type === 'hour')
+        const hour = hourPart ? parseInt(hourPart.value) : 0
+
+        if (!hourlyMap.has(hour)) {
+          hourlyMap.set(hour, {
+            postCount: 0,
+            totalViews: 0,
+            totalLikes: 0,
+            totalComments: 0
+          })
+        }
+
+        const hourData = hourlyMap.get(hour)!
+        hourData.postCount += 1
+        hourData.totalViews += Number(post.viewCount || 0)
+        hourData.totalLikes += post.likeCount || 0
+        hourData.totalComments += post.commentCount || 0
+      })
+
+      // Convert to array and calculate averages
+      const hourlyData = Array.from(hourlyMap.entries())
+        .map(([hour, data]) => ({
+          hour,
+          postCount: data.postCount,
+          totalViews: data.totalViews,
+          avgViews: Math.round(data.totalViews / data.postCount),
+          totalLikes: data.totalLikes,
+          totalComments: data.totalComments,
+          avgEngagementRate: (data.totalLikes + data.totalComments) / Math.max(data.totalViews, 1)
+        }))
+        .sort((a, b) => a.hour - b.hour)
+
+      // Get top 3 hours by average views
+      const bestTimes = hourlyData
+        .sort((a, b) => b.avgViews - a.avgViews)
+        .slice(0, 3)
+        .map(d => ({
+          hour: d.hour,
+          avgViews: d.avgViews,
+          postCount: d.postCount
+        }))
+
+      timeAnalysis = {
+        hourlyData,
+        bestTimes
+      }
+    }
+
+    const response: any = {
       posts: responsePosts,
       hasMore,
       total,
       page,
-      limit
-    })
+      limit,
+      aggregateMetrics
+    }
+
+    if (includeTimeAnalysis) {
+      response.timeAnalysis = timeAnalysis
+    }
+
+    if (includeActivityData) {
+      response.activityData = activityData
+      response.firstPostDate = firstPostDate
+    }
+
+    return NextResponse.json(response)
   } catch (error) {
     console.error('Failed to fetch posts:', error)
     return NextResponse.json(

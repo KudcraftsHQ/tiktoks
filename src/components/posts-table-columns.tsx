@@ -131,13 +131,14 @@ const formatDate = (dateString: string): string => {
 const formatDateTime = (dateString: string): { date: string; time: string } => {
   const date = new Date(dateString)
 
-  const dateStr = new Intl.DateTimeFormat('en-US', {
+  // Use user's locale for date formatting (will show in their local timezone)
+  const dateStr = new Intl.DateTimeFormat(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric'
   }).format(date)
 
-  const timeStr = new Intl.DateTimeFormat('en-US', {
+  const timeStr = new Intl.DateTimeFormat(undefined, {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true

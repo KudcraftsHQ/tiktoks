@@ -97,10 +97,30 @@ const formatNumber = (num?: number | string | bigint | null): string => {
 
 const formatDate = (dateString: string): string => {
   const date = new Date(dateString)
-  return new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(
+  // Use user's locale for relative time formatting
+  return new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' }).format(
     Math.floor((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
     'day'
   )
+}
+
+const formatDateTime = (dateString: string): { date: string; time: string } => {
+  const date = new Date(dateString)
+
+  // Use user's locale for date formatting (will show in their local timezone)
+  const dateStr = new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  }).format(date)
+
+  const timeStr = new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  }).format(date)
+
+  return { date: dateStr, time: timeStr }
 }
 
 interface ProfileActionsCellProps {
@@ -413,11 +433,11 @@ export const createProfilesTableColumns = ({
     header: createSortableHeader('Last Updated'),
     cell: ({ row }) => {
       const profile = row.original
+      const { date, time } = formatDateTime(profile.updatedAt)
       return (
-        <div className="text-center">
-          <span className="text-sm text-muted-foreground">
-            {formatDate(profile.updatedAt)}
-          </span>
+        <div className="text-sm whitespace-nowrap">
+          <div>{date}</div>
+          <div className="text-muted-foreground text-xs">{time}</div>
         </div>
       )
     }
