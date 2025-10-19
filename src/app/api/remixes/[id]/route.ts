@@ -89,6 +89,18 @@ export async function GET(
       )
     }
 
+    // Normalize slides data with proper bootstrapping and defaults
+    const normalizedSlides = normalizeSlides(remix.slides)
+
+    // If no original post, return simplified response
+    if (!remix.originalPost) {
+      return NextResponse.json({
+        ...remix,
+        slides: normalizedSlides,
+        originalPost: null
+      })
+    }
+
     // Parse images JSON and generate presigned URLs for each image
     let images = []
     try {
@@ -125,9 +137,6 @@ export async function GET(
       cacheAssetService.getUrl(remix.originalPost.coverId),
       cacheAssetService.getUrl(remix.originalPost.authorAvatarId)
     ])
-
-    // Normalize slides data with proper bootstrapping and defaults
-    const normalizedSlides = normalizeSlides(remix.slides)
 
     // Convert BigInt to string for JSON serialization and add presigned URLs
     const responseRemix = {
@@ -220,6 +229,22 @@ export async function PUT(
       }
     })
 
+    // Normalize slides data with proper bootstrapping and defaults
+    const normalizedSlides = normalizeSlides(updatedRemix.slides)
+
+    // If no original post, return simplified response
+    if (!updatedRemix.originalPost) {
+      return NextResponse.json({
+        success: true,
+        message: 'Remix updated successfully',
+        remix: {
+          ...updatedRemix,
+          slides: normalizedSlides,
+          originalPost: null
+        }
+      })
+    }
+
     // Parse images JSON and generate presigned URLs for each image
     let images = []
     try {
@@ -256,9 +281,6 @@ export async function PUT(
       cacheAssetService.getUrl(updatedRemix.originalPost.coverId),
       cacheAssetService.getUrl(updatedRemix.originalPost.authorAvatarId)
     ])
-
-    // Normalize slides data with proper bootstrapping and defaults
-    const normalizedSlides = normalizeSlides(updatedRemix.slides)
 
     // Convert BigInt to string for JSON serialization and add presigned URLs
     const responseRemix = {

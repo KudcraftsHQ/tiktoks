@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Home, FileText, Users, UserCheck, Sparkles, Star, Search, CloudUpload } from 'lucide-react'
+import { Home, FileText, Users, UserCheck, Sparkles, Star, Search, CloudUpload, BookmarkCheck } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -36,15 +36,21 @@ export function AppSidebar() {
       icon: Home,
     },
     {
-      title: 'Upload',
-      url: '/upload',
-      icon: CloudUpload,
+      title: 'Bookmarks',
+      url: '/bookmarks',
+      icon: BookmarkCheck,
     },
-    {
-      title: 'TikTok Accounts',
-      url: '/tiktok-accounts',
-      icon: UserCheck,
-    },
+    // Hidden for now
+    // {
+    //   title: 'Upload',
+    //   url: '/upload',
+    //   icon: CloudUpload,
+    // },
+    // {
+    //   title: 'TikTok Accounts',
+    //   url: '/tiktok-accounts',
+    //   icon: UserCheck,
+    // },
   ]
 
   const profileNavigationItems = [

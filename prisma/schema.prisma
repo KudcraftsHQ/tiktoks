@@ -180,13 +180,16 @@ model CollectionPost {
 
 model RemixPost {
   id                 String   @id @default(cuid())
-  originalPostId     String   // Reference to TikTokPost
+  originalPostId     String?  // Reference to TikTokPost (optional - can create remix without original)
   productContextId   String?  // Reference to ProductContext (optional)
   name               String
   description        String?
   generationType     String   @default("manual") // 'manual', 'ai_paraphrase'
   additionalPrompt   String?  // Optional additional prompt used during paraphrasing
   bookmarked         Boolean  @default(false) // Track if remix is bookmarked for content use
+  approved           Boolean  @default(false) // Approval status for content use
+  postedUrl          String?  // URL to posted TikTok content
+  postedAt           DateTime? // When the remix was posted
 
   // Complete slide structure with canvas, backgrounds, and text boxes in JSON
   slides             Json     @default("[]") // Array of RemixSlide objects with full structure
@@ -194,7 +197,7 @@ model RemixPost {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  originalPost       TiktokPost @relation(fields: [originalPostId], references: [id], onDelete: Cascade)
+  originalPost       TiktokPost? @relation(fields: [originalPostId], references: [id], onDelete: SetNull)
   productContext     ProductContext? @relation(fields: [productContextId], references: [id], onDelete: SetNull)
   textStyles         RemixTextStyle[]
   assetFolders       RemixAssetFolder[]
@@ -204,6 +207,8 @@ model RemixPost {
   @@index([originalPostId])
   @@index([productContextId])
   @@index([bookmarked])
+  @@index([bookmarked, approved])
+  @@index([postedUrl])
 }
 
 // Text styles for Remix posts - reusable text styling templates

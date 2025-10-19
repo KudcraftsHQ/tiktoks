@@ -14,6 +14,10 @@ interface InlineEditableTextProps {
   className?: string
   maxLength?: number
   rows?: number
+  disabled?: boolean
+  disabledMessage?: string
+  fixedHeight?: boolean
+  heightClass?: string
 }
 
 export function InlineEditableText({
@@ -22,7 +26,11 @@ export function InlineEditableText({
   placeholder = 'Enter text...',
   className,
   maxLength = 2000,
-  rows = 3
+  rows = 3,
+  disabled = false,
+  disabledMessage = 'Editing is disabled',
+  fixedHeight = false,
+  heightClass = 'h-40'
 }: InlineEditableTextProps) {
   const [localValue, setLocalValue] = useState(value)
   const [isSaving, setIsSaving] = useState(false)
@@ -64,7 +72,7 @@ export function InlineEditableText({
   }
 
   return (
-    <div className={cn('relative group', className)}>
+    <div className={cn('relative group', fixedHeight && 'h-full', className)}>
       <Textarea
         ref={textareaRef}
         value={localValue}
@@ -72,10 +80,14 @@ export function InlineEditableText({
         onBlur={handleBlur}
         placeholder={placeholder}
         maxLength={maxLength}
-        rows={rows}
+        rows={fixedHeight ? undefined : rows}
+        disabled={disabled}
+        title={disabled ? disabledMessage : undefined}
         className={cn(
           'pr-10 resize-none text-xs',
-          isSaving && 'opacity-50 pointer-events-none'
+          isSaving && 'opacity-50 pointer-events-none',
+          disabled && 'cursor-not-allowed bg-muted/50',
+          fixedHeight && 'h-full overflow-y-auto field-sizing-content'
         )}
       />
       <Button
@@ -84,7 +96,7 @@ export function InlineEditableText({
         variant="ghost"
         className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
         onClick={handleCopy}
-        disabled={isSaving}
+        disabled={isSaving || disabled}
       >
         {copied ? (
           <Check className="h-3 w-3 text-green-500" />
