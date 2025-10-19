@@ -511,33 +511,46 @@ function ProfileDetailPageContent() {
       const selectedPostsData = posts.filter(p => selectedPosts.has(p.id))
 
       // Format posts data
-      const formattedPosts = selectedPostsData.map(post => ({
-        id: post.id,
-        description: post.description || '',
-        contentType: post.contentType,
-        createTime: post.publishedAt,
-        metrics: {
-          views: post.viewCount || 0,
-          likes: post.likeCount || 0,
-          comments: post.commentCount || 0,
-          shares: post.shareCount || 0,
-          plays: post.duration ? Math.ceil(post.viewCount / (post.duration / 60)) : 0
-        },
-        author: {
-          handle: post.authorHandle || 'unknown',
-          avatarId: post.authorAvatarId || null
-        },
-        media: {
-          videoId: post.videoId || null,
-          coverId: post.coverId || null,
-          musicId: post.musicId || null,
-          images: (post.images || []).map(img => ({
-            imageId: img.cacheAssetId || null,
-            ocrText: post.ocrTexts?.[img.cacheAssetId] || undefined
-          }))
-        },
-        ocrText: post.ocrTexts ? Object.values(post.ocrTexts).filter(Boolean).join('\n') : null
-      }))
+      const formattedPosts = selectedPostsData.map(post => {
+        // Parse ocrTexts if it's a string
+        let parsedOcrTexts: any = null
+        try {
+          if (typeof post.ocrTexts === 'string') {
+            parsedOcrTexts = JSON.parse(post.ocrTexts)
+          } else if (post.ocrTexts && typeof post.ocrTexts === 'object') {
+            parsedOcrTexts = post.ocrTexts
+          }
+        } catch (error) {
+          console.warn('Failed to parse ocrTexts for post:', post.id, error)
+        }
+
+        return {
+          id: post.id,
+          description: post.description || '',
+          contentType: post.contentType,
+          createTime: post.publishedAt,
+          metrics: {
+            views: post.viewCount || 0,
+            likes: post.likeCount || 0,
+            comments: post.commentCount || 0,
+            shares: post.shareCount || 0,
+            plays: post.duration ? Math.ceil(post.viewCount / (post.duration / 60)) : 0
+          },
+          author: {
+            handle: post.authorHandle || 'unknown',
+            avatarId: post.authorAvatarId || null
+          },
+          media: {
+            videoId: post.videoId || null,
+            coverId: post.coverId || null,
+            musicId: post.musicId || null,
+            images: (post.images || []).map((img, index) => ({
+              imageId: img.cacheAssetId || null
+            }))
+          },
+          ocrText: parsedOcrTexts && Array.isArray(parsedOcrTexts) ? parsedOcrTexts : null
+        }
+      })
 
       // Create JSON data structure
       const clipboardData = {
