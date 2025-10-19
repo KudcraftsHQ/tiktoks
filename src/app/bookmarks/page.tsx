@@ -26,10 +26,33 @@ import { formatCompactNumber, normalizeBigInt } from '@/lib/stats-calculator'
 interface RemixSlide {
   id: string
   displayOrder: number
+  canvas?: {
+    width: number
+    height: number
+    unit?: string
+  }
+  backgroundLayers?: Array<{
+    id?: string
+    type: 'image' | 'color' | 'gradient'
+    imageId?: string
+    x: number
+    y: number
+    width: number
+    height: number
+    rotation: number
+    fitMode: string
+    color?: string
+    opacity: number
+    blendMode: string
+    zIndex: number
+  }>
+  originalImageIndex?: number
   paraphrasedText: string
+  originalText?: string
   textBoxes: Array<{
     id: string
     text: string
+    [key: string]: any
   }>
 }
 

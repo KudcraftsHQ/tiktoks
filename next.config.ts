@@ -36,15 +36,10 @@ const nextConfig: NextConfig = {
     '@napi-rs/canvas',
     // Platform-specific packages will be externalized automatically
   ],
-  experimental: {
-    serverComponentsExternalPackages: [
-      '@napi-rs/canvas',
-    ],
-    turbo: {
-      resolveAlias: {
-        // Don't alias canvas - we need @napi-rs/canvas to work
-        // canvas: './empty.js',
-      },
+  turbopack: {
+    resolveAlias: {
+      // Don't alias canvas - we need @napi-rs/canvas to work
+      // canvas: './empty.js',
     },
   },
   webpack: (config, { isServer }) => {

@@ -9,13 +9,14 @@ import { PrismaClient, CacheStatus } from '@/generated/prisma'
 import { mediaDownloadService } from '../media-download'
 import { uploadToR2 } from '../r2'
 import heicConvert from 'heic-convert'
+import { analyzeFileBuffer, getFileAnalysisSummary } from '../file-type-detector'
 import {
   QUEUE_NAMES,
   defaultWorkerOptions,
   MediaCacheJobData,
   MediaCacheJobResult
 } from './config'
-import { setJobContext, captureJobError, setupQueueSentryListeners } from '../sentry-worker'
+import { setJobContext, captureJobError, captureHeicConversionError, setupQueueSentryListeners } from '../sentry-worker'
 
 class MediaCacheWorker {
   private worker: Worker<MediaCacheJobData, MediaCacheJobResult>
@@ -116,26 +117,72 @@ class MediaCacheWorker {
       let processedFilename = downloadResult.filename
 
       if (this.isHeicContent(originalUrl, downloadResult.contentType)) {
-        console.log(`🔄 [MediaCacheWorker] Converting HEIC image to JPEG...`)
-        try {
-          const convertedBuffer = await heicConvert({
-            buffer: downloadResult.buffer,
-            format: 'JPEG',
-            quality: 0.92
-          })
+        console.log(`🔍 [MediaCacheWorker] Analyzing file before HEIC conversion...`)
+        
+        // Analyze the buffer to detect actual file format
+        const fileAnalysis = analyzeFileBuffer(downloadResult.buffer, processedFilename, downloadResult.contentType)
+        console.log(`📊 [MediaCacheWorker] File analysis:`, getFileAnalysisSummary(fileAnalysis))
+        
+        // Only attempt conversion if buffer is actually HEIC format
+        const shouldAttemptConversion = fileAnalysis.detectedType.format === 'HEIC/HEIF'
+        
+        if (shouldAttemptConversion) {
+          console.log(`🔄 [MediaCacheWorker] Converting HEIC image to JPEG...`)
+          try {
+            const convertedBuffer = await heicConvert({
+              buffer: downloadResult.buffer,
+              format: 'JPEG',
+              quality: 0.92
+            })
 
-          processedBuffer = Buffer.from(convertedBuffer)
-          processedContentType = 'image/jpeg'
-          processedFilename = this.changeFileExtension(processedFilename || 'image', '.jpg')
+            processedBuffer = Buffer.from(convertedBuffer)
+            processedContentType = 'image/jpeg'
+            processedFilename = this.changeFileExtension(processedFilename || 'image', '.jpg')
 
-          console.log(`✅ [MediaCacheWorker] HEIC conversion completed:`, {
-            originalSize: downloadResult.buffer.length,
-            convertedSize: processedBuffer.length,
-            newFilename: processedFilename
+            console.log(`✅ [MediaCacheWorker] HEIC conversion completed:`, {
+              originalSize: downloadResult.buffer.length,
+              convertedSize: processedBuffer.length,
+              newFilename: processedFilename,
+              detectedFormat: fileAnalysis.detectedType.format
+            })
+          } catch (conversionError) {
+            console.error(`❌ [MediaCacheWorker] HEIC conversion failed:`, {
+              error: conversionError instanceof Error ? conversionError.message : String(conversionError),
+              fileAnalysis: getFileAnalysisSummary(fileAnalysis),
+              url: originalUrl
+            })
+            
+            // Capture detailed error to Sentry with file analysis context
+            captureHeicConversionError(
+              conversionError instanceof Error ? conversionError : new Error(String(conversionError)),
+              QUEUE_NAMES.MEDIA_CACHE,
+              job.id!,
+              job.data,
+              fileAnalysis,
+              originalUrl
+            )
+            
+            // Continue with original buffer if conversion fails
+            console.warn(`⚠️ [MediaCacheWorker] Using original buffer due to conversion failure`)
+          }
+        } else {
+          console.warn(`⚠️ [MediaCacheWorker] Skipping HEIC conversion - file format mismatch detected:`, {
+            expected: 'HEIC/HEIF',
+            detected: fileAnalysis.detectedType.format,
+            url: originalUrl,
+            summary: getFileAnalysisSummary(fileAnalysis)
           })
-        } catch (conversionError) {
-          console.warn(`⚠️ [MediaCacheWorker] HEIC conversion failed, using original:`, conversionError)
-          // Continue with original buffer if conversion fails
+          
+          // Still capture the mismatch to Sentry for analysis
+          const mismatchError = new Error(`HEIC conversion skipped - detected format: ${fileAnalysis.detectedType.format}`)
+          captureHeicConversionError(
+            mismatchError,
+            QUEUE_NAMES.MEDIA_CACHE,
+            job.id!,
+            job.data,
+            fileAnalysis,
+            originalUrl
+          )
         }
       }
 

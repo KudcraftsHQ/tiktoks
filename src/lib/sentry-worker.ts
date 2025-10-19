@@ -85,6 +85,67 @@ export function captureJobError(
 }
 
 /**
+ * Capture HEIC conversion error with detailed file analysis context
+ */
+export function captureHeicConversionError(
+  error: Error,
+  jobName: string,
+  jobId: string,
+  jobData: any,
+  fileAnalysis: any,
+  originalUrl: string
+) {
+  Sentry.withScope((scope) => {
+    scope.setTag("job.name", jobName);
+    scope.setTag("job.id", jobId);
+    scope.setTag("error.type", "heic_conversion");
+    scope.setTag("detected_format", fileAnalysis.detectedType.format);
+    scope.setTag("format_mismatch", fileAnalysis.isMismatch.toString());
+    scope.setLevel("error");
+
+    // Job context
+    scope.setContext("job", {
+      name: jobName,
+      id: jobId,
+      data: jobData,
+    });
+
+    // File analysis context
+    scope.setContext("file_analysis", {
+      detectedType: {
+        format: fileAnalysis.detectedType.format,
+        mimeType: fileAnalysis.detectedType.mimeType,
+        confidence: fileAnalysis.detectedType.confidence,
+        description: fileAnalysis.detectedType.description
+      },
+      expectedFromExtension: fileAnalysis.expectedFromExtension,
+      isMismatch: fileAnalysis.isMismatch,
+      bufferSize: fileAnalysis.bufferSize,
+      headerHex: fileAnalysis.headerHex,
+      metadata: fileAnalysis.metadata,
+      summary: `${fileAnalysis.detectedType.format} (${fileAnalysis.bufferSize} bytes)${fileAnalysis.isMismatch ? ' - MISMATCH' : ''}`
+    });
+
+    // URL and source context
+    scope.setContext("source", {
+      originalUrl,
+      urlHasHeicExtension: originalUrl.toLowerCase().includes('.heic') || originalUrl.toLowerCase().includes('.heif')
+    });
+
+    // Enhanced error context
+    scope.setContext("conversion_attempt", {
+      triggeredByUrlExtension: originalUrl.toLowerCase().includes('.heic') || originalUrl.toLowerCase().includes('.heif'),
+      triggeredByContentType: false, // Will be set in caller if applicable
+      actualFormatDetected: fileAnalysis.detectedType.format,
+      shouldAttemptConversion: fileAnalysis.detectedType.format === 'HEIC/HEIF',
+      conversionLikelyToSucceed: fileAnalysis.detectedType.format === 'HEIC/HEIF' && !fileAnalysis.isMismatch
+    });
+
+    Sentry.captureException(error);
+  });
+}
+
+/**
  * Setup Sentry listeners for BullMQ queue events
  * Provides comprehensive job lifecycle monitoring and error tracking
  */
