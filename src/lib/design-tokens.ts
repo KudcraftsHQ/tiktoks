@@ -9,12 +9,12 @@ export const designTokens = {
     page: {
       desktop: 'px-6 py-8',
       mobile: 'px-4 py-6',
-      responsive: 'px-4 py-3 md:px-6',
+      responsive: 'px-4 py-0 md:px-6',
     },
     header: {
       desktop: 'px-6 py-4',
       mobile: 'px-4 py-3',
-      responsive: 'px-4 py-3 md:px-6 md:py-4',
+      responsive: 'px-4 py-2 md:px-6 md:py-2',
     },
     card: {
       desktop: 'p-6',

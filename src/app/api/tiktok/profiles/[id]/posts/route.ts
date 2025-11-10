@@ -14,6 +14,7 @@ export async function GET(
     const page = parseInt(searchParams.get('page') || '1')
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100)
     const contentType = searchParams.get('contentType')
+    const categoryId = searchParams.get('categoryId')
     const search = searchParams.get('search') || ''
     const dateFrom = searchParams.get('dateFrom')
     const dateTo = searchParams.get('dateTo')
@@ -49,6 +50,10 @@ export async function GET(
 
     if (contentType && ['video', 'photo'].includes(contentType)) {
       where.contentType = contentType
+    }
+
+    if (categoryId && categoryId !== 'all') {
+      where.postCategoryId = categoryId
     }
 
     // Date range filtering on publishedAt

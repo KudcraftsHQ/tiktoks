@@ -4,7 +4,7 @@ import { designTokens } from '@/lib/design-tokens'
 interface PageLayoutProps {
   children: React.ReactNode
   title: React.ReactNode
-  description?: string
+  description?: React.ReactNode
   headerActions?: React.ReactNode
 }
 
@@ -15,17 +15,23 @@ export function PageLayout({
   headerActions,
 }: PageLayoutProps) {
   return (
-    <div className="h-screen bg-background grid grid-rows-[84px_1fr]">
-      {/* Header - Fixed height */}
-      <header>
-        <div className={`${designTokens.container.full} ${designTokens.spacing.header.responsive}`}>
+    <div className="h-screen bg-background grid grid-rows-[auto_1fr]">
+      {/* Header - Dashboard Style */}
+      <header className="border-b bg-card">
+        <div className={`${designTokens.container.full} py-2 px-4 sm:py-3`}>
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex-1 min-w-0">
-              <h1 className={`${designTokens.typography.pageTitle.responsive} font-semibold`}>
-                {title}
-              </h1>
+              {typeof title === 'string' ? (
+                <h1 className="text-base sm:text-lg font-semibold">
+                  {title}
+                </h1>
+              ) : (
+                <div className="text-base sm:text-lg font-semibold">
+                  {title}
+                </div>
+              )}
               {description && (
-                <p className={designTokens.typography.subtitle}>
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   {description}
                 </p>
               )}
@@ -41,7 +47,7 @@ export function PageLayout({
 
       {/* Main Content - Scrollable */}
       <main className="flex flex-col h-full min-h-0">
-        <div className={`${designTokens.container.full} ${designTokens.spacing.page.responsive} h-full flex flex-col min-h-0`}>
+        <div className={`${designTokens.container.full} h-full flex flex-col min-h-0 px-4 py-3`}>
           {children}
         </div>
       </main>

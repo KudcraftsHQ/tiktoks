@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useRef, useCallback } from 'react'
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -17,16 +17,17 @@ import { getProxiedImageUrlById } from '@/lib/image-proxy'
 import { SmartImage } from '@/components/SmartImage'
 import { PostAnalyticsSheet } from '@/components/PostAnalyticsSheet'
 import { SortingState } from '@tanstack/react-table'
-import { FileText, Loader2 } from 'lucide-react'
+import { FileText, Loader2, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { DateRange } from '@/components/DateRangeFilter'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 
 interface PostsTableProps {
   posts: TikTokPost[]
   totalPosts?: number
-  contentTypeFilter?: {
-    value: 'all' | 'video' | 'photo'
-    onChange: (value: 'all' | 'video' | 'photo') => void
+  categoryFilter?: {
+    value: string
+    onChange: (value: string) => void
   }
   dateRangeFilter?: {
     value: DateRange
@@ -34,6 +35,7 @@ interface PostsTableProps {
   }
   onPageChange?: (pageIndex: number, pageSize: number) => void
   onSortingChange?: (sorting: SortingState) => void
+  onRefetchPosts?: () => void
   sorting?: SortingState
   isLoading?: boolean
   hiddenColumns?: string[]
@@ -41,22 +43,29 @@ interface PostsTableProps {
   // Selection state (controlled from parent)
   selectedPosts?: Set<string>
   onSelectionChange?: (selectedPosts: Set<string>) => void
+  viewMode?: 'metrics' | 'content'
 }
 
 export function PostsTable({
   posts,
   totalPosts,
-  contentTypeFilter,
+  categoryFilter,
   dateRangeFilter,
   onPageChange,
   onSortingChange,
+  onRefetchPosts,
   sorting,
   isLoading,
   hiddenColumns,
   enableServerSideSorting = false,
   selectedPosts: externalSelectedPosts,
-  onSelectionChange
+  onSelectionChange,
+  viewMode = 'metrics'
 }: PostsTableProps) {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+
   const [selectedPost, setSelectedPost] = useState<TikTokPost | null>(null)
   const [analyticsPost, setAnalyticsPost] = useState<TikTokPost | null>(null)
   const [showAnalytics, setShowAnalytics] = useState(false)
@@ -68,6 +77,7 @@ export function PostsTable({
 
   const photoPosts = posts.filter(p => p.contentType === 'photo')
   const allPhotosSelected = photoPosts.length > 0 && selectedPosts.size === photoPosts.length
+  const allPostsSelected = posts.length > 0 && selectedPosts.size === posts.length
 
   // Use a stable cache to store proxied URLs by cache asset IDs
   // This ensures URLs never change, even when underlying R2 URLs change
@@ -143,18 +153,18 @@ export function PostsTable({
 
   const handleTriggerOCR = useCallback(async (postId: string) => {
     try {
-      const response = await fetch(`/api/tiktok/posts/${postId}/ocr`, {
+      const response = await fetch(`/api/tiktok/posts/${postId}/process`, {
         method: 'POST',
       })
 
       if (!response.ok) {
-        throw new Error('Failed to trigger OCR')
+        throw new Error('Failed to process post')
       }
 
-      toast.success('OCR processing started')
+      toast.success('OCR and classification processing started')
     } catch (err) {
-      console.error('Failed to trigger OCR:', err)
-      toast.error('Failed to start OCR processing')
+      console.error('Failed to process post:', err)
+      toast.error('Failed to start OCR and classification processing')
       throw err
     }
   }, [])
@@ -171,9 +181,8 @@ export function PostsTable({
 
   const handleSelectAll = useCallback((selected: boolean) => {
     if (selected) {
-      // Only select photo posts
-      const photoPosts = postsWithProxiedUrls.filter(p => p.contentType === 'photo')
-      const newSet = new Set(photoPosts.map(p => p.id))
+      // Select all posts
+      const newSet = new Set(postsWithProxiedUrls.map(p => p.id))
       setSelectedPosts(newSet)
     } else {
       setSelectedPosts(new Set())
@@ -185,7 +194,7 @@ export function PostsTable({
 
     setIsBulkOCRing(true)
     try {
-      const response = await fetch('/api/tiktok/posts/bulk-ocr', {
+      const response = await fetch('/api/tiktok/posts/batch-process', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -196,20 +205,61 @@ export function PostsTable({
       })
 
       if (!response.ok) {
-        throw new Error('Failed to bulk OCR')
+        throw new Error('Failed to process posts')
       }
 
       await response.json()
 
-      toast.success(`OCR started for ${selectedPosts.size} posts`)
+      toast.success(`OCR and classification started for ${selectedPosts.size} posts`)
 
       // Clear selection
       setSelectedPosts(new Set())
     } catch (err) {
-      console.error('Failed to bulk OCR:', err)
-      toast.error('Failed to start bulk OCR processing')
+      console.error('Failed to process posts:', err)
+      toast.error('Failed to start OCR and classification processing')
     } finally {
       setIsBulkOCRing(false)
+    }
+  }
+
+  const [isGeneratingRemix, setIsGeneratingRemix] = useState(false)
+
+  const handleGenerateRemixFromSelected = async () => {
+    if (selectedPosts.size === 0) return
+
+    setIsGeneratingRemix(true)
+    try {
+      const response = await fetch('/api/remixes/generate-from-posts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          postIds: Array.from(selectedPosts)
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to generate remix')
+      }
+
+      const result = await response.json()
+
+      toast.success('Remix generated successfully!')
+
+      // Navigate to the remix edit page
+      if (result.remixId) {
+        window.open(`/remix/${result.remixId}/edit`, '_blank')
+      }
+
+      // Clear selection
+      setSelectedPosts(new Set())
+    } catch (err) {
+      console.error('Failed to generate remix:', err)
+      toast.error(err instanceof Error ? err.message : 'Failed to generate remix')
+    } finally {
+      setIsGeneratingRemix(false)
     }
   }
 
@@ -222,12 +272,40 @@ export function PostsTable({
       onRemixPost: handleRemixPost,
       onRowClick: handleRowClick,
       onTriggerOCR: handleTriggerOCR,
+      onRefetchPosts,
       selectedPosts,
       onSelectPost: handleSelectPost,
       onSelectAll: handleSelectAll,
-      allSelected: allPhotosSelected
+      allSelected: allPostsSelected,
+      viewMode
     })
-  }, [handlePreviewPost, handleOpenImageGallery, handleRemixPost, handleRowClick, handleTriggerOCR, selectedPosts, handleSelectPost, handleSelectAll, allPhotosSelected])
+  }, [handlePreviewPost, handleOpenImageGallery, handleRemixPost, handleRowClick, handleTriggerOCR, onRefetchPosts, selectedPosts, handleSelectPost, handleSelectAll, allPostsSelected, viewMode])
+
+  // Compute initial column visibility
+  const initialColumnVisibility = useMemo(() => {
+    const visibility: Record<string, boolean> = {}
+
+    // Apply base hidden columns
+    if (hiddenColumns) {
+      hiddenColumns.forEach(colId => {
+        visibility[colId] = false
+      })
+    }
+
+    // Apply view mode visibility rules
+    columns.forEach((col: any) => {
+      const columnId = col.id || col.accessorKey
+      if (!columnId) return
+
+      if (viewMode === 'metrics' && col.meta?.hideInMetricsMode) {
+        visibility[columnId] = false
+      } else if (viewMode === 'content' && col.meta?.hideInContentMode) {
+        visibility[columnId] = false
+      }
+    })
+
+    return visibility
+  }, [hiddenColumns, columns, viewMode])
 
   // Global filter function to search across author and OCR text
   const globalFilterFn = (post: TikTokPost, filterValue: string) => {
@@ -261,7 +339,7 @@ export function PostsTable({
           globalFilterFn={globalFilterFn}
           searchPlaceholder="Search by author, description..."
           showPagination={true}
-          contentTypeFilter={contentTypeFilter}
+          categoryFilter={categoryFilter}
           dateRangeFilter={dateRangeFilter}
           onPageChange={onPageChange}
           onSortingChange={onSortingChange}
@@ -271,34 +349,36 @@ export function PostsTable({
           totalRows={totalPosts}
           isLoading={isLoading}
           enableColumnPinning={true}
-          hiddenColumns={hiddenColumns}
+          initialColumnVisibility={initialColumnVisibility}
           onRowClick={handleRowClick}
           customHeaderActions={
-            selectedPosts.size > 0 ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">
-                  {selectedPosts.size} selected
-                </span>
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={handleBulkOCR}
-                  disabled={isBulkOCRing}
-                >
-                  {isBulkOCRing ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <FileText className="w-4 h-4 mr-1" />
-                      Run OCR on Selected
-                    </>
-                  )}
-                </Button>
-              </div>
-            ) : null
+            <>
+              {selectedPosts.size > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    {selectedPosts.size} selected
+                  </span>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={handleBulkOCR}
+                    disabled={isBulkOCRing}
+                  >
+                    {isBulkOCRing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="w-4 h-4 mr-1" />
+                        Run OCR on Selected
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </>
           }
         />
       </div>

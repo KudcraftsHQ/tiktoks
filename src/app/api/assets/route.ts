@@ -4,15 +4,23 @@ import { cacheAssetService } from '@/lib/cache-asset-service'
 
 const prisma = new PrismaClient()
 
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: NextRequest) {
   try {
-    const { id } = await context.params
+    const { searchParams } = new URL(request.url)
+    const folderId = searchParams.get('folderId')
 
-    const assets = await prisma.remixAsset.findMany({
-      where: { remixId: id },
+    const where: any = {}
+
+    if (folderId === 'null' || folderId === '') {
+      // Root level (no folder)
+      where.folderId = null
+    } else if (folderId) {
+      // Specific folder
+      where.folderId = folderId
+    }
+
+    const assets = await prisma.asset.findMany({
+      where,
       orderBy: { createdAt: 'desc' }
     })
 
@@ -27,7 +35,7 @@ export async function GET(
 
     return NextResponse.json(assetsWithUrls)
   } catch (error) {
-    console.error('Failed to fetch remix assets:', error)
+    console.error('Failed to fetch assets:', error)
     return NextResponse.json(
       { error: 'Failed to fetch assets' },
       { status: 500 }
@@ -35,17 +43,12 @@ export async function GET(
   }
 }
 
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: NextRequest) {
   try {
-    const { id } = await context.params
     const body = await request.json()
 
-    const asset = await prisma.remixAsset.create({
+    const asset = await prisma.asset.create({
       data: {
-        remixId: id,
         folderId: body.folderId || null,
         cacheAssetId: body.cacheAssetId,
         name: body.name,
@@ -61,7 +64,7 @@ export async function POST(
       url
     })
   } catch (error) {
-    console.error('Failed to create remix asset:', error)
+    console.error('Failed to create asset:', error)
     return NextResponse.json(
       { error: 'Failed to create asset' },
       { status: 500 }

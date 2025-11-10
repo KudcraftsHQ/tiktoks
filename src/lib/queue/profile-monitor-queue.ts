@@ -29,8 +29,8 @@ class ProfileMonitorQueue {
   /**
    * Add a profile monitoring job to the queue
    */
-  async addMonitorJob(profileId: string, priority = 0): Promise<void> {
-    console.log(`📋 [ProfileMonitorQueue] Adding monitor job for profile: ${profileId}`)
+  async addMonitorJob(profileId: string, priority = 0, options?: { forceRecache?: boolean }): Promise<void> {
+    console.log(`📋 [ProfileMonitorQueue] Adding monitor job for profile: ${profileId}`, options)
 
     // Generate unique job ID with timestamp to allow multiple runs
     const jobId = `monitor-${profileId}-${Date.now()}`
@@ -38,7 +38,7 @@ class ProfileMonitorQueue {
 
     const job = await this.queue.add(
       'monitor-profile',
-      { profileId },
+      { profileId, forceRecache: options?.forceRecache || false },
       {
         priority, // Higher priority = processed first
         jobId, // Unique job ID with timestamp to allow multiple runs
@@ -54,6 +54,7 @@ class ProfileMonitorQueue {
       jobId: job.id,
       name: job.name,
       profileId,
+      forceRecache: options?.forceRecache,
       priority,
       state: await job.getState()
     })

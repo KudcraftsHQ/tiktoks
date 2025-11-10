@@ -101,8 +101,8 @@ export interface BulkUpsertResult {
 }
 
 // Helper function to cache media for a single post
-async function cachePostMedia(postData: PostData) {
-  console.log(`🚀 [BulkUpsertService] Caching media for post: ${postData.tiktokId}`)
+async function cachePostMedia(postData: PostData, forceRecache = false) {
+  console.log(`🚀 [BulkUpsertService] Caching media for post: ${postData.tiktokId}`, { forceRecache })
 
   try {
     const cacheResult = await mediaCacheServiceV2.cacheTikTokPostMedia(
@@ -110,7 +110,8 @@ async function cachePostMedia(postData: PostData) {
       postData.coverUrl,
       postData.musicUrl,
       postData.images,
-      postData.authorAvatar
+      postData.authorAvatar,
+      forceRecache
     )
 
     // Log any caching errors
@@ -148,15 +149,22 @@ export class TikTokBulkUpsertService {
    */
   async bulkUpsert(
     profileData: ProfileData,
-    postsData: PostData[]
+    postsData: PostData[],
+    options?: { forceRecache?: boolean }
   ): Promise<BulkUpsertResult> {
+    const forceRecache = options?.forceRecache || false
+    console.log(`🔄 [BulkUpsertService] Bulk upsert starting`, {
+      handle: profileData.handle,
+      postsCount: postsData.length,
+      forceRecache
+    })
     // Cache profile avatar if available (outside transaction)
     let profileAvatarId: string | undefined
 
     if (profileData.avatar) {
       try {
         console.log(`🚀 [BulkUpsertService] Caching profile avatar for: ${profileData.handle}`)
-        const avatarCacheAssetId = await mediaCacheServiceV2.cacheAvatar(profileData.avatar)
+        const avatarCacheAssetId = await mediaCacheServiceV2.cacheAvatar(profileData.avatar, undefined, forceRecache)
         if (avatarCacheAssetId) {
           profileAvatarId = avatarCacheAssetId
           console.log(`✅ [BulkUpsertService] Profile avatar cached successfully for: ${profileData.handle}`)
@@ -194,40 +202,44 @@ export class TikTokBulkUpsertService {
 
     console.log(`📊 [BulkUpsertService] Found ${newPosts.length} new posts and ${existingPosts.length} existing posts`)
 
-    // Only cache media for NEW posts (outside transaction)
-    console.log(`🚀 [BulkUpsertService] Starting media caching for ${newPosts.length} new posts`)
-    const newPostsWithCachedMedia = await Promise.all(
-      newPosts.map(async (postData) => {
-        console.log(`🔄 [BulkUpsertService] Caching media for new post: ${postData.tiktokId}`)
-        const cachedMedia = await cachePostMedia(postData)
+    // Cache media for NEW posts (always) and EXISTING posts (if forceRecache is enabled)
+    const postsToCache = forceRecache ? postsData : newPosts
+    console.log(`🚀 [BulkUpsertService] Starting media caching for ${postsToCache.length} posts ${forceRecache ? '(force recache enabled)' : '(new posts only)'}`)
+
+    const postsWithCachedMedia = await Promise.all(
+      postsToCache.map(async (postData) => {
+        const isNew = !existingPostsMap.has(postData.tiktokId)
+        console.log(`🔄 [BulkUpsertService] Caching media for ${isNew ? 'new' : 'existing'} post: ${postData.tiktokId}`)
+        const cachedMedia = await cachePostMedia(postData, forceRecache)
         return {
           postData,
           cachedMedia,
-          isNew: true
+          isNew
         }
       })
     )
 
-    // For existing posts, reuse their current cache asset IDs (no new caching)
-    const existingPostsWithCachedMedia = existingPosts.map((postData) => {
-      const existingPost = existingPostsMap.get(postData.tiktokId)!
-      console.log(`♻️ [BulkUpsertService] Reusing cached media for existing post: ${postData.tiktokId}`)
-      return {
-        postData,
-        cachedMedia: {
-          cachedVideo: existingPost.videoId,
-          cachedCover: existingPost.coverId,
-          cachedMusic: existingPost.musicId,
-          cachedImages: typeof existingPost.images === 'string' ? JSON.parse(existingPost.images) : existingPost.images,
-          cachedAuthorAvatar: existingPost.authorAvatarId
-        },
-        isNew: false
-      }
-    })
+    // For existing posts that we didn't recache, reuse their current cache asset IDs
+    if (!forceRecache && existingPosts.length > 0) {
+      const existingPostsWithReusedMedia = existingPosts.map((postData) => {
+        const existingPost = existingPostsMap.get(postData.tiktokId)!
+        console.log(`♻️ [BulkUpsertService] Reusing cached media for existing post: ${postData.tiktokId}`)
+        return {
+          postData,
+          cachedMedia: {
+            cachedVideo: existingPost.videoId,
+            cachedCover: existingPost.coverId,
+            cachedMusic: existingPost.musicId,
+            cachedImages: typeof existingPost.images === 'string' ? JSON.parse(existingPost.images) : existingPost.images,
+            cachedAuthorAvatar: existingPost.authorAvatarId
+          },
+          isNew: false
+        }
+      })
+      postsWithCachedMedia.push(...existingPostsWithReusedMedia)
+    }
 
-    // Combine both arrays
-    const postsWithCachedMedia = [...newPostsWithCachedMedia, ...existingPostsWithCachedMedia]
-    console.log(`✅ [BulkUpsertService] Media caching completed: ${newPosts.length} cached, ${existingPosts.length} reused`)
+    console.log(`✅ [BulkUpsertService] Media caching completed: ${postsToCache.length} cached${!forceRecache ? `, ${existingPosts.length} reused` : ''}`)
 
     // Process database operations in smaller batches to avoid timeout
     console.log(`🚀 [BulkUpsertService] Starting database operations for ${postsWithCachedMedia.length} posts`)

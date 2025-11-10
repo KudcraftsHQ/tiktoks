@@ -86,6 +86,24 @@ model TiktokProfile {
   @@index([isOwnProfile])
 }
 
+// Post Category for TikTok content classification
+
+model PostCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  aiGenerated Boolean  @default(false) // Created by AI vs manually
+  postCount   Int      @default(0) // How many posts use this category
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  posts       TiktokPost[]
+
+  @@map("post_categories")
+  @@index([name])
+  @@index([aiGenerated])
+}
+
 model TiktokPost {
   id          String   @id @default(cuid())
   tiktokId    String   @unique // TikTok's aweme_id
@@ -104,11 +122,23 @@ model TiktokPost {
   // Array of objects: [{"cacheAssetId": "uuid", "width": 100, "height": 200}]
   images      Json     @default("[]")
 
-  // OCR and text extraction
-  ocrTexts     Json     @default("[]") // Array of objects: [{"imageIndex": 0, "text": "extracted text"}]
-  imageDescriptions Json @default("[]") // Array of objects: [{"imageIndex": 0, "imageDescription": "detailed visual description"}]
+  // Post category classification
+  postCategoryId String?
+  categoryConfidence Float?
+
+  // OCR and text extraction - now includes full structured output
+  // Full structure: { postCategory: {...}, slides: [...], processingMetadata: {...} }
+  ocrData      Json     @default("{}") // Full structured OCR response
+  ocrTexts     Json     @default("[]") // Denormalized: Array of objects: [{"imageIndex": 0, "text": "extracted text"}]
+  imageDescriptions Json @default("[]") // Denormalized: Array of objects: [{"imageIndex": 0, "imageDescription": "detailed visual description"}]
   ocrStatus    String   @default("pending") // 'pending', 'processing', 'completed', 'failed'
   ocrProcessedAt DateTime?
+
+  // Slide classifications - denormalized from ocrData
+  // Array: [{slideIndex: 0, slideType: "hook", categoryId: "...", ...}]
+  slideClassifications Json @default("[]")
+  classificationStatus String @default("pending") // 'pending', 'processing', 'completed', 'failed'
+  classificationProcessedAt DateTime?
 
   // Author info (denormalized for performance)
   authorNickname String?
@@ -135,6 +165,7 @@ model TiktokPost {
   updatedAt    DateTime @updatedAt
 
   profile      TiktokProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  postCategory PostCategory? @relation(fields: [postCategoryId], references: [id], onDelete: SetNull)
   collections  CollectionPost[]
   remixes      RemixPost[]
   metricsHistory TikTokPostMetricsHistory[]
@@ -145,6 +176,7 @@ model TiktokPost {
   @@index([publishedAt])
   @@index([authorHandle])
   @@index([ocrStatus])
+  @@index([postCategoryId])
 }
 
 model Collection {
@@ -176,16 +208,47 @@ model CollectionPost {
   @@index([postId])
 }
 
+// Draft Sessions for grouping generated content variations
+
+model DraftSession {
+  id                 String   @id @default(cuid())
+  name               String   // User-editable session name
+
+  // Generation configuration
+  generationStrategy String   // 'remix' | 'inspired'
+  languageStyle      String
+  contentIdeas       String?
+  slidesRange        Json     // { min: number, max: number }
+  productContextId   String?  // Reference to ProductContext (optional)
+
+  // Metadata
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Relations
+  drafts             RemixPost[]
+  productContext     ProductContext? @relation(fields: [productContextId], references: [id], onDelete: SetNull)
+
+  @@map("draft_sessions")
+  @@index([createdAt])
+  @@index([productContextId])
+}
+
 // Remix system for TikTok posts - Simplified JSON structure
 
 model RemixPost {
   id                 String   @id @default(cuid())
   originalPostId     String?  // Reference to TikTokPost (optional - can create remix without original)
+  sourcePostIds      String[] @default([]) // NEW: Multiple source posts for multi-post generation
   productContextId   String?  // Reference to ProductContext (optional)
+  sessionId          String?  // Reference to DraftSession (optional - groups related drafts)
   name               String
   description        String?
-  generationType     String   @default("manual") // 'manual', 'ai_paraphrase'
+  generationType     String   @default("manual") // 'manual', 'ai_paraphrase', 'ai_multi_post'
   additionalPrompt   String?  // Optional additional prompt used during paraphrasing
+  generationPrompt   String?  // NEW: Full prompt used for generation
+  languageStyleTags  String[] @default([]) // NEW: ["casual", "emoji-heavy", etc.]
+  isDraft            Boolean  @default(true) // NEW: All new remixes start as drafts
   bookmarked         Boolean  @default(false) // Track if remix is bookmarked for content use
   approved           Boolean  @default(false) // Approval status for content use
   postedUrl          String?  // URL to posted TikTok content
@@ -194,21 +257,27 @@ model RemixPost {
   // Complete slide structure with canvas, backgrounds, and text boxes in JSON
   slides             Json     @default("[]") // Array of RemixSlide objects with full structure
 
+  // NEW: Slide classifications stored alongside slides
+  slideClassifications Json   @default("[]") // Array: [{slideIndex: 0, type: "HOOK", categoryId: "..."}]
+
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   originalPost       TiktokPost? @relation(fields: [originalPostId], references: [id], onDelete: SetNull)
   productContext     ProductContext? @relation(fields: [productContextId], references: [id], onDelete: SetNull)
+  session            DraftSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   textStyles         RemixTextStyle[]
-  assetFolders       RemixAssetFolder[]
-  assets             RemixAsset[]
+  classificationIndexes SlideClassificationIndex[]
 
   @@map("remix_posts")
   @@index([originalPostId])
   @@index([productContextId])
+  @@index([sessionId])
   @@index([bookmarked])
   @@index([bookmarked, approved])
   @@index([postedUrl])
+  @@index([isDraft])
+  @@index([generationType])
 }
 
 // Text styles for Remix posts - reusable text styling templates
@@ -263,27 +332,21 @@ model RemixTextStyle {
   @@index([remixId, isDefault])
 }
 
-// Folders for organizing remix assets
+// Global asset management - not tied to any specific remix
 
-model RemixAssetFolder {
+model AssetFolder {
   id          String   @id @default(cuid())
-  remixId     String
   name        String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  
-  remix       RemixPost @relation(fields: [remixId], references: [id], onDelete: Cascade)
-  assets      RemixAsset[]
-  
-  @@map("remix_asset_folders")
-  @@index([remixId])
+
+  assets      Asset[]
+
+  @@map("asset_folders")
 }
 
-// Assets for Remix posts - uploaded images with folder organization
-
-model RemixAsset {
+model Asset {
   id              String   @id @default(cuid())
-  remixId         String
   folderId        String?  // Optional folder
   cacheAssetId    String   @db.Uuid // Reference to CacheAsset
   name            String?  // Optional custom name
@@ -291,12 +354,10 @@ model RemixAsset {
   height          Int?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
-  
-  remix           RemixPost @relation(fields: [remixId], references: [id], onDelete: Cascade)
-  folder          RemixAssetFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
-  
-  @@map("remix_assets")
-  @@index([remixId])
+
+  folder          AssetFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  @@map("assets")
   @@index([folderId])
   @@index([cacheAssetId])
 }
@@ -311,6 +372,7 @@ model ProductContext {
   updatedAt   DateTime @updatedAt
 
   remixes     RemixPost[]
+  draftSessions DraftSession[]
 
   @@map("product_contexts")
   @@index([title])
@@ -369,6 +431,50 @@ model Conversation {
 
   @@map("conversations")
   @@index([updatedAt])
+}
+
+// Content Ideation System - Categories for slide classification
+
+model ContentIdeaCategory {
+  id          String   @id @default(cuid())
+  name        String
+  type        String   // "HOOK" | "CONTENT" | "CTA"
+  description String?
+  aiGenerated Boolean  @default(false)
+  slideCount  Int      @default(0) // How many slides use this category
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  classifications SlideClassificationIndex[]
+
+  @@map("content_idea_categories")
+  @@index([type])
+  @@index([aiGenerated])
+  @@unique([name, type])
+}
+
+// Content Ideation System - Searchable index of classified slides
+
+model SlideClassificationIndex {
+  id                String   @id @default(cuid())
+  remixPostId       String
+  slideIndex        Int
+  type              String   // "HOOK" | "CONTENT" | "CTA"
+  categoryId        String
+  contentText       String   @db.Text // Denormalized for search
+  sourcePostId      String?  // Original TikTokPost if exists
+  languageStyleTags String[] @default([])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  remixPost         RemixPost @relation(fields: [remixPostId], references: [id], onDelete: Cascade)
+  category          ContentIdeaCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@map("slide_classification_index")
+  @@index([type, categoryId])
+  @@index([sourcePostId])
+  @@index([remixPostId, slideIndex])
+  @@unique([remixPostId, slideIndex])
 }
 
 // TikTok Upload Accounts for OAuth-connected accounts used as upload destinations

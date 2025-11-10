@@ -34,7 +34,6 @@ import { FloatingBackgroundPanel } from '@/components/FloatingBackgroundPanel'
 import { CanvasSidebar, TextElementsSection, BackgroundSection, CanvasSettingsSection } from '@/components/CanvasSidebar'
 import { TextStylePanel } from '@/components/TextStylePanel'
 import { TextStylesManager } from '@/components/TextStylesManager'
-import { RemixUploadsManager } from '@/components/RemixUploadsManager'
 import {
   DndContext,
   closestCenter,
@@ -1452,14 +1451,18 @@ export default function RemixEditor({ params }: EditorProps) {
               label: 'Uploads',
               icon: CloudUpload,
               content: remix ? (
-                <RemixUploadsManager
-                  remixId={remix.id}
-                  onSelectImage={async (url, cacheAssetId) => {
-                    // Apply as background
-                    applyBackgroundImageAsset(cacheAssetId)
-                    setTimeout(() => setThumbnailUpdateTrigger(prev => prev + 1), 0)
-                  }}
-                />
+                <div className="p-4 text-sm text-muted-foreground">
+                  <p className="mb-2">Manage your assets globally:</p>
+                  <Button
+                    onClick={() => router.push('/assets')}
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                  >
+                    <ImageIcon className="h-4 w-4 mr-2" />
+                    Browse Assets
+                  </Button>
+                </div>
               ) : null
             },
             

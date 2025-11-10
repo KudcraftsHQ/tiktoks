@@ -70,6 +70,7 @@ export interface MediaCacheJobResult {
 // Profile Monitoring job interfaces
 export interface ProfileMonitorJobData {
   profileId: string
+  forceRecache?: boolean
 }
 
 export interface ProfileMonitorJobResult {

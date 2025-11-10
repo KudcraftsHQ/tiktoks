@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Home, FileText, Users, UserCheck, Sparkles, Star, Search, CloudUpload, BookmarkCheck } from 'lucide-react'
+import { Home, FileText, Users, UserCheck, Sparkles, Star, Search, CloudUpload, BookmarkCheck, Edit, Library, Tag, ImageIcon } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -36,10 +36,20 @@ export function AppSidebar() {
       icon: Home,
     },
     {
+      title: 'Drafts',
+      url: '/drafts',
+      icon: Edit,
+    },
+    {
       title: 'Bookmarks',
       url: '/bookmarks',
       icon: BookmarkCheck,
     },
+    {
+      title: 'Assets',
+      url: '/assets',
+      icon: ImageIcon
+    }
     // Hidden for now
     // {
     //   title: 'Upload',
@@ -51,6 +61,14 @@ export function AppSidebar() {
     //   url: '/tiktok-accounts',
     //   icon: UserCheck,
     // },
+  ]
+
+  const contentNavigationItems = [
+    {
+      title: 'Content Library',
+      url: '/content-ideas/library',
+      icon: Library,
+    },
   ]
 
   const profileNavigationItems = [
@@ -68,6 +86,11 @@ export function AppSidebar() {
 
   const otherNavigationItems = [
     {
+      title: 'Post Categories',
+      url: '/post-categories',
+      icon: Tag,
+    },
+    {
       title: 'Product Contexts',
       url: '/product-contexts',
       icon: FileText,
@@ -76,7 +99,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="p-4">
+      <SidebarHeader className="p-4 border-b">
         <div className="flex items-center justify-between">
           <div className="flex flex-col space-y-2">
             <h2 className="text-lg font-semibold">TikTok Carousel</h2>
@@ -114,6 +137,27 @@ export function AppSidebar() {
           <SidebarGroupContent className="space-y-2">
             <SidebarMenu>
               {profileNavigationItems.map((item) => {
+                const isActive = pathname === item.url
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link href={item.url}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Content</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {contentNavigationItems.map((item) => {
                 const isActive = pathname === item.url
                 return (
                   <SidebarMenuItem key={item.title}>

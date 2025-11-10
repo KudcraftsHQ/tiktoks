@@ -11,6 +11,8 @@ import {
   Heart,
   Users,
   Clipboard,
+  LayoutList,
+  LayoutGrid,
 } from 'lucide-react'
 import { PostsTable } from '@/components/PostsTable'
 import { Card, CardContent } from '@/components/ui/card'
@@ -20,10 +22,12 @@ import { designTokens } from '@/lib/design-tokens'
 import { toast } from 'sonner'
 import { SortingState } from '@tanstack/react-table'
 import { ContentAnalysisSidebar } from '@/components/ContentAnalysisSidebar'
+import { GenerateContentDrawer } from '@/components/GenerateContentDrawer'
 import { cn } from '@/lib/utils'
 import { DateRange } from '@/components/DateRangeFilter'
 import { PostingTimeChart, PostingTimeChartData, PostingTimeChartBestTime } from '@/components/PostingTimeChart'
 import { PostingActivityHeatmap } from '@/components/PostingActivityHeatmap'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   calculateAggregateMetrics,
   calculateTimeAnalysis,
@@ -90,13 +94,20 @@ function PostsPageContent() {
     to: dateToParam ? new Date(dateToParam) : undefined
   }
 
+  // Parse category from URL
+  const initialCategory = searchParams.get('category') || 'all'
+
+  // Parse view mode from URL
+  const initialViewMode = (searchParams.get('view') as 'metrics' | 'content') || 'metrics'
+
   const [posts, setPosts] = useState<TikTokPost[]>([])
+  const [viewMode, setViewMode] = useState<'metrics' | 'content'>(initialViewMode)
   const [totalPosts, setTotalPosts] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [currentPage, setCurrentPage] = useState(initialPage)
   const [pageSize, setPageSize] = useState(25)
   const [sorting, setSorting] = useState<SortingState>(initialSorting)
-  const [contentTypeFilter, setContentTypeFilter] = useState<'all' | 'video' | 'photo'>('all')
+  const [categoryFilter, setCategoryFilter] = useState<string>(initialCategory)
   const [dateRange, setDateRange] = useState<DateRange>(initialDateRange)
   const [timeAnalysis, setTimeAnalysis] = useState<{
     hourlyData: PostingTimeChartData[]
@@ -116,6 +127,7 @@ function PostsPageContent() {
   // Selection and Analysis sidebar state
   const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set())
   const [isAnalysisSidebarOpen, setIsAnalysisSidebarOpen] = useState(false)
+  const [isGenerateDrawerOpen, setIsGenerateDrawerOpen] = useState(false)
 
   // Don't auto-close sidebar when posts are deselected
   // useEffect(() => {
@@ -157,7 +169,7 @@ function PostsPageContent() {
   }, [selectedPostsForMetrics, firstPostDate])
 
   // Update URL with current state
-  const updateURL = useCallback((page: number, sort: SortingState, dateFilter: DateRange) => {
+  const updateURL = useCallback((page: number, sort: SortingState, dateFilter: DateRange, category: string, view: 'metrics' | 'content') => {
     const params = new URLSearchParams()
 
     if (page > 1) {
@@ -180,6 +192,16 @@ function PostsPageContent() {
       params.set('dateTo', dateFilter.to.toISOString())
     }
 
+    // Add category filter
+    if (category && category !== 'all') {
+      params.set('category', category)
+    }
+
+    // Add view mode (only if content mode)
+    if (view === 'content') {
+      params.set('view', 'content')
+    }
+
     const queryString = params.toString()
     const newUrl = queryString ? `?${queryString}` : '/'
 
@@ -187,7 +209,7 @@ function PostsPageContent() {
     router.push(newUrl, { scroll: false })
   }, [router])
 
-  const fetchPosts = useCallback(async (page: number, limit: number, sort: SortingState, filter: 'all' | 'video' | 'photo', dateFilter: DateRange) => {
+  const fetchPosts = useCallback(async (page: number, limit: number, sort: SortingState, dateFilter: DateRange, category: string) => {
     setIsLoading(true)
     try {
       // Get client timezone
@@ -201,9 +223,9 @@ function PostsPageContent() {
         timezone: timezone
       })
 
-      // Add content type filter
-      if (filter !== 'all') {
-        params.append('contentType', filter)
+      // Add category filter
+      if (category && category !== 'all') {
+        params.append('categoryId', category)
       }
 
       // Add sorting parameters
@@ -253,6 +275,7 @@ function PostsPageContent() {
     }
   }, [])
 
+
   // Handle sorting change with URL update
   const handleSortingChange = useCallback((updaterOrValue: SortingState | ((old: SortingState) => SortingState)) => {
     const newSorting = typeof updaterOrValue === 'function'
@@ -263,10 +286,10 @@ function PostsPageContent() {
 
     // Update URL and fetch in a separate effect to avoid render issues
     setTimeout(() => {
-      updateURL(currentPage, newSorting, dateRange)
-      fetchPosts(currentPage, pageSize, newSorting, contentTypeFilter, dateRange)
+      updateURL(currentPage, newSorting, dateRange, categoryFilter, viewMode)
+      fetchPosts(currentPage, pageSize, newSorting, dateRange, categoryFilter)
     }, 0)
-  }, [currentPage, pageSize, sorting, contentTypeFilter, dateRange, updateURL, fetchPosts])
+  }, [currentPage, pageSize, sorting, categoryFilter, dateRange, viewMode, updateURL, fetchPosts])
 
   // Handle page change with URL update
   const handlePageChange = useCallback((pageIndex: number, newPageSize: number) => {
@@ -275,11 +298,11 @@ function PostsPageContent() {
     setPageSize(newPageSize)
 
     setSorting(currentSorting => {
-      updateURL(newPage, currentSorting, dateRange)
-      fetchPosts(newPage, newPageSize, currentSorting, contentTypeFilter, dateRange)
+      updateURL(newPage, currentSorting, dateRange, categoryFilter, viewMode)
+      fetchPosts(newPage, newPageSize, currentSorting, dateRange, categoryFilter)
       return currentSorting
     })
-  }, [contentTypeFilter, dateRange, updateURL, fetchPosts])
+  }, [categoryFilter, dateRange, viewMode, updateURL, fetchPosts])
 
   // Handle date range change with URL update
   const handleDateRangeChange = useCallback((newDateRange: DateRange) => {
@@ -288,10 +311,33 @@ function PostsPageContent() {
 
     // Update URL and fetch
     setTimeout(() => {
-      updateURL(1, sorting, newDateRange)
-      fetchPosts(1, pageSize, sorting, contentTypeFilter, newDateRange)
+      updateURL(1, sorting, newDateRange, categoryFilter, viewMode)
+      fetchPosts(1, pageSize, sorting, newDateRange, categoryFilter)
     }, 0)
-  }, [pageSize, sorting, contentTypeFilter, updateURL, fetchPosts])
+  }, [pageSize, sorting, categoryFilter, viewMode, updateURL, fetchPosts])
+
+  // Handle category change with URL update
+  const handleCategoryChange = useCallback((newCategory: string) => {
+    setCategoryFilter(newCategory)
+    setCurrentPage(1) // Reset to first page when filter changes
+
+    // Update URL and fetch
+    setTimeout(() => {
+      updateURL(1, sorting, dateRange, newCategory, viewMode)
+      fetchPosts(1, pageSize, sorting, dateRange, newCategory)
+    }, 0)
+  }, [pageSize, sorting, dateRange, viewMode, updateURL, fetchPosts])
+
+  // Handle refetch (e.g., after updating slide classification)
+  const handleRefetchPosts = useCallback(() => {
+    fetchPosts(currentPage, pageSize, sorting, dateRange, categoryFilter)
+  }, [currentPage, pageSize, sorting, dateRange, categoryFilter, fetchPosts])
+
+  // Handle content generated callback
+  const handleContentGenerated = useCallback(() => {
+    // Navigation is handled by GenerateContentDrawer
+    // This callback is kept for potential future use
+  }, [])
 
   // Sync state from URL params (for browser back/forward)
   useEffect(() => {
@@ -300,6 +346,7 @@ function PostsPageContent() {
     const oldSortOrder = searchParams.get('sortOrder')
     const dateFromParam = searchParams.get('dateFrom')
     const dateToParam = searchParams.get('dateTo')
+    const categoryParam = searchParams.get('category') || 'all'
 
     let urlSorting: SortingState = []
 
@@ -320,23 +367,29 @@ function PostsPageContent() {
     // Check if URL state is different from current state
     const sortingDifferent = JSON.stringify(urlSorting) !== JSON.stringify(sorting)
     const dateDifferent = JSON.stringify(urlDateRange) !== JSON.stringify(dateRange)
+    const categoryDifferent = categoryParam !== categoryFilter
 
-    if (sortingDifferent || dateDifferent) {
+    if (sortingDifferent || dateDifferent || categoryDifferent) {
       if (sortingDifferent) setSorting(urlSorting)
       if (dateDifferent) setDateRange(urlDateRange)
-      fetchPosts(currentPage, pageSize, urlSorting, contentTypeFilter, urlDateRange)
+      if (categoryDifferent) setCategoryFilter(categoryParam)
+      fetchPosts(currentPage, pageSize, urlSorting, urlDateRange, categoryParam)
     }
-  }, [searchParams, sorting, dateRange, currentPage, pageSize, contentTypeFilter, fetchPosts])
+  }, [searchParams, sorting, dateRange, categoryFilter, currentPage, pageSize, fetchPosts])
 
   // Initial fetch
   useEffect(() => {
-    fetchPosts(initialPage, pageSize, initialSorting, contentTypeFilter, initialDateRange)
+    fetchPosts(initialPage, pageSize, initialSorting, initialDateRange, initialCategory)
   }, [])
 
-  // Refetch when content type filter changes
+  // Sync viewMode from URL
   useEffect(() => {
-    fetchPosts(currentPage, pageSize, sorting, contentTypeFilter, dateRange)
-  }, [contentTypeFilter])
+    const urlViewMode = (searchParams.get('view') as 'metrics' | 'content') || 'metrics'
+    if (urlViewMode !== viewMode) {
+      setViewMode(urlViewMode)
+    }
+  }, [searchParams, viewMode])
+
 
   // Get selected posts data for sidebar
   const selectedPostsData = posts
@@ -443,31 +496,61 @@ function PostsPageContent() {
       <div className="flex-1 flex flex-col min-w-0">
         <PageLayout
           title="TikTok Posts"
-          description="Manage your imported TikTok content and create remixes"
           headerActions={
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <ToggleGroup
+                type="single"
+                value={viewMode}
+                onValueChange={(value) => {
+                  if (value) {
+                    const newViewMode = value as 'metrics' | 'content'
+                    setViewMode(newViewMode)
+                    updateURL(currentPage, sorting, dateRange, categoryFilter, newViewMode)
+                  }
+                }}
+                className="border h-8"
+              >
+                <ToggleGroupItem value="metrics" className="gap-1.5 h-8 px-3 text-xs">
+                  <LayoutList className="h-3 w-3" />
+                  <span>Metrics</span>
+                </ToggleGroupItem>
+                <ToggleGroupItem value="content" className="gap-1.5 h-8 px-3 text-xs">
+                  <LayoutGrid className="h-3 w-3" />
+                  <span>Content</span>
+                </ToggleGroupItem>
+              </ToggleGroup>
               <Button
                 variant="outline"
                 onClick={handleCopyToClipboard}
                 disabled={selectedPosts.size === 0 || isCopyingToClipboard}
-                className="w-full sm:w-auto"
+                className="w-full sm:w-auto h-8 px-3 text-xs"
               >
-                <Clipboard className="h-4 w-4 mr-2" />
+                <Clipboard className="h-3 w-3 mr-1.5" />
                 Copy to Clipboard {selectedPosts.size > 0 && `(${selectedPosts.size})`}
+              </Button>
+              <Button
+                variant={isGenerateDrawerOpen ? "default" : "outline"}
+                onClick={() => setIsGenerateDrawerOpen(!isGenerateDrawerOpen)}
+                className="w-full sm:w-auto h-8 px-3 text-xs"
+              >
+                <Sparkles className="h-3 w-3 mr-1.5" />
+                Generate Content {selectedPosts.size > 0 && `(${selectedPosts.size})`}
               </Button>
               <Button
                 variant={isAnalysisSidebarOpen ? "default" : "outline"}
                 onClick={() => setIsAnalysisSidebarOpen(!isAnalysisSidebarOpen)}
-                className="w-full sm:w-auto"
+                className="w-full sm:w-auto h-8 px-3 text-xs"
               >
-                <Sparkles className="h-4 w-4 mr-2" />
+                <Sparkles className="h-3 w-3 mr-1.5" />
                 Chat with Data {selectedPosts.size > 0 && `(${selectedPosts.size})`}
               </Button>
             </div>
           }
         >
-          {/* Metrics and Charts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr_1fr] gap-4">
+          {viewMode === 'metrics' ? (
+            <>
+              {/* Metrics and Charts Row */}
+              <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr_1fr] gap-4">
             {/* Metrics Grid - 2x3 */}
             {isLoading && !displayMetrics ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -549,32 +632,67 @@ function PostsPageContent() {
               bestTimes={displayTimeAnalysis?.bestTimes || []}
               loading={isLoading && !displayTimeAnalysis}
             />
-          </div>
+              </div>
 
-          {/* Posts Table */}
-          <PostsTable
-            posts={posts}
-            totalPosts={totalPosts}
-            contentTypeFilter={{
-              value: contentTypeFilter,
-              onChange: setContentTypeFilter
-            }}
-            dateRangeFilter={{
-              value: dateRange,
-              onChange: handleDateRangeChange
-            }}
-            onPageChange={handlePageChange}
-            onSortingChange={handleSortingChange}
-            sorting={sorting}
-            enableServerSideSorting={true}
-            isLoading={isLoading}
-            selectedPosts={selectedPosts}
-            onSelectionChange={setSelectedPosts}
-          />
+              {/* Posts Table */}
+              <PostsTable
+                posts={posts}
+                totalPosts={totalPosts}
+                categoryFilter={{
+                  value: categoryFilter,
+                  onChange: handleCategoryChange
+                }}
+                dateRangeFilter={{
+                  value: dateRange,
+                  onChange: handleDateRangeChange
+                }}
+                onPageChange={handlePageChange}
+                onSortingChange={handleSortingChange}
+                onRefetchPosts={handleRefetchPosts}
+                sorting={sorting}
+                enableServerSideSorting={true}
+                isLoading={isLoading}
+                selectedPosts={selectedPosts}
+                onSelectionChange={setSelectedPosts}
+                viewMode={viewMode}
+              />
+            </>
+          ) : (
+            /* Content Mode: Full Height Posts Table */
+            <PostsTable
+              posts={posts}
+              totalPosts={totalPosts}
+              categoryFilter={{
+                value: categoryFilter,
+                onChange: handleCategoryChange
+              }}
+              dateRangeFilter={{
+                value: dateRange,
+                onChange: handleDateRangeChange
+              }}
+              onPageChange={handlePageChange}
+              onSortingChange={handleSortingChange}
+              onRefetchPosts={handleRefetchPosts}
+              sorting={sorting}
+              enableServerSideSorting={true}
+              isLoading={isLoading}
+              selectedPosts={selectedPosts}
+              onSelectionChange={setSelectedPosts}
+              viewMode={viewMode}
+            />
+          )}
         </PageLayout>
       </div>
 
-      {/* Sidebar - spans full height */}
+      {/* Generate Content Sidebar - spans full height */}
+      <GenerateContentDrawer
+        isOpen={isGenerateDrawerOpen}
+        onClose={() => setIsGenerateDrawerOpen(false)}
+        selectedPostIds={Array.from(selectedPosts)}
+        onContentGenerated={handleContentGenerated}
+      />
+
+      {/* Content Analysis Sidebar - spans full height */}
       <ContentAnalysisSidebar
         isOpen={isAnalysisSidebarOpen}
         onClose={() => setIsAnalysisSidebarOpen(false)}

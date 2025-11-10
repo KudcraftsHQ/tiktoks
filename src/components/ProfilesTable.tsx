@@ -13,6 +13,8 @@ import { DataTable } from '@/components/ui/data-table'
 import { createProfilesTableColumns, TikTokProfile } from '@/components/profiles-table-columns'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import { ExternalLink, Users, Heart, Video, CheckCircle, PlayCircle, PauseCircle, RefreshCw } from 'lucide-react'
 
 interface ProfilesTableProps {
@@ -26,6 +28,7 @@ export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps
   const [selectedProfiles, setSelectedProfiles] = useState<Set<string>>(new Set())
   const [isBulkToggling, setIsBulkToggling] = useState(false)
   const [isBulkUpdating, setIsBulkUpdating] = useState(false)
+  const [forceRecache, setForceRecache] = useState(false)
 
   const formatNumber = (num?: number | null): string => {
     if (!num) return '0'
@@ -165,7 +168,8 @@ export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          profileIds: Array.from(selectedProfiles)
+          profileIds: Array.from(selectedProfiles),
+          forceRecache
         })
       })
 
@@ -174,10 +178,11 @@ export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps
       }
 
       const result = await response.json()
-      alert(`Successfully queued update for ${result.queuedCount} profile${result.queuedCount > 1 ? 's' : ''}`)
+      alert(`Successfully queued update for ${result.queuedCount} profile${result.queuedCount > 1 ? 's' : ''}${forceRecache ? ' with force recache' : ''}`)
 
-      // Clear selection
+      // Clear selection and reset checkbox
       setSelectedProfiles(new Set())
+      setForceRecache(false)
     } catch (err) {
       console.error('Failed to bulk trigger update:', err)
       alert('Failed to queue profile updates. Please try again.')
@@ -231,10 +236,23 @@ export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps
         getRowId={(row) => row.id}
         customHeaderActions={
           selectedProfiles.size > 0 ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">
                 {selectedProfiles.size} selected
               </span>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="force-recache"
+                  checked={forceRecache}
+                  onCheckedChange={(checked) => setForceRecache(checked as boolean)}
+                />
+                <Label
+                  htmlFor="force-recache"
+                  className="text-sm font-normal cursor-pointer"
+                >
+                  Force recache images
+                </Label>
+              </div>
               <Button
                 variant="default"
                 size="sm"

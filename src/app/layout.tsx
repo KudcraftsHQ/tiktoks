@@ -50,7 +50,7 @@ export default function RootLayout({
         `}} />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased dark`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased dark theme-mono`}
       >
           <SidebarProvider>
             <AppSidebar />

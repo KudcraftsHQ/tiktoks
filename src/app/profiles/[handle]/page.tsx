@@ -93,12 +93,15 @@ function ProfileDetailPageContent() {
     to: dateToParam ? new Date(dateToParam) : undefined
   }
 
+  // Parse category from URL
+  const initialCategory = searchParams.get('category') || 'all'
+
   const [profile, setProfile] = useState<TikTokProfile | null>(null)
   const [posts, setPosts] = useState<TikTokPost[]>([])
   const [loading, setLoading] = useState(false)
   const [profileLoading, setProfileLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [contentTypeFilter, setContentTypeFilter] = useState<'all' | 'video' | 'photo'>('all')
+  const [categoryFilter, setCategoryFilter] = useState<string>(initialCategory)
   const [currentPage, setCurrentPage] = useState(initialPage)
   const [totalPosts, setTotalPosts] = useState(0)
   const [monitoringEnabled, setMonitoringEnabled] = useState(false)
@@ -171,7 +174,7 @@ function ProfileDetailPageContent() {
   }, [selectedPostsForMetrics, firstPostDate])
 
   // Update URL with current state
-  const updateURL = useCallback((page: number, sort: SortingState, dateFilter: DateRange) => {
+  const updateURL = useCallback((page: number, sort: SortingState, dateFilter: DateRange, category: string) => {
     const params = new URLSearchParams()
 
     if (page > 1) {
@@ -191,6 +194,11 @@ function ProfileDetailPageContent() {
     }
     if (dateFilter.to) {
       params.set('dateTo', dateFilter.to.toISOString())
+    }
+
+    // Add category filter
+    if (category && category !== 'all') {
+      params.set('category', category)
     }
 
     const queryString = params.toString()
@@ -221,7 +229,7 @@ function ProfileDetailPageContent() {
     }
   }, [handle])
 
-  const fetchProfilePosts = useCallback(async (page: number, sort: SortingState, filter: 'all' | 'video' | 'photo', dateFilter: DateRange) => {
+  const fetchProfilePosts = useCallback(async (page: number, sort: SortingState, dateFilter: DateRange, category: string) => {
     if (!profile?.id) return
 
     setLoading(true)
@@ -233,8 +241,8 @@ function ProfileDetailPageContent() {
         limit: '50'
       })
 
-      if (filter !== 'all') {
-        params.append('contentType', filter)
+      if (category && category !== 'all') {
+        params.append('categoryId', category)
       }
 
       // Add sorting parameters
@@ -329,10 +337,10 @@ function ProfileDetailPageContent() {
 
   const handleRefresh = useCallback(() => {
     fetchProfile()
-    fetchProfilePosts(currentPage, sorting, contentTypeFilter, dateRange)
+    fetchProfilePosts(currentPage, sorting, dateRange, categoryFilter)
     fetchActivityData()
     fetchTimeAnalysisData()
-  }, [fetchProfile, fetchProfilePosts, fetchActivityData, fetchTimeAnalysisData, currentPage, sorting, contentTypeFilter, dateRange])
+  }, [fetchProfile, fetchProfilePosts, fetchActivityData, fetchTimeAnalysisData, currentPage, sorting, categoryFilter, dateRange])
 
   const handleMonitoringToggle = useCallback(async (enabled: boolean) => {
     if (!profile?.id) return
@@ -441,9 +449,9 @@ function ProfileDetailPageContent() {
 
   useEffect(() => {
     if (profile?.id) {
-      fetchProfilePosts(currentPage, sorting, contentTypeFilter, dateRange)
+      fetchProfilePosts(currentPage, sorting, dateRange, categoryFilter)
     }
-  }, [profile?.id, currentPage, sorting, contentTypeFilter, dateRange, fetchProfilePosts])
+  }, [profile?.id, currentPage, sorting, categoryFilter, dateRange, fetchProfilePosts])
 
   useEffect(() => {
     fetchActivityData()
@@ -588,9 +596,9 @@ function ProfileDetailPageContent() {
 
     // Update URL in a separate effect to avoid render issues
     setTimeout(() => {
-      updateURL(currentPage, newSorting, dateRange)
+      updateURL(currentPage, newSorting, dateRange, categoryFilter)
     }, 0)
-  }, [currentPage, sorting, dateRange, updateURL])
+  }, [currentPage, sorting, categoryFilter, dateRange, updateURL])
 
   // Handle page change with URL update
   // Note: DataTable calls this with the NEW pageIndex (0-indexed) after navigation
@@ -599,10 +607,10 @@ function ProfileDetailPageContent() {
     setCurrentPage(newPage)
 
     setSorting(currentSorting => {
-      updateURL(newPage, currentSorting, dateRange)
+      updateURL(newPage, currentSorting, dateRange, categoryFilter)
       return currentSorting
     })
-  }, [dateRange, updateURL])
+  }, [dateRange, categoryFilter, updateURL])
 
   // Handle date range change with URL update
   const handleDateRangeChange = useCallback((newDateRange: DateRange) => {
@@ -611,9 +619,25 @@ function ProfileDetailPageContent() {
 
     // Update URL and trigger refetch
     setTimeout(() => {
-      updateURL(1, sorting, newDateRange)
+      updateURL(1, sorting, newDateRange, categoryFilter)
     }, 0)
-  }, [sorting, updateURL])
+  }, [sorting, categoryFilter, updateURL])
+
+  // Handle category change with URL update
+  const handleCategoryChange = useCallback((newCategory: string) => {
+    setCategoryFilter(newCategory)
+    setCurrentPage(1) // Reset to first page when filter changes
+
+    // Update URL and trigger refetch
+    setTimeout(() => {
+      updateURL(1, sorting, dateRange, newCategory)
+    }, 0)
+  }, [sorting, dateRange, updateURL])
+
+  // Handle refetch (e.g., after updating slide classification)
+  const handleRefetchPosts = useCallback(() => {
+    fetchProfilePosts(currentPage, sorting, dateRange, categoryFilter)
+  }, [fetchProfilePosts, currentPage, sorting, dateRange, categoryFilter])
 
   if (profileLoading) {
     return (
@@ -882,14 +906,14 @@ function ProfileDetailPageContent() {
         </div>
 
         {/* Posts Table - Takes remaining height, filter is inside */}
-        {posts.length > 0 || contentTypeFilter !== 'all' ? (
+        {posts.length > 0 ? (
           <div className="min-h-0">
             <PostsTable
               posts={posts}
               totalPosts={totalPosts}
-              contentTypeFilter={{
-                value: contentTypeFilter,
-                onChange: setContentTypeFilter
+              categoryFilter={{
+                value: categoryFilter,
+                onChange: handleCategoryChange
               }}
               dateRangeFilter={{
                 value: dateRange,
@@ -897,6 +921,7 @@ function ProfileDetailPageContent() {
               }}
               onPageChange={handlePageChange}
               onSortingChange={handleSortingChange}
+              onRefetchPosts={handleRefetchPosts}
               sorting={sorting}
               enableServerSideSorting={true}
               hiddenColumns={['authorHandle']}

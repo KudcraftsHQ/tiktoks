@@ -12,14 +12,16 @@ class MediaCacheServiceV2 {
   /**
    * Cache a single image and return cache asset ID
    */
-  async cacheImage(url: string, subfolder = 'images'): Promise<string | null> {
+  async cacheImage(url: string, subfolder = 'images', forceRecache = false): Promise<string | null> {
     if (!url) return null
 
-    console.log(`🖼️ [MediaCacheServiceV2] Caching image: ${url}`)
+    console.log(`🖼️ [MediaCacheServiceV2] Caching image: ${url}`, { forceRecache })
 
     const cacheAsset = await cacheAssetService.createCacheAsset(
       url,
-      `carousel/${subfolder}`
+      `carousel/${subfolder}`,
+      undefined,
+      forceRecache
     )
 
     console.log(`✅ [MediaCacheServiceV2] Created cache asset for image: ${cacheAsset.id}`)
@@ -29,14 +31,16 @@ class MediaCacheServiceV2 {
   /**
    * Cache a video and return cache asset ID
    */
-  async cacheVideo(url: string, subfolder = 'videos'): Promise<string | null> {
+  async cacheVideo(url: string, subfolder = 'videos', forceRecache = false): Promise<string | null> {
     if (!url) return null
 
-    console.log(`🎥 [MediaCacheServiceV2] Caching video: ${url}`)
+    console.log(`🎥 [MediaCacheServiceV2] Caching video: ${url}`, { forceRecache })
 
     const cacheAsset = await cacheAssetService.createCacheAsset(
       url,
-      `tiktok/${subfolder}`
+      `tiktok/${subfolder}`,
+      undefined,
+      forceRecache
     )
 
     console.log(`✅ [MediaCacheServiceV2] Created cache asset for video: ${cacheAsset.id}`)
@@ -46,14 +50,16 @@ class MediaCacheServiceV2 {
   /**
    * Cache an avatar and return cache asset ID
    */
-  async cacheAvatar(url: string, subfolder = 'avatars'): Promise<string | null> {
+  async cacheAvatar(url: string, subfolder = 'avatars', forceRecache = false): Promise<string | null> {
     if (!url) return null
 
-    console.log(`👤 [MediaCacheServiceV2] Caching avatar: ${url}`)
+    console.log(`👤 [MediaCacheServiceV2] Caching avatar: ${url}`, { forceRecache })
 
     const cacheAsset = await cacheAssetService.createCacheAsset(
       url,
-      `tiktok/${subfolder}`
+      `tiktok/${subfolder}`,
+      undefined,
+      forceRecache
     )
 
     console.log(`✅ [MediaCacheServiceV2] Created cache asset for avatar: ${cacheAsset.id}`)
@@ -63,14 +69,16 @@ class MediaCacheServiceV2 {
   /**
    * Cache music/audio and return cache asset ID
    */
-  async cacheMusic(url: string, subfolder = 'music'): Promise<string | null> {
+  async cacheMusic(url: string, subfolder = 'music', forceRecache = false): Promise<string | null> {
     if (!url) return null
 
-    console.log(`🎵 [MediaCacheServiceV2] Caching music: ${url}`)
+    console.log(`🎵 [MediaCacheServiceV2] Caching music: ${url}`, { forceRecache })
 
     const cacheAsset = await cacheAssetService.createCacheAsset(
       url,
-      `tiktok/${subfolder}`
+      `tiktok/${subfolder}`,
+      undefined,
+      forceRecache
     )
 
     console.log(`✅ [MediaCacheServiceV2] Created cache asset for music: ${cacheAsset.id}`)
@@ -80,15 +88,16 @@ class MediaCacheServiceV2 {
   /**
    * Cache multiple images and return cache asset IDs
    */
-  async cacheImages(urls: string[], subfolder = 'images'): Promise<(string | null)[]> {
-    console.log(`🖼️ [MediaCacheServiceV2] Caching ${urls.length} images`)
+  async cacheImages(urls: string[], subfolder = 'images', forceRecache = false): Promise<(string | null)[]> {
+    console.log(`🖼️ [MediaCacheServiceV2] Caching ${urls.length} images`, { forceRecache })
 
     const validUrls = urls.filter(url => url && url.trim())
     if (validUrls.length === 0) return []
 
     const cacheAssets = await cacheAssetService.createBulkCacheAssets(
       validUrls,
-      `carousel/${subfolder}`
+      `carousel/${subfolder}`,
+      forceRecache
     )
 
     // Map back to original order, including null for invalid URLs
@@ -152,7 +161,8 @@ class MediaCacheServiceV2 {
     coverUrl?: string,
     musicUrl?: string,
     images?: Array<{ url: string; width: number; height: number }>,
-    authorAvatar?: string
+    authorAvatar?: string,
+    forceRecache = false
   ): Promise<{
     cachedVideoId?: string | null
     cachedCoverId?: string | null
@@ -161,7 +171,7 @@ class MediaCacheServiceV2 {
     cachedAuthorAvatarId?: string | null
     errors: string[]
   }> {
-    console.log(`🎬 [MediaCacheServiceV2] Caching TikTok post media`)
+    console.log(`🎬 [MediaCacheServiceV2] Caching TikTok post media`, { forceRecache })
 
     const errors: string[] = []
     const cachedImages: Array<{ cacheAssetId: string | null; width: number; height: number }> = []
@@ -170,7 +180,7 @@ class MediaCacheServiceV2 {
     let cachedVideoId: string | null = null
     if (videoUrl) {
       try {
-        cachedVideoId = await this.cacheVideo(videoUrl, 'videos')
+        cachedVideoId = await this.cacheVideo(videoUrl, 'videos', forceRecache)
       } catch (error) {
         errors.push(`Failed to cache video: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
@@ -180,7 +190,7 @@ class MediaCacheServiceV2 {
     let cachedCoverId: string | null = null
     if (coverUrl) {
       try {
-        cachedCoverId = await this.cacheImage(coverUrl, 'covers')
+        cachedCoverId = await this.cacheImage(coverUrl, 'covers', forceRecache)
       } catch (error) {
         errors.push(`Failed to cache cover: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
@@ -190,7 +200,7 @@ class MediaCacheServiceV2 {
     let cachedMusicId: string | null = null
     if (musicUrl) {
       try {
-        cachedMusicId = await this.cacheMusic(musicUrl)
+        cachedMusicId = await this.cacheMusic(musicUrl, undefined, forceRecache)
       } catch (error) {
         errors.push(`Failed to cache music: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
@@ -199,7 +209,7 @@ class MediaCacheServiceV2 {
     // Cache carousel images (for photo posts)
     if (images && images.length > 0) {
       const imageUrls = images.map(img => img.url)
-      const imageCacheAssetIds = await this.cacheImages(imageUrls, 'images')
+      const imageCacheAssetIds = await this.cacheImages(imageUrls, 'images', forceRecache)
 
       images.forEach((originalImage, index) => {
         cachedImages.push({
@@ -214,7 +224,7 @@ class MediaCacheServiceV2 {
     let cachedAuthorAvatarId: string | null = null
     if (authorAvatar) {
       try {
-        cachedAuthorAvatarId = await this.cacheAvatar(authorAvatar)
+        cachedAuthorAvatarId = await this.cacheAvatar(authorAvatar, undefined, forceRecache)
       } catch (error) {
         errors.push(`Failed to cache author avatar: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }

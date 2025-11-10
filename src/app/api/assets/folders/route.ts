@@ -3,15 +3,9 @@ import { PrismaClient } from '@/generated/prisma'
 
 const prisma = new PrismaClient()
 
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: NextRequest) {
   try {
-    const { id } = await context.params
-
-    const folders = await prisma.remixAssetFolder.findMany({
-      where: { remixId: id },
+    const folders = await prisma.assetFolder.findMany({
       include: {
         _count: {
           select: { assets: true }
@@ -22,7 +16,7 @@ export async function GET(
 
     return NextResponse.json(folders)
   } catch (error) {
-    console.error('Failed to fetch remix folders:', error)
+    console.error('Failed to fetch folders:', error)
     return NextResponse.json(
       { error: 'Failed to fetch folders' },
       { status: 500 }
@@ -30,17 +24,12 @@ export async function GET(
   }
 }
 
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: NextRequest) {
   try {
-    const { id } = await context.params
     const body = await request.json()
 
-    const folder = await prisma.remixAssetFolder.create({
+    const folder = await prisma.assetFolder.create({
       data: {
-        remixId: id,
         name: body.name
       },
       include: {
@@ -52,7 +41,7 @@ export async function POST(
 
     return NextResponse.json(folder)
   } catch (error) {
-    console.error('Failed to create remix folder:', error)
+    console.error('Failed to create folder:', error)
     return NextResponse.json(
       { error: 'Failed to create folder' },
       { status: 500 }

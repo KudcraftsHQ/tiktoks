@@ -37,6 +37,9 @@ import { createSortableHeader } from '@/components/ui/data-table'
 import { getProxiedImageUrl } from '@/lib/image-proxy'
 import { SmartImage } from '@/components/SmartImage'
 import { MiniSparkline } from '@/components/MiniSparkline'
+import { SlideClassificationBadge, SlideType } from '@/components/SlideClassificationBadge'
+import { SlideTypeDropdown } from '@/components/SlideTypeDropdown'
+import { InlineEditableText } from '@/components/InlineEditableText'
 import { useRouter } from 'next/navigation'
 
 export interface TikTokPost {
@@ -84,6 +87,15 @@ export interface TikTokPost {
   ocrStatus: 'pending' | 'processing' | 'completed' | 'failed'
   ocrProcessedAt?: string | null
   ocrTexts?: any
+  // Classification fields
+  slideClassifications?: any
+  classificationStatus?: 'pending' | 'processing' | 'completed' | 'failed'
+  classificationProcessedAt?: string | null
+  // Post category
+  postCategory?: {
+    id: string
+    name: string
+  } | null
 }
 
 interface PostsTableColumnsProps {
@@ -92,10 +104,12 @@ interface PostsTableColumnsProps {
   onRemixPost?: (post: TikTokPost) => void
   onRowClick?: (post: TikTokPost) => void
   onTriggerOCR?: (postId: string) => Promise<void>
+  onRefetchPosts?: () => void
   selectedPosts?: Set<string>
   onSelectPost?: (postId: string, selected: boolean) => void
   onSelectAll?: (selected: boolean) => void
   allSelected?: boolean
+  viewMode?: 'metrics' | 'content'
 }
 
 const formatNumber = (num: number): string => {
@@ -168,15 +182,23 @@ export const createPostsTableColumns = ({
   onRemixPost,
   onRowClick,
   onTriggerOCR,
+  onRefetchPosts,
   selectedPosts = new Set(),
   onSelectPost,
   onSelectAll,
-  allSelected = false
+  allSelected = false,
+  viewMode = 'metrics'
 }: PostsTableColumnsProps): ColumnDef<TikTokPost>[] => [
   {
     id: 'select',
     header: ({ table }) => (
-      <div className="flex items-center justify-center">
+      <div
+        className="flex items-center justify-center w-full h-full"
+        onClick={(e) => {
+          e.stopPropagation()
+          onSelectAll?.(!allSelected)
+        }}
+      >
         <Checkbox
           checked={allSelected}
           onCheckedChange={(checked) => {
@@ -188,12 +210,18 @@ export const createPostsTableColumns = ({
     ),
     cell: ({ row }) => {
       const post = row.original
-      // Only show checkbox for photo posts
-      if (post.contentType !== 'photo') {
+      // In content mode, show checkbox for all posts; in metrics mode, only photo posts
+      if (viewMode === 'metrics' && post.contentType !== 'photo') {
         return null
       }
       return (
-        <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="flex items-center justify-center w-full h-full cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation()
+            onSelectPost?.(post.id, !selectedPosts.has(post.id))
+          }}
+        >
           <Checkbox
             checked={selectedPosts.has(post.id)}
             onCheckedChange={(checked) => {
@@ -289,15 +317,128 @@ export const createPostsTableColumns = ({
     }
   },
   {
+    accessorKey: 'description',
+    header: createSortableHeader('Description'),
+    meta: {
+      hideInMetricsMode: true
+    },
+    cell: ({ row }) => {
+      const post = row.original
+      const description = post.description || ''
+
+      return (
+        <div className="min-w-[250px] max-w-[300px]">
+          {post.postCategory && (
+            <div className="mb-2">
+              <Badge variant="secondary" className="text-xs">
+                {post.postCategory.name}
+              </Badge>
+            </div>
+          )}
+          <div className="h-48 overflow-y-auto">
+            <InlineEditableText
+              value={description || ''}
+              onSave={async () => {}} // No-op save
+              placeholder="No description"
+              fixedHeight={true}
+              heightClass="h-48"
+              disabled={false}
+              className="text-[12px]"
+              rows={8}
+            />
+          </div>
+        </div>
+      )
+    }
+  },
+  {
     accessorKey: 'title',
     header: createSortableHeader('Content'),
     cell: ({ row }) => {
       const post = row.original as any
       const images = post._proxiedImages || []
-      const maxDisplay = 5
+      const maxDisplay = viewMode === 'content' ? images.length : 5
       const displayImages = images.slice(0, maxDisplay)
       const remainingCount = images.length - maxDisplay
 
+      // Parse OCR texts for content mode
+      let ocrTexts: Array<{ imageIndex: number; text: string; success: boolean; error?: string }> = []
+      if (viewMode === 'content') {
+        try {
+          if (post.ocrTexts) {
+            const parsed = typeof post.ocrTexts === 'string'
+              ? JSON.parse(post.ocrTexts)
+              : post.ocrTexts
+            ocrTexts = Array.isArray(parsed) ? parsed : []
+          }
+        } catch {
+          ocrTexts = []
+        }
+      }
+
+      // Parse slide classifications
+      let slideClassifications: Array<{ slideIndex: number; slideType: string; confidence: number }> = []
+      if (viewMode === 'content') {
+        try {
+          if (post.slideClassifications) {
+            const parsed = typeof post.slideClassifications === 'string'
+              ? JSON.parse(post.slideClassifications)
+              : post.slideClassifications
+            slideClassifications = Array.isArray(parsed) ? parsed : []
+          }
+        } catch {
+          slideClassifications = []
+        }
+      }
+
+      // Content mode: Show horizontal slides with OCR text only (no images)
+      if (viewMode === 'content' && post.contentType === 'photo' && images.length > 0) {
+        return (
+          <div className="w-full">
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {displayImages.map((image: any, index: number) => {
+                const ocrResult = ocrTexts.find(ocr => ocr.imageIndex === index)
+                const ocrText = ocrResult?.success ? ocrResult.text : 'No text'
+                const classification = slideClassifications.find(c => c.slideIndex === index)
+
+                return (
+                  <div key={index} className="flex-shrink-0 w-52 flex flex-col">
+                    {/* Slide number badge */}
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <div className="bg-primary/10 text-primary text-xs font-medium px-2 py-0.5 rounded">
+                        Slide {index + 1}
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <SlideTypeDropdown
+                          postId={post.id}
+                          slideIndex={index}
+                          currentType={classification?.slideType as 'hook' | 'content' | 'cta' | null}
+                          onUpdate={onRefetchPosts}
+                        />
+                      </div>
+                    </div>
+                    {/* OCR text - fixed height with scroll */}
+                    <div className="h-48 overflow-y-auto">
+                      <InlineEditableText
+                        value={ocrText}
+                        onSave={async () => {}} // No-op save
+                        placeholder={ocrResult?.success ? 'No text' : 'No text'}
+                        fixedHeight={true}
+                        heightClass="h-48"
+                        disabled={false}
+                        className="text-[12px]"
+                        rows={8}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      }
+
+      // Metrics mode: Show compact thumbnails
       return (
         <div className="space-y-2 min-w-[200px]">
           <div className="flex items-center space-x-2">
@@ -370,6 +511,9 @@ export const createPostsTableColumns = ({
           </Button>
         </div>
       )
+    },
+    meta: {
+      hideInContentMode: true
     },
     cell: ({ row }) => {
       const viewCount = row.getValue('viewCount') as number
@@ -449,6 +593,9 @@ export const createPostsTableColumns = ({
         </div>
       )
     },
+    meta: {
+      hideInContentMode: true
+    },
     cell: ({ row }) => {
       const likeCount = row.getValue('likeCount') as number
       return (
@@ -477,6 +624,9 @@ export const createPostsTableColumns = ({
           </Button>
         </div>
       )
+    },
+    meta: {
+      hideInContentMode: true
     },
     cell: ({ row }) => {
       const commentCount = row.getValue('commentCount') as number
@@ -507,6 +657,9 @@ export const createPostsTableColumns = ({
         </div>
       )
     },
+    meta: {
+      hideInContentMode: true
+    },
     cell: ({ row }) => {
       const shareCount = row.getValue('shareCount') as number
       return (
@@ -536,6 +689,9 @@ export const createPostsTableColumns = ({
         </div>
       )
     },
+    meta: {
+      hideInContentMode: true
+    },
     cell: ({ row }) => {
       const saveCount = row.getValue('saveCount') as number
       return (
@@ -548,6 +704,9 @@ export const createPostsTableColumns = ({
   {
     accessorKey: 'publishedAt',
     header: createSortableHeader('Published'),
+    meta: {
+      hideInContentMode: true
+    },
     cell: ({ row }) => {
       const publishedAt = row.getValue('publishedAt') as string
       const { date, time } = formatDateTime(publishedAt)
@@ -562,6 +721,9 @@ export const createPostsTableColumns = ({
   {
     accessorKey: 'updatedAt',
     header: createSortableHeader('Last Updated'),
+    meta: {
+      hideInContentMode: true
+    },
     cell: ({ row }) => {
       const updatedAt = row.getValue('updatedAt') as string
       const { date, time } = formatDateTime(updatedAt)
@@ -576,6 +738,9 @@ export const createPostsTableColumns = ({
   {
     accessorKey: 'ocrStatus',
     header: 'OCR Status',
+    meta: {
+      hideInContentMode: true
+    },
     cell: ({ row }) => {
       const post = row.original
       
@@ -622,6 +787,90 @@ export const createPostsTableColumns = ({
               {config.label}
             </span>
           </div>
+        </div>
+      )
+    }
+  },
+  {
+    accessorKey: 'slideClassifications',
+    header: 'Classifications',
+    meta: {
+      hideInContentMode: true
+    },
+    cell: ({ row }) => {
+      const post = row.original
+
+      // Only show classifications for photo posts
+      if (post.contentType !== 'photo') {
+        return <div className="text-center text-muted-foreground text-xs">N/A</div>
+      }
+
+      // Parse classifications
+      let classifications: Array<{
+        slideIndex: number
+        type: SlideType
+        categoryId: string
+        categoryName: string
+        confidence?: number
+      }> = []
+
+      try {
+        if (post.slideClassifications) {
+          const parsed = typeof post.slideClassifications === 'string'
+            ? JSON.parse(post.slideClassifications)
+            : post.slideClassifications
+          classifications = Array.isArray(parsed) ? parsed : []
+        }
+      } catch {
+        classifications = []
+      }
+
+      // Show status if no classifications yet
+      if (classifications.length === 0) {
+        const status = post.classificationStatus || 'pending'
+
+        if (status === 'pending' || status === 'processing') {
+          return (
+            <div className="flex items-center justify-center gap-1.5 px-2 py-1 rounded-md bg-muted">
+              {status === 'processing' && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+              <span className="text-xs text-muted-foreground">
+                {status === 'processing' ? 'Classifying...' : 'Not classified'}
+              </span>
+            </div>
+          )
+        }
+
+        if (status === 'failed') {
+          return (
+            <div className="flex items-center justify-center gap-1.5 px-2 py-1 rounded-md bg-red-50 dark:bg-red-950">
+              <XCircle className="w-3 h-3 text-red-600" />
+              <span className="text-xs text-red-600">Failed</span>
+            </div>
+          )
+        }
+
+        return <div className="text-center text-muted-foreground text-xs">-</div>
+      }
+
+      // Count classifications by type
+      const counts = classifications.reduce((acc, c) => {
+        acc[c.type] = (acc[c.type] || 0) + 1
+        return acc
+      }, {} as Record<SlideType, number>)
+
+      return (
+        <div className="flex flex-wrap gap-1 items-center justify-center max-w-[200px]">
+          {(['HOOK', 'CONTENT', 'CTA'] as SlideType[]).map(type => {
+            const count = counts[type]
+            if (!count) return null
+
+            return (
+              <div key={type} className="flex items-center gap-0.5">
+                <SlideClassificationBadge type={type} />
+                <span className="text-xs text-muted-foreground">×{count}</span>
+              </div>
+            )
+          })}
         </div>
       )
     }

@@ -19,8 +19,8 @@ class CacheAssetService {
   /**
    * Create a new cache asset and queue it for background processing
    */
-  async createCacheAsset(originalUrl: string, folder = 'media', filename?: string): Promise<CacheAsset> {
-    console.log(`🚀 [CacheAssetService] Creating cache asset for URL: ${originalUrl}`)
+  async createCacheAsset(originalUrl: string, folder = 'media', filename?: string, forceRecache = false): Promise<CacheAsset> {
+    console.log(`🚀 [CacheAssetService] Creating cache asset for URL: ${originalUrl}`, { forceRecache })
 
     // Check if cache asset already exists
     const existing = await this.prisma.cacheAsset.findUnique({
@@ -29,6 +29,30 @@ class CacheAssetService {
 
     if (existing) {
       console.log(`📋 [CacheAssetService] Cache asset already exists: ${existing.id}`)
+
+      if (forceRecache) {
+        console.log(`🔄 [CacheAssetService] Force recache enabled, resetting cache asset and queueing new job`)
+
+        // Reset the cache asset status to PENDING
+        await this.prisma.cacheAsset.update({
+          where: { id: existing.id },
+          data: {
+            status: CacheStatus.PENDING,
+            updatedAt: new Date()
+          }
+        })
+
+        // Queue for background processing
+        await mediaCacheQueue.addCacheJob({
+          originalUrl,
+          cacheAssetId: existing.id,
+          folder,
+          filename
+        })
+
+        console.log(`✅ [CacheAssetService] Cache asset reset and queued for recaching: ${existing.id}`)
+      }
+
       return existing
     }
 
@@ -59,9 +83,10 @@ class CacheAssetService {
    */
   async createBulkCacheAssets(
     urls: string[],
-    folder = 'media'
+    folder = 'media',
+    forceRecache = false
   ): Promise<CacheAsset[]> {
-    console.log(`🚀 [CacheAssetService] Creating ${urls.length} cache assets`)
+    console.log(`🚀 [CacheAssetService] Creating ${urls.length} cache assets`, { forceRecache })
 
     const cacheAssets: CacheAsset[] = []
     const jobsToQueue: Array<{
@@ -76,7 +101,27 @@ class CacheAssetService {
         where: { originalUrl: url }
       })
 
-      if (!cacheAsset) {
+      if (cacheAsset) {
+        if (forceRecache) {
+          console.log(`🔄 [CacheAssetService] Force recache enabled for existing asset: ${cacheAsset.id}`)
+
+          // Reset the cache asset status to PENDING
+          await this.prisma.cacheAsset.update({
+            where: { id: cacheAsset.id },
+            data: {
+              status: CacheStatus.PENDING,
+              updatedAt: new Date()
+            }
+          })
+
+          // Add to queue jobs
+          jobsToQueue.push({
+            originalUrl: url,
+            cacheAssetId: cacheAsset.id,
+            folder
+          })
+        }
+      } else {
         // Create new cache asset
         cacheAsset = await this.prisma.cacheAsset.create({
           data: {
@@ -153,11 +198,11 @@ class CacheAssetService {
       } : 'null')
 
       if (cacheAsset) {
-        // If cached successfully, return public or presigned URL
-        if (cacheAsset.status === CacheStatus.CACHED && cacheAsset.cacheKey) {
+        // If cacheKey exists, use it (regardless of status)
+        if (cacheAsset.cacheKey) {
           // Prefer public URL if requested (for TikTok domain verification)
           if (preferPublic) {
-            console.log(`✅ [CacheAssetService] Cache asset is cached, generating public URL`)
+            console.log(`✅ [CacheAssetService] Cache key exists, generating public URL`)
             try {
               const publicUrl = keyToUrl(cacheAsset.cacheKey)
               console.log(`✅ [CacheAssetService] Generated public URL: ${publicUrl}`)
@@ -166,7 +211,7 @@ class CacheAssetService {
               console.warn(`❌ [CacheAssetService] Failed to generate public URL:`, error)
             }
           } else {
-            console.log(`✅ [CacheAssetService] Cache asset is cached, generating presigned URL`)
+            console.log(`✅ [CacheAssetService] Cache key exists, generating presigned URL`)
             try {
               const presignedUrl = await generatePresignedUrlFromKey(cacheAsset.cacheKey)
               console.log(`✅ [CacheAssetService] Generated presigned URL`)
@@ -186,7 +231,7 @@ class CacheAssetService {
 
         // Fall back to original URL from cache asset
         const fallbackUrl = originalUrl || cacheAsset.originalUrl
-        console.log(`🔄 [CacheAssetService] Using original URL: ${fallbackUrl}`)
+        console.log(`🔄 [CacheAssetService] No cache key, using original URL: ${fallbackUrl}`)
         return fallbackUrl
       }
 

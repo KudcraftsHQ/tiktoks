@@ -113,24 +113,16 @@ export function PostingTimeChart({ data, bestTimes = [], loading = false }: Post
       <div className="p-4 pb-3 flex-shrink-0">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-semibold">Best posting times</h3>
-          {bestTimes.length > 0 && (
-            <div className="flex gap-2">
-              {bestTimes.slice(0, 3).map((time, idx) => (
-                <div
-                  key={time.hour}
-                  className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-gradient-to-r from-yellow-500/10 to-purple-500/10 border border-yellow-500/20"
-                >
-                  <div className="w-4 h-4 rounded-full bg-yellow-500 text-white flex items-center justify-center text-[9px] font-bold">
-                    {idx + 1}
-                  </div>
-                  <div className="text-xs font-semibold">{formatHour(time.hour)}</div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {Math.round(time.avgViews).toLocaleString()}
-                  </div>
-                </div>
-              ))}
+          <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded bg-[#C27AFF]" />
+              <span className="text-muted-foreground">{chartConfig.posts.label}</span>
             </div>
-          )}
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded bg-purple-600" />
+              <span className="text-muted-foreground">{chartConfig.avgViews.label}</span>
+            </div>
+          </div>
         </div>
       </div>
       <div className="flex-1 px-4 pb-4 min-h-0">
@@ -181,7 +173,6 @@ export function PostingTimeChart({ data, bestTimes = [], loading = false }: Post
                 />
               }
             />
-            <ChartLegend content={<ChartLegendContent />} />
             <Bar
               yAxisId="left"
               dataKey="posts"
@@ -206,6 +197,7 @@ export function PostingTimeChart({ data, bestTimes = [], loading = false }: Post
               strokeWidth={2.5}
               dot={{ r: 2.5, fill: 'rgb(147, 51, 234)', strokeWidth: 2, stroke: 'white' }}
               activeDot={{ r: 4.5, fill: 'rgb(147, 51, 234)', strokeWidth: 2.5, stroke: 'white' }}
+              legendType="none"
             />
           </ComposedChart>
         </ChartContainer>

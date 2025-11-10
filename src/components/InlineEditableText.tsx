@@ -72,7 +72,7 @@ export function InlineEditableText({
   }
 
   return (
-    <div className={cn('relative group', fixedHeight && 'h-full', className)}>
+    <div className={cn('relative group', fixedHeight && 'h-full')}>
       <Textarea
         ref={textareaRef}
         value={localValue}
@@ -84,10 +84,11 @@ export function InlineEditableText({
         disabled={disabled}
         title={disabled ? disabledMessage : undefined}
         className={cn(
-          'pr-10 resize-none text-xs',
+          'pr-10 resize-none',
           isSaving && 'opacity-50 pointer-events-none',
           disabled && 'cursor-not-allowed bg-muted/50',
-          fixedHeight && 'h-full overflow-y-auto field-sizing-content'
+          fixedHeight && 'h-full overflow-y-auto field-sizing-content',
+          className // Apply custom className last to allow overrides
         )}
       />
       <Button

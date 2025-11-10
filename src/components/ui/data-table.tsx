@@ -15,7 +15,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { ArrowUpDown, ChevronDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { ArrowUpDown, ChevronDown, ArrowUp, ArrowDown, LayoutList, LayoutGrid } from 'lucide-react'
 import { CSSProperties } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -34,8 +34,20 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { PostTypeFilter } from '@/components/PostTypeFilter'
 import { DateRangeFilter, DateRange } from '@/components/DateRangeFilter'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+
+export interface PostCategory {
+  id: string
+  name: string
+  postCount: number
+}
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
@@ -44,9 +56,9 @@ interface DataTableProps<TData, TValue> {
   searchPlaceholder?: string
   showPagination?: boolean
   globalFilterFn?: (row: TData, filterValue: string) => boolean
-  contentTypeFilter?: {
-    value: 'all' | 'video' | 'photo'
-    onChange: (value: 'all' | 'video' | 'photo') => void
+  categoryFilter?: {
+    value: string
+    onChange: (value: string) => void
   }
   dateRangeFilter?: {
     value: DateRange
@@ -63,7 +75,9 @@ interface DataTableProps<TData, TValue> {
   enableColumnPinning?: boolean
   getRowId?: (row: TData) => string
   hiddenColumns?: string[]
+  initialColumnVisibility?: VisibilityState
   customHeaderActions?: React.ReactNode
+  hideColumnSelector?: boolean
 }
 
 export function DataTable<TData, TValue>({
@@ -73,7 +87,7 @@ export function DataTable<TData, TValue>({
   searchPlaceholder = 'Search...',
   showPagination = true,
   globalFilterFn,
-  contentTypeFilter,
+  categoryFilter,
   dateRangeFilter,
   onPageChange,
   onSortingChange,
@@ -86,21 +100,57 @@ export function DataTable<TData, TValue>({
   enableColumnPinning = false,
   getRowId,
   hiddenColumns = [],
-  customHeaderActions
+  initialColumnVisibility: externalInitialColumnVisibility,
+  customHeaderActions,
+  hideColumnSelector = false
 }: DataTableProps<TData, TValue>) {
+  // Fetch categories for filter
+  const [categories, setCategories] = React.useState<PostCategory[]>([])
+  const [categoriesLoading, setCategoriesLoading] = React.useState(false)
+
+  React.useEffect(() => {
+    // Only fetch if category filter is provided
+    if (!categoryFilter) return
+
+    const fetchCategories = async () => {
+      setCategoriesLoading(true)
+      try {
+        const response = await fetch('/api/post-categories')
+        const result = await response.json()
+        if (result.success && result.data) {
+          setCategories(result.data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch categories:', error)
+      } finally {
+        setCategoriesLoading(false)
+      }
+    }
+
+    fetchCategories()
+  }, [categoryFilter])
   const [internalSorting, setInternalSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 
-  // Initialize column visibility with hidden columns
-  const initialColumnVisibility = React.useMemo(() => {
+  // Initialize column visibility with hidden columns or external visibility
+  const computedInitialColumnVisibility = React.useMemo(() => {
+    if (externalInitialColumnVisibility) {
+      return externalInitialColumnVisibility
+    }
+
     const visibility: VisibilityState = {}
     hiddenColumns.forEach(columnId => {
       visibility[columnId] = false
     })
     return visibility
-  }, [hiddenColumns])
+  }, [JSON.stringify(hiddenColumns), externalInitialColumnVisibility])
 
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(initialColumnVisibility)
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(computedInitialColumnVisibility)
+
+  // Update column visibility when external visibility changes
+  React.useEffect(() => {
+    setColumnVisibility(computedInitialColumnVisibility)
+  }, [JSON.stringify(computedInitialColumnVisibility)])
   const [rowSelection, setRowSelection] = React.useState({})
   const [globalFilter, setGlobalFilter] = React.useState('')
   const [shadowOpacity, setShadowOpacity] = React.useState({ left: 0, right: 0 })
@@ -178,8 +228,9 @@ export function DataTable<TData, TValue>({
     manualSorting,
     manualPagination,
     enableMultiSort: true, // Enable multi-column sorting (Shift+Click)
-    pageCount: manualPagination && totalRows !== undefined 
-      ? Math.ceil(totalRows / pagination.pageSize) 
+    sortDescFirst: true, // Prioritize descending sort first
+    pageCount: manualPagination && totalRows !== undefined
+      ? Math.ceil(totalRows / pagination.pageSize)
       : undefined,
     globalFilterFn: globalFilterFn ? (row, _columnId, filterValue) => {
       return globalFilterFn(row.original, filterValue)
@@ -224,70 +275,97 @@ export function DataTable<TData, TValue>({
     }
   }, [enableColumnPinning])
 
+  // Check if we should show the filter bar
+  const hasSearchOrFilters = !!(
+    globalFilterFn ||
+    searchKey ||
+    customHeaderActions ||
+    dateRangeFilter ||
+    categoryFilter ||
+    !hideColumnSelector
+  )
+
   return (
     <div className="w-full h-full grid grid-rows-[auto_1fr_auto] min-h-0">
       {/* Filters - Auto height at top */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 py-4 border-b bg-background">
-        {globalFilterFn ? (
-          <Input
-            placeholder={searchPlaceholder}
-            value={globalFilter ?? ''}
-            onChange={(event) => setGlobalFilter(event.target.value)}
-            className="w-full sm:max-w-sm"
-          />
-        ) : searchKey ? (
-          <Input
-            placeholder={searchPlaceholder}
-            value={(table.getColumn(searchKey)?.getFilterValue() as string) ?? ''}
-            onChange={(event) =>
-              table.getColumn(searchKey)?.setFilterValue(event.target.value)
-            }
-            className="w-full sm:max-w-sm"
-          />
-        ) : null}
+      {hasSearchOrFilters && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 pt-2 pb-3 border-b bg-background">
+          {globalFilterFn ? (
+            <Input
+              placeholder={searchPlaceholder}
+              value={globalFilter ?? ''}
+              onChange={(event) => setGlobalFilter(event.target.value)}
+              className="w-full sm:max-w-sm h-8 text-xs"
+            />
+          ) : searchKey ? (
+            <Input
+              placeholder={searchPlaceholder}
+              value={(table.getColumn(searchKey)?.getFilterValue() as string) ?? ''}
+              onChange={(event) =>
+                table.getColumn(searchKey)?.setFilterValue(event.target.value)
+              }
+              className="w-full sm:max-w-sm h-8 text-xs"
+            />
+          ) : null}
 
-        <div className="flex items-center gap-2 sm:ml-auto">
-          {customHeaderActions}
-          {dateRangeFilter && (
-            <DateRangeFilter
-              value={dateRangeFilter.value}
-              onChange={dateRangeFilter.onChange}
-            />
-          )}
-          {contentTypeFilter && (
-            <PostTypeFilter
-              value={contentTypeFilter.value}
-              onChange={contentTypeFilter.onChange}
-            />
-          )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-full sm:w-auto">
-                Columns <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {table
-                .getAllColumns()
-                .filter((column) => column.getCanHide())
-                .map((column) => {
-                  return (
-                    <DropdownMenuCheckboxItem
-                      key={column.id}
-                      className="capitalize"
-                      checked={column.getIsVisible()}
-                      onCheckedChange={(value) =>
-                        column.toggleVisibility(!!value)
-                      }
-                    >
-                      {column.id}
-                    </DropdownMenuCheckboxItem>
-                  )
-                })}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-2 sm:ml-auto">
+            {customHeaderActions}
+            {dateRangeFilter && (
+              <DateRangeFilter
+                value={dateRangeFilter.value}
+                onChange={dateRangeFilter.onChange}
+              />
+            )}
+            {categoryFilter && (
+              <Select
+                value={categoryFilter.value}
+                onValueChange={categoryFilter.onChange}
+                disabled={categoriesLoading}
+              >
+                <SelectTrigger className="w-full sm:w-[180px] h-8 text-xs">
+                  <SelectValue placeholder={categoriesLoading ? "Loading..." : "All Categories"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="text-xs">All Categories</SelectItem>
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id} className="text-xs">
+                      {category.name} ({category.postCount})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {!hideColumnSelector && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="w-full sm:w-auto h-8 text-xs px-3">
+                    Columns <ChevronDown className="ml-1.5 h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {table
+                    .getAllColumns()
+                    .filter((column) => column.getCanHide())
+                    .map((column) => {
+                      return (
+                        <DropdownMenuCheckboxItem
+                          key={column.id}
+                          className="capitalize"
+                          checked={column.getIsVisible()}
+                          onCheckedChange={(value) =>
+                            column.toggleVisibility(!!value)
+                          }
+                        >
+                          {column.id}
+                        </DropdownMenuCheckboxItem>
+                      )
+                    })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Scrollable table container - Critical: min-h-0 for flex scrolling */}
       <div ref={tableWrapperRef} className="overflow-auto min-h-0 relative">
@@ -330,12 +408,20 @@ export function DataTable<TData, TValue>({
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
+              table.getRowModel().rows.map((row) => {
+                // Check if this is a reference row
+                const isReferenceRow = (row.original as any)._rowType === 'reference'
+                const rowClassName = [
+                  onRowClick ? 'cursor-pointer group' : '',
+                  isReferenceRow ? 'bg-[#383838]' : ''
+                ].filter(Boolean).join(' ')
+
+                return (
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && 'selected'}
                   onClick={() => onRowClick?.(row.original)}
-                  className={onRowClick ? 'cursor-pointer group' : ''}
+                  className={rowClassName}
                 >
                   {row.getVisibleCells().map((cell) => {
                     const pinningStyles = enableColumnPinning
@@ -346,7 +432,7 @@ export function DataTable<TData, TValue>({
                       <TableCell
                         key={cell.id}
                         style={pinningStyles}
-                        className="bg-background group-hover:bg-muted"
+                        className={isReferenceRow ? "bg-[#383838]" : "bg-background"}
                       >
                         {flexRender(
                           cell.column.columnDef.cell,
@@ -356,7 +442,8 @@ export function DataTable<TData, TValue>({
                     )
                   })}
                 </TableRow>
-              ))
+                )
+              })
             ) : !isLoading ? (
               <TableRow>
                 <TableCell
@@ -457,7 +544,41 @@ export function createSortableHeader(title: string) {
     return (
       <Button
         variant="ghost"
-        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        onClick={(event) => {
+          // Manually control sorting state to ensure desc-first behavior
+          const columnId = column.id
+          const existingSort = sortingState.find((s: any) => s.id === columnId)
+          const isMulti = event.shiftKey
+
+          let newSorting: any[]
+
+          if (!existingSort) {
+            // Not currently sorted -> sort descending (first click)
+            if (isMulti) {
+              newSorting = [...sortingState, { id: columnId, desc: true }]
+            } else {
+              newSorting = [{ id: columnId, desc: true }]
+            }
+          } else if (existingSort.desc) {
+            // Currently desc -> sort ascending (second click)
+            if (isMulti) {
+              newSorting = sortingState.map((s: any) =>
+                s.id === columnId ? { ...s, desc: false } : s
+              )
+            } else {
+              newSorting = [{ id: columnId, desc: false }]
+            }
+          } else {
+            // Currently asc -> clear sort (third click)
+            if (isMulti) {
+              newSorting = sortingState.filter((s: any) => s.id !== columnId)
+            } else {
+              newSorting = []
+            }
+          }
+
+          table.setSorting(newSorting)
+        }}
         className={`h-auto p-0 hover:bg-transparent group ${isSorted ? 'font-bold' : ''}`}
         title={isMultiSorted ? `Sort order: ${sortIndex + 1}. Shift+Click to modify multi-sort` : 'Click to sort, Shift+Click for multi-sort'}
       >

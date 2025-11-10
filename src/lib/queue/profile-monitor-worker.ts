@@ -105,10 +105,11 @@ class ProfileMonitorWorker {
   private async processJob(
     job: Job<ProfileMonitorJobData>
   ): Promise<ProfileMonitorJobResult> {
-    const { profileId } = job.data
+    const { profileId, forceRecache = false } = job.data
 
     console.log(`🚀 [ProfileMonitorWorker] Starting monitoring job for profile:`, {
-      profileId
+      profileId,
+      forceRecache
     })
 
     // Set Sentry context for this job
@@ -216,11 +217,12 @@ class ProfileMonitorWorker {
 
           console.log(`🔗 [ProfileMonitorWorker] Calling bulk upsert service:`, {
             profileHandle: profileData.handle,
-            postsCount: postsForUpsert.length
+            postsCount: postsForUpsert.length,
+            forceRecache
           })
 
           try {
-            const upsertResult = await this.bulkUpsertService.bulkUpsert(profileData, postsForUpsert)
+            const upsertResult = await this.bulkUpsertService.bulkUpsert(profileData, postsForUpsert, { forceRecache })
             totalPostsScraped += upsertResult.stats.totalPosts
             console.log(`✅ [ProfileMonitorWorker] Upserted ${upsertResult.stats.totalPosts} posts from page ${pagesScraped}`, {
               stats: upsertResult.stats

@@ -153,13 +153,12 @@ export function DateRangeFilter({ value, onChange, className }: DateRangeFilterP
         <PopoverTrigger asChild>
           <Button
             variant={hasActiveFilter ? 'default' : 'outline'}
-            size="sm"
             className={cn(
-              'justify-start text-left font-normal',
+              'justify-start text-left font-normal h-8 text-xs px-3',
               !hasActiveFilter && 'text-muted-foreground'
             )}
           >
-            <CalendarIcon className="mr-2 h-4 w-4" />
+            <CalendarIcon className="mr-1.5 h-3 w-3" />
             {getDisplayText()}
           </Button>
         </PopoverTrigger>
@@ -217,11 +216,10 @@ export function DateRangeFilter({ value, onChange, className }: DateRangeFilterP
       {hasActiveFilter && (
         <Button
           variant="ghost"
-          size="sm"
           className="h-8 px-2"
           onClick={handleClear}
         >
-          <X className="h-4 w-4" />
+          <X className="h-3 w-3" />
         </Button>
       )}
     </div>

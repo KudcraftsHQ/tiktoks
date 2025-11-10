@@ -24,14 +24,17 @@ export function PostingActivityHeatmap({ data, showStreak = false, firstPostDate
       dataMap.set(item.date, item.count)
     })
 
-    // Get current year from January 1st to today
+    // Get last 3 months from today
     const today = new Date()
-    const startOfYear = new Date(today.getFullYear(), 0, 1)
-    const daysSinceStartOfYear = Math.floor((today.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    today.setHours(0, 0, 0, 0)
+    const threeMonthsAgo = new Date(today)
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
+    threeMonthsAgo.setHours(0, 0, 0, 0)
+    const daysSinceThreeMonthsAgo = Math.floor((today.getTime() - threeMonthsAgo.getTime()) / (1000 * 60 * 60 * 24)) + 1
 
-    // Initialize all days from start of year to today
-    for (let i = 0; i < daysSinceStartOfYear; i++) {
-      const date = new Date(startOfYear)
+    // Initialize all days from 3 months ago to today
+    for (let i = 0; i < daysSinceThreeMonthsAgo; i++) {
+      const date = new Date(threeMonthsAgo)
       date.setDate(date.getDate() + i)
       date.setHours(0, 0, 0, 0)
 
@@ -85,15 +88,15 @@ export function PostingActivityHeatmap({ data, showStreak = false, firstPostDate
     return currentStreak
   }, [heatmapData])
 
-  // Group by weeks starting from the first day of the year
+  // Group by weeks starting from the first day in the range
   const { weeks, monthLabels } = useMemo(() => {
     if (heatmapData.length === 0) {
       return { weeks: [], monthLabels: [] }
     }
 
-    // Adjust for the first day of the year's position in the week
-    const firstDayOfYear = heatmapData[0]
-    const firstDayOfWeek = firstDayOfYear.dayOfWeek // 0 = Sunday, 1 = Monday, etc.
+    // Adjust for the first day in range's position in the week
+    const firstDayInRange = heatmapData[0]
+    const firstDayOfWeek = firstDayInRange.dayOfWeek // 0 = Sunday, 1 = Monday, etc.
 
     // Convert to Monday-based (0 = Monday, 6 = Sunday)
     const offset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1

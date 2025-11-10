@@ -172,7 +172,24 @@ class MediaCacheWorker {
             url: originalUrl,
             summary: getFileAnalysisSummary(fileAnalysis)
           })
-          
+
+          // Update content type and filename to match detected format
+          if (fileAnalysis.detectedType.format === 'JPEG') {
+            processedContentType = 'image/jpeg'
+            processedFilename = this.changeFileExtension(processedFilename || 'image', '.jpg')
+            console.log(`✅ [MediaCacheWorker] Updated to JPEG format:`, {
+              newFilename: processedFilename,
+              contentType: processedContentType
+            })
+          } else if (fileAnalysis.detectedType.format === 'PNG') {
+            processedContentType = 'image/png'
+            processedFilename = this.changeFileExtension(processedFilename || 'image', '.png')
+            console.log(`✅ [MediaCacheWorker] Updated to PNG format:`, {
+              newFilename: processedFilename,
+              contentType: processedContentType
+            })
+          }
+
           // Still capture the mismatch to Sentry for analysis
           const mismatchError = new Error(`HEIC conversion skipped - detected format: ${fileAnalysis.detectedType.format}`)
           captureHeicConversionError(

@@ -192,6 +192,7 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100)
     const contentType = searchParams.get('contentType')
     const authorHandle = searchParams.get('authorHandle')
+    const categoryId = searchParams.get('categoryId')
     const search = searchParams.get('search') || ''
     const dateFrom = searchParams.get('dateFrom')
     const dateTo = searchParams.get('dateTo')
@@ -233,6 +234,10 @@ export async function GET(request: NextRequest) {
 
     if (authorHandle) {
       where.authorHandle = authorHandle
+    }
+
+    if (categoryId && categoryId !== 'all') {
+      where.postCategoryId = categoryId
     }
 
     // Date range filtering on publishedAt
@@ -284,6 +289,12 @@ export async function GET(request: NextRequest) {
               handle: true,
               nickname: true,
               avatarId: true
+            }
+          },
+          postCategory: {
+            select: {
+              id: true,
+              name: true
             }
           },
           _count: {
@@ -378,6 +389,35 @@ export async function GET(request: NextRequest) {
         mentions = []
       }
 
+      // Parse OCR-related fields
+      let ocrTexts = null
+      let imageDescriptions = null
+      let slideClassifications = null
+
+      try {
+        ocrTexts = post.ocrTexts
+          ? (typeof post.ocrTexts === 'string' ? JSON.parse(post.ocrTexts) : post.ocrTexts)
+          : null
+      } catch (error) {
+        console.warn('Failed to parse ocrTexts for post:', post.id, error)
+      }
+
+      try {
+        imageDescriptions = post.imageDescriptions
+          ? (typeof post.imageDescriptions === 'string' ? JSON.parse(post.imageDescriptions) : post.imageDescriptions)
+          : null
+      } catch (error) {
+        console.warn('Failed to parse imageDescriptions for post:', post.id, error)
+      }
+
+      try {
+        slideClassifications = post.slideClassifications
+          ? (typeof post.slideClassifications === 'string' ? JSON.parse(post.slideClassifications) : post.slideClassifications)
+          : null
+      } catch (error) {
+        console.warn('Failed to parse slideClassifications for post:', post.id, error)
+      }
+
       return {
         ...post,
         viewCount: post.viewCount?.toString() || '0',
@@ -387,7 +427,10 @@ export async function GET(request: NextRequest) {
         authorAvatar: presignedAvatarUrls[index],
         images: images,
         hashtags: hashtags,
-        mentions: mentions
+        mentions: mentions,
+        ocrTexts: ocrTexts,
+        imageDescriptions: imageDescriptions,
+        slideClassifications: slideClassifications
       }
     })
 
