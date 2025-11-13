@@ -670,7 +670,7 @@ export const createPostsTableColumns = ({
   {
     id: 'metrics',
     header: 'Metrics',
-    size: 84,
+    size: 100,
     meta: {
       hideInMetricsMode: true
     },
