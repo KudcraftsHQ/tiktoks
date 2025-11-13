@@ -15,7 +15,7 @@ const OCR_RESPONSE_SCHEMA = {
       properties: {
         category: {
           type: Type.STRING,
-          description: "The category name (e.g., 'tips&tricks', 'lessons', 'tutorial', 'motivation', 'story'). Use existing category if it fits, or create a new one if confident it's needed."
+          description: "The category name. Use existing category if it fits, or create a new one if confident it's needed."
         },
         confidence: {
           type: Type.NUMBER,

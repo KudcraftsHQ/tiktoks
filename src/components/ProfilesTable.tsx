@@ -228,61 +228,10 @@ export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps
       <DataTable
         columns={columns}
         data={profiles}
-        searchKey="handle"
-        searchPlaceholder="Search profiles..."
-        showPagination={false}
-        onRowClick={handleRowClick}
-        enableColumnPinning={true}
-        getRowId={(row) => row.id}
-        customHeaderActions={
-          selectedProfiles.size > 0 ? (
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-muted-foreground">
-                {selectedProfiles.size} selected
-              </span>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="force-recache"
-                  checked={forceRecache}
-                  onCheckedChange={(checked) => setForceRecache(checked as boolean)}
-                />
-                <Label
-                  htmlFor="force-recache"
-                  className="text-sm font-normal cursor-pointer"
-                >
-                  Force recache images
-                </Label>
-              </div>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleBulkTriggerUpdate}
-                disabled={isBulkUpdating}
-              >
-                <RefreshCw className={`w-4 h-4 mr-1 ${isBulkUpdating ? 'animate-spin' : ''}`} />
-                Update Now
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleBulkToggleMonitoring(true)}
-                disabled={isBulkToggling}
-              >
-                <PlayCircle className="w-4 h-4 mr-1" />
-                Enable Monitoring
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleBulkToggleMonitoring(false)}
-                disabled={isBulkToggling}
-              >
-                <PauseCircle className="w-4 h-4 mr-1" />
-                Disable Monitoring
-              </Button>
-            </div>
-          ) : null
-        }
+        enablePagination={false}
+        leftStickyColumnsCount={2}
+        rightStickyColumnsCount={1}
+
       />
 
       {/* Profile Preview Dialog */}

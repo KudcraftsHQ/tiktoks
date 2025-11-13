@@ -13,6 +13,7 @@ import {
   Clipboard,
   LayoutList,
   LayoutGrid,
+  MessageSquareIcon,
 } from 'lucide-react'
 import { PostsTable } from '@/components/PostsTable'
 import { Card, CardContent } from '@/components/ui/card'
@@ -27,7 +28,22 @@ import { cn } from '@/lib/utils'
 import { DateRange } from '@/components/DateRangeFilter'
 import { PostingTimeChart, PostingTimeChartData, PostingTimeChartBestTime } from '@/components/PostingTimeChart'
 import { PostingActivityHeatmap } from '@/components/PostingActivityHeatmap'
+import { SearchInput } from '@/components/SearchInput'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { AdvancedFilters, AdvancedFiltersValue } from '@/components/AdvancedFilters'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react'
 import {
   calculateAggregateMetrics,
   calculateTimeAnalysis,
@@ -100,6 +116,17 @@ function PostsPageContent() {
   // Parse view mode from URL
   const initialViewMode = (searchParams.get('view') as 'metrics' | 'content') || 'metrics'
 
+  // Parse search from URL
+  const initialSearch = searchParams.get('search') || ''
+
+  // Parse advanced filters from URL
+  const accountIdsParam = searchParams.get('accountIds')
+  const initialAdvancedFilters: AdvancedFiltersValue = {
+    accountIds: accountIdsParam ? accountIdsParam.split(',').filter(Boolean) : [],
+    viewCountGt: searchParams.get('viewCountGt') ? parseInt(searchParams.get('viewCountGt')!) : undefined,
+    viewCountLt: searchParams.get('viewCountLt') ? parseInt(searchParams.get('viewCountLt')!) : undefined
+  }
+
   const [posts, setPosts] = useState<TikTokPost[]>([])
   const [viewMode, setViewMode] = useState<'metrics' | 'content'>(initialViewMode)
   const [totalPosts, setTotalPosts] = useState(0)
@@ -109,6 +136,9 @@ function PostsPageContent() {
   const [sorting, setSorting] = useState<SortingState>(initialSorting)
   const [categoryFilter, setCategoryFilter] = useState<string>(initialCategory)
   const [dateRange, setDateRange] = useState<DateRange>(initialDateRange)
+  const [searchQuery, setSearchQuery] = useState<string>(initialSearch)
+  const [isSearching, setIsSearching] = useState(false)
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFiltersValue>(initialAdvancedFilters)
   const [timeAnalysis, setTimeAnalysis] = useState<{
     hourlyData: PostingTimeChartData[]
     bestTimes: PostingTimeChartBestTime[]
@@ -169,7 +199,7 @@ function PostsPageContent() {
   }, [selectedPostsForMetrics, firstPostDate])
 
   // Update URL with current state
-  const updateURL = useCallback((page: number, sort: SortingState, dateFilter: DateRange, category: string, view: 'metrics' | 'content') => {
+  const updateURL = useCallback((page: number, sort: SortingState, dateFilter: DateRange, category: string, view: 'metrics' | 'content', search: string, filters: AdvancedFiltersValue) => {
     const params = new URLSearchParams()
 
     if (page > 1) {
@@ -202,6 +232,22 @@ function PostsPageContent() {
       params.set('view', 'content')
     }
 
+    // Add search query
+    if (search && search.trim().length > 0) {
+      params.set('search', search.trim())
+    }
+
+    // Add advanced filters
+    if (filters.accountIds.length > 0) {
+      params.set('accountIds', filters.accountIds.join(','))
+    }
+    if (filters.viewCountGt) {
+      params.set('viewCountGt', filters.viewCountGt.toString())
+    }
+    if (filters.viewCountLt) {
+      params.set('viewCountLt', filters.viewCountLt.toString())
+    }
+
     const queryString = params.toString()
     const newUrl = queryString ? `?${queryString}` : '/'
 
@@ -209,7 +255,7 @@ function PostsPageContent() {
     router.push(newUrl, { scroll: false })
   }, [router])
 
-  const fetchPosts = useCallback(async (page: number, limit: number, sort: SortingState, dateFilter: DateRange, category: string) => {
+  const fetchPosts = useCallback(async (page: number, limit: number, sort: SortingState, dateFilter: DateRange, category: string, search: string, filters: AdvancedFiltersValue): Promise<void> => {
     setIsLoading(true)
     try {
       // Get client timezone
@@ -242,6 +288,22 @@ function PostsPageContent() {
       }
       if (dateFilter.to) {
         params.append('dateTo', dateFilter.to.toISOString())
+      }
+
+      // Add search query
+      if (search && search.trim().length > 0) {
+        params.append('search', search.trim())
+      }
+
+      // Add advanced filters
+      if (filters.accountIds.length > 0) {
+        params.append('accountIds', filters.accountIds.join(','))
+      }
+      if (filters.viewCountGt) {
+        params.append('viewCountGt', filters.viewCountGt.toString())
+      }
+      if (filters.viewCountLt) {
+        params.append('viewCountLt', filters.viewCountLt.toString())
       }
 
       const response = await fetch(`/api/tiktok/posts?${params}`)
@@ -286,10 +348,10 @@ function PostsPageContent() {
 
     // Update URL and fetch in a separate effect to avoid render issues
     setTimeout(() => {
-      updateURL(currentPage, newSorting, dateRange, categoryFilter, viewMode)
-      fetchPosts(currentPage, pageSize, newSorting, dateRange, categoryFilter)
+      updateURL(currentPage, newSorting, dateRange, categoryFilter, viewMode, searchQuery, advancedFilters)
+      fetchPosts(currentPage, pageSize, newSorting, dateRange, categoryFilter, searchQuery, advancedFilters)
     }, 0)
-  }, [currentPage, pageSize, sorting, categoryFilter, dateRange, viewMode, updateURL, fetchPosts])
+  }, [currentPage, pageSize, sorting, categoryFilter, dateRange, viewMode, searchQuery, advancedFilters, updateURL, fetchPosts])
 
   // Handle page change with URL update
   const handlePageChange = useCallback((pageIndex: number, newPageSize: number) => {
@@ -298,11 +360,11 @@ function PostsPageContent() {
     setPageSize(newPageSize)
 
     setSorting(currentSorting => {
-      updateURL(newPage, currentSorting, dateRange, categoryFilter, viewMode)
-      fetchPosts(newPage, newPageSize, currentSorting, dateRange, categoryFilter)
+      updateURL(newPage, currentSorting, dateRange, categoryFilter, viewMode, searchQuery, advancedFilters)
+      fetchPosts(newPage, newPageSize, currentSorting, dateRange, categoryFilter, searchQuery, advancedFilters)
       return currentSorting
     })
-  }, [categoryFilter, dateRange, viewMode, updateURL, fetchPosts])
+  }, [categoryFilter, dateRange, viewMode, searchQuery, advancedFilters, updateURL, fetchPosts])
 
   // Handle date range change with URL update
   const handleDateRangeChange = useCallback((newDateRange: DateRange) => {
@@ -311,10 +373,10 @@ function PostsPageContent() {
 
     // Update URL and fetch
     setTimeout(() => {
-      updateURL(1, sorting, newDateRange, categoryFilter, viewMode)
-      fetchPosts(1, pageSize, sorting, newDateRange, categoryFilter)
+      updateURL(1, sorting, newDateRange, categoryFilter, viewMode, searchQuery, advancedFilters)
+      fetchPosts(1, pageSize, sorting, newDateRange, categoryFilter, searchQuery, advancedFilters)
     }, 0)
-  }, [pageSize, sorting, categoryFilter, viewMode, updateURL, fetchPosts])
+  }, [pageSize, sorting, categoryFilter, viewMode, searchQuery, advancedFilters, updateURL, fetchPosts])
 
   // Handle category change with URL update
   const handleCategoryChange = useCallback((newCategory: string) => {
@@ -323,15 +385,42 @@ function PostsPageContent() {
 
     // Update URL and fetch
     setTimeout(() => {
-      updateURL(1, sorting, dateRange, newCategory, viewMode)
-      fetchPosts(1, pageSize, sorting, dateRange, newCategory)
+      updateURL(1, sorting, dateRange, newCategory, viewMode, searchQuery, advancedFilters)
+      fetchPosts(1, pageSize, sorting, dateRange, newCategory, searchQuery, advancedFilters)
     }, 0)
-  }, [pageSize, sorting, dateRange, viewMode, updateURL, fetchPosts])
+  }, [pageSize, sorting, dateRange, viewMode, searchQuery, advancedFilters, updateURL, fetchPosts])
+
+  // Handle search query change with URL update
+  const handleSearchChange = useCallback((newSearch: string) => {
+    setSearchQuery(newSearch)
+    setCurrentPage(1) // Reset to first page when search changes
+    setIsSearching(true) // Start search loading
+
+    // Update URL and fetch
+    setTimeout(() => {
+      updateURL(1, sorting, dateRange, categoryFilter, viewMode, newSearch, advancedFilters)
+      fetchPosts(1, pageSize, sorting, dateRange, categoryFilter, newSearch, advancedFilters).finally(() => {
+        setIsSearching(false) // End search loading
+      })
+    }, 0)
+  }, [pageSize, sorting, dateRange, categoryFilter, viewMode, advancedFilters, updateURL, fetchPosts])
+
+  // Handle advanced filters change with URL update
+  const handleAdvancedFiltersChange = useCallback((newFilters: AdvancedFiltersValue) => {
+    setAdvancedFilters(newFilters)
+    setCurrentPage(1) // Reset to first page when filters change
+
+    // Update URL and fetch
+    setTimeout(() => {
+      updateURL(1, sorting, dateRange, categoryFilter, viewMode, searchQuery, newFilters)
+      fetchPosts(1, pageSize, sorting, dateRange, categoryFilter, searchQuery, newFilters)
+    }, 0)
+  }, [pageSize, sorting, dateRange, categoryFilter, viewMode, searchQuery, updateURL, fetchPosts])
 
   // Handle refetch (e.g., after updating slide classification)
   const handleRefetchPosts = useCallback(() => {
-    fetchPosts(currentPage, pageSize, sorting, dateRange, categoryFilter)
-  }, [currentPage, pageSize, sorting, dateRange, categoryFilter, fetchPosts])
+    fetchPosts(currentPage, pageSize, sorting, dateRange, categoryFilter, searchQuery, advancedFilters)
+  }, [currentPage, pageSize, sorting, dateRange, categoryFilter, searchQuery, advancedFilters, fetchPosts])
 
   // Handle content generated callback
   const handleContentGenerated = useCallback(() => {
@@ -347,6 +436,10 @@ function PostsPageContent() {
     const dateFromParam = searchParams.get('dateFrom')
     const dateToParam = searchParams.get('dateTo')
     const categoryParam = searchParams.get('category') || 'all'
+    const searchParam = searchParams.get('search') || ''
+    const accountIdsParam = searchParams.get('accountIds')
+    const viewCountGtParam = searchParams.get('viewCountGt')
+    const viewCountLtParam = searchParams.get('viewCountLt')
 
     let urlSorting: SortingState = []
 
@@ -364,22 +457,32 @@ function PostsPageContent() {
       to: dateToParam ? new Date(dateToParam) : undefined
     }
 
+    const urlAdvancedFilters: AdvancedFiltersValue = {
+      accountIds: accountIdsParam ? accountIdsParam.split(',').filter(Boolean) : [],
+      viewCountGt: viewCountGtParam ? parseInt(viewCountGtParam) : undefined,
+      viewCountLt: viewCountLtParam ? parseInt(viewCountLtParam) : undefined
+    }
+
     // Check if URL state is different from current state
     const sortingDifferent = JSON.stringify(urlSorting) !== JSON.stringify(sorting)
     const dateDifferent = JSON.stringify(urlDateRange) !== JSON.stringify(dateRange)
     const categoryDifferent = categoryParam !== categoryFilter
+    const searchDifferent = searchParam !== searchQuery
+    const filtersDifferent = JSON.stringify(urlAdvancedFilters) !== JSON.stringify(advancedFilters)
 
-    if (sortingDifferent || dateDifferent || categoryDifferent) {
+    if (sortingDifferent || dateDifferent || categoryDifferent || searchDifferent || filtersDifferent) {
       if (sortingDifferent) setSorting(urlSorting)
       if (dateDifferent) setDateRange(urlDateRange)
       if (categoryDifferent) setCategoryFilter(categoryParam)
-      fetchPosts(currentPage, pageSize, urlSorting, urlDateRange, categoryParam)
+      if (searchDifferent) setSearchQuery(searchParam)
+      if (filtersDifferent) setAdvancedFilters(urlAdvancedFilters)
+      fetchPosts(currentPage, pageSize, urlSorting, urlDateRange, categoryParam, searchParam, urlAdvancedFilters)
     }
-  }, [searchParams, sorting, dateRange, categoryFilter, currentPage, pageSize, fetchPosts])
+  }, [searchParams, sorting, dateRange, categoryFilter, searchQuery, advancedFilters, currentPage, pageSize, fetchPosts])
 
   // Initial fetch
   useEffect(() => {
-    fetchPosts(initialPage, pageSize, initialSorting, initialDateRange, initialCategory)
+    fetchPosts(initialPage, pageSize, initialSorting, initialDateRange, initialCategory, initialSearch, initialAdvancedFilters)
   }, [])
 
   // Sync viewMode from URL
@@ -425,46 +528,76 @@ function PostsPageContent() {
       // Filter selected posts from the posts array
       const selectedPostsData = posts.filter(p => selectedPosts.has(p.id))
 
-      // Format posts data
-      const formattedPosts = selectedPostsData.map(post => ({
-        id: post.id,
-        description: post.description || '',
-        contentType: post.contentType,
-        createTime: post.publishedAt,
-        metrics: {
-          views: post.viewCount || 0,
-          likes: post.likeCount || 0,
-          comments: post.commentCount || 0,
-          shares: post.shareCount || 0,
-          plays: post.duration ? Math.ceil(post.viewCount / (post.duration / 60)) : 0
-        },
-        author: {
-          handle: post.authorHandle || 'unknown',
-          avatarId: post.authorAvatarId || null
-        },
-        media: {
-          videoId: post.videoId || null,
-          coverId: post.coverId || null,
-          musicId: post.musicId || null,
-          images: (post.images || []).map(img => ({
-            imageId: img.cacheAssetId || null,
-            ocrText: post.ocrTexts?.[img.cacheAssetId] || undefined
-          }))
-        },
-        ocrText: post.ocrTexts ? Object.values(post.ocrTexts).filter(Boolean).join('\n') : null
-      }))
+      // Format posts as markdown
+      const markdownContent = selectedPostsData.map((post, index) => {
+        const sections: string[] = []
 
-      // Create JSON data structure
-      const clipboardData = {
-        posts: formattedPosts,
-        summary: {
-          totalPosts: formattedPosts.length,
-          exportedAt: new Date().toISOString()
+        // Post counter as H1
+        sections.push(`# Post #${index + 1}`)
+        sections.push('')
+
+        // Description as H2
+        if (post.description) {
+          sections.push('## Description')
+          sections.push('')
+          sections.push(post.description)
+          sections.push('')
         }
-      }
+
+        // Parse OCR texts
+        let ocrTexts: Array<{ imageIndex: number; text: string; success: boolean; error?: string }> = []
+        try {
+          if (post.ocrTexts) {
+            const parsed = typeof post.ocrTexts === 'string'
+              ? JSON.parse(post.ocrTexts)
+              : post.ocrTexts
+            ocrTexts = Array.isArray(parsed) ? parsed : []
+          }
+        } catch {
+          ocrTexts = []
+        }
+
+        // Parse slide classifications
+        let slideClassifications: Array<{ slideIndex: number; slideType: string; confidence: number }> = []
+        try {
+          if (post.slideClassifications) {
+            const parsed = typeof post.slideClassifications === 'string'
+              ? JSON.parse(post.slideClassifications)
+              : post.slideClassifications
+            slideClassifications = Array.isArray(parsed) ? parsed : []
+          }
+        } catch {
+          slideClassifications = []
+        }
+
+        // Content text with slides as H2
+        if (post.images && post.images.length > 0) {
+          sections.push('## Content Text')
+          sections.push('')
+
+          post.images.forEach((img, slideIndex) => {
+            // Get OCR text by imageIndex
+            const ocrResult = ocrTexts.find(ocr => ocr.imageIndex === slideIndex)
+            const ocrText = ocrResult?.success ? ocrResult.text : null
+
+            // Get slide type from classifications
+            const classification = slideClassifications.find(c => c.slideIndex === slideIndex)
+            const slideType = classification?.slideType || 'unknown'
+
+            if (ocrText) {
+              sections.push(`### Slide ${slideIndex + 1} - ${slideType}`)
+              sections.push('')
+              sections.push(ocrText)
+              sections.push('')
+            }
+          })
+        }
+
+        return sections.join('\n')
+      }).join('\n---\n\n')
 
       // Copy to clipboard
-      await navigator.clipboard.writeText(JSON.stringify(clipboardData, null, 2))
+      await navigator.clipboard.writeText(markdownContent)
 
       // Show success toast
       toast.success(`Copied ${selectedPosts.size} post${selectedPosts.size !== 1 ? 's' : ''} to clipboard`, {
@@ -491,66 +624,151 @@ function PostsPageContent() {
   }
 
   return (
-    <div className="flex h-screen w-full">
+    <div className="flex h-screen w-full min-w-0">
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0">
         <PageLayout
-          title="TikTok Posts"
-          headerActions={
-            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-              <ToggleGroup
-                type="single"
-                value={viewMode}
-                onValueChange={(value) => {
-                  if (value) {
-                    const newViewMode = value as 'metrics' | 'content'
-                    setViewMode(newViewMode)
-                    updateURL(currentPage, sorting, dateRange, categoryFilter, newViewMode)
-                  }
-                }}
-                className="border h-8"
-              >
-                <ToggleGroupItem value="metrics" className="gap-1.5 h-8 px-3 text-xs">
-                  <LayoutList className="h-3 w-3" />
-                  <span>Metrics</span>
-                </ToggleGroupItem>
-                <ToggleGroupItem value="content" className="gap-1.5 h-8 px-3 text-xs">
-                  <LayoutGrid className="h-3 w-3" />
-                  <span>Content</span>
-                </ToggleGroupItem>
-              </ToggleGroup>
-              <Button
-                variant="outline"
-                onClick={handleCopyToClipboard}
-                disabled={selectedPosts.size === 0 || isCopyingToClipboard}
-                className="w-full sm:w-auto h-8 px-3 text-xs"
-              >
-                <Clipboard className="h-3 w-3 mr-1.5" />
-                Copy to Clipboard {selectedPosts.size > 0 && `(${selectedPosts.size})`}
-              </Button>
-              <Button
-                variant={isGenerateDrawerOpen ? "default" : "outline"}
-                onClick={() => setIsGenerateDrawerOpen(!isGenerateDrawerOpen)}
-                className="w-full sm:w-auto h-8 px-3 text-xs"
-              >
-                <Sparkles className="h-3 w-3 mr-1.5" />
-                Generate Content {selectedPosts.size > 0 && `(${selectedPosts.size})`}
-              </Button>
-              <Button
-                variant={isAnalysisSidebarOpen ? "default" : "outline"}
-                onClick={() => setIsAnalysisSidebarOpen(!isAnalysisSidebarOpen)}
-                className="w-full sm:w-auto h-8 px-3 text-xs"
-              >
-                <Sparkles className="h-3 w-3 mr-1.5" />
-                Chat with Data {selectedPosts.size > 0 && `(${selectedPosts.size})`}
-              </Button>
+          title={
+            <div className="flex items-center gap-4">
+              <SearchInput
+                value={searchQuery}
+                onChange={handleSearchChange}
+                placeholder="Search posts..."
+                isLoading={isSearching}
+              />
             </div>
+          }
+          headerActions={
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto items-center">
+                <AdvancedFilters
+                  value={advancedFilters}
+                  onChange={handleAdvancedFiltersChange}
+                />
+                {viewMode === 'content' && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <div className="relative">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 px-3 text-xs gap-1.5"
+                        >
+                          <ArrowUpDown className="h-3 w-3" />
+                        </Button>
+                        {sorting.length > 0 && (
+                          <Badge
+                            variant="secondary"
+                            className="absolute -right-1.5 -bottom-1.5 h-4 w-4 flex items-center justify-center rounded-full p-0 text-[10px] border border-background"
+                          >
+                            {sorting.length}
+                          </Badge>
+                        )}
+                      </div>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64" align="end">
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <h4 className="font-medium text-sm">Sort By</h4>
+                          <Select
+                            value={sorting[0]?.id || ''}
+                            onValueChange={(value) => {
+                              const newSorting: SortingState = value
+                                ? [{ id: value, desc: sorting[0]?.desc ?? true }]
+                                : []
+                              handleSortingChange(newSorting)
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Select field" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="viewCount">Views</SelectItem>
+                              <SelectItem value="likeCount">Likes</SelectItem>
+                              <SelectItem value="commentCount">Comments</SelectItem>
+                              <SelectItem value="shareCount">Shares</SelectItem>
+                              <SelectItem value="saveCount">Saves</SelectItem>
+                              <SelectItem value="publishedAt">Published Date</SelectItem>
+                              <SelectItem value="authorHandle">Author</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {sorting.length > 0 && (
+                          <div className="space-y-2">
+                            <h4 className="font-medium text-sm">Direction</h4>
+                            <ToggleGroup
+                              type="single"
+                              value={sorting[0]?.desc ? 'desc' : 'asc'}
+                              onValueChange={(value) => {
+                                if (value && sorting[0]) {
+                                  const newSorting: SortingState = [
+                                    { id: sorting[0].id, desc: value === 'desc' }
+                                  ]
+                                  handleSortingChange(newSorting)
+                                }
+                              }}
+                              className="w-full"
+                            >
+                              <ToggleGroupItem value="desc" className="flex-1 gap-1.5 h-8 text-xs">
+                                <ArrowDown className="h-3 w-3" />
+                                Descending
+                              </ToggleGroupItem>
+                              <ToggleGroupItem value="asc" className="flex-1 gap-1.5 h-8 text-xs">
+                                <ArrowUp className="h-3 w-3" />
+                                Ascending
+                              </ToggleGroupItem>
+                            </ToggleGroup>
+                          </div>
+                        )}
+
+                        {sorting.length > 0 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              handleSortingChange([])
+                            }}
+                            className="w-full h-8 text-xs gap-1.5"
+                          >
+                            <X className="h-3 w-3" />
+                            Reset Sorting
+                          </Button>
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={handleCopyToClipboard}
+                  disabled={selectedPosts.size === 0 || isCopyingToClipboard}
+                  className="w-full sm:w-auto h-8 px-3 text-xs"
+                >
+                  <Clipboard className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant={isGenerateDrawerOpen ? "default" : "outline"}
+                  onClick={() => setIsGenerateDrawerOpen(!isGenerateDrawerOpen)}
+                  className="w-full sm:w-auto h-8 px-3 text-xs"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  Generate {selectedPosts.size > 0 && ` (${selectedPosts.size})`}
+                </Button>
+                <Button
+                  variant={isAnalysisSidebarOpen ? "default" : "outline"}
+                  onClick={() => setIsAnalysisSidebarOpen(!isAnalysisSidebarOpen)}
+                  className="w-full sm:w-auto h-8 px-3 text-xs"
+                >
+                  <MessageSquareIcon className="h-3 w-3" />
+                  Chat{selectedPosts.size > 0 && ` (${selectedPosts.size})`}
+                </Button>
+              </div>
           }
         >
           {viewMode === 'metrics' ? (
             <>
               {/* Metrics and Charts Row */}
-              <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr_1fr] gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr_1fr] gap-4 px-4 pt-4">
             {/* Metrics Grid - 2x3 */}
             {isLoading && !displayMetrics ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -655,6 +873,7 @@ function PostsPageContent() {
                 selectedPosts={selectedPosts}
                 onSelectionChange={setSelectedPosts}
                 viewMode={viewMode}
+                searchQuery={searchQuery}
               />
             </>
           ) : (
@@ -679,6 +898,7 @@ function PostsPageContent() {
               selectedPosts={selectedPosts}
               onSelectionChange={setSelectedPosts}
               viewMode={viewMode}
+              searchQuery={searchQuery}
             />
           )}
         </PageLayout>

@@ -44,6 +44,7 @@ interface PostsTableProps {
   selectedPosts?: Set<string>
   onSelectionChange?: (selectedPosts: Set<string>) => void
   viewMode?: 'metrics' | 'content'
+  searchQuery?: string
 }
 
 export function PostsTable({
@@ -60,7 +61,8 @@ export function PostsTable({
   enableServerSideSorting = false,
   selectedPosts: externalSelectedPosts,
   onSelectionChange,
-  viewMode = 'metrics'
+  viewMode = 'metrics',
+  searchQuery = ''
 }: PostsTableProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -74,6 +76,18 @@ export function PostsTable({
   const selectedPosts = externalSelectedPosts ?? internalSelectedPosts
   const setSelectedPosts = onSelectionChange ?? setInternalSelectedPosts
   const [isBulkOCRing, setIsBulkOCRing] = useState(false)
+
+  // Parse search terms from search query
+  const searchTerms = useMemo(() => {
+    if (!searchQuery || searchQuery.trim().length === 0) return []
+    return searchQuery
+      .split(/\s+/)
+      .map(term => term.trim())
+      .filter(term => term.length >= 2)
+  }, [searchQuery])
+
+  // Column visibility state
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({})
 
   const photoPosts = posts.filter(p => p.contentType === 'photo')
   const allPhotosSelected = photoPosts.length > 0 && selectedPosts.size === photoPosts.length
@@ -277,12 +291,13 @@ export function PostsTable({
       onSelectPost: handleSelectPost,
       onSelectAll: handleSelectAll,
       allSelected: allPostsSelected,
-      viewMode
+      viewMode,
+      searchTerms
     })
-  }, [handlePreviewPost, handleOpenImageGallery, handleRemixPost, handleRowClick, handleTriggerOCR, onRefetchPosts, selectedPosts, handleSelectPost, handleSelectAll, allPostsSelected, viewMode])
+  }, [handlePreviewPost, handleOpenImageGallery, handleRemixPost, handleRowClick, handleTriggerOCR, onRefetchPosts, selectedPosts, handleSelectPost, handleSelectAll, allPostsSelected, viewMode, searchTerms])
 
-  // Compute initial column visibility
-  const initialColumnVisibility = useMemo(() => {
+  // Update column visibility whenever columns, hiddenColumns, or viewMode changes
+  useEffect(() => {
     const visibility: Record<string, boolean> = {}
 
     // Apply base hidden columns
@@ -304,7 +319,7 @@ export function PostsTable({
       }
     })
 
-    return visibility
+    setColumnVisibility(visibility)
   }, [hiddenColumns, columns, viewMode])
 
   // Global filter function to search across author and OCR text
@@ -331,55 +346,19 @@ export function PostsTable({
 
   return (
     <>
-      <div className="h-full flex flex-col min-h-0">
+      <div className="h-full flex flex-col min-h-0 min-w-0">
         <DataTable
           columns={columns}
           data={postsWithProxiedUrls}
-          getRowId={(post) => post.id}
-          globalFilterFn={globalFilterFn}
-          searchPlaceholder="Search by author, description..."
-          showPagination={true}
-          categoryFilter={categoryFilter}
-          dateRangeFilter={dateRangeFilter}
-          onPageChange={onPageChange}
-          onSortingChange={onSortingChange}
-          sorting={sorting}
-          manualSorting={enableServerSideSorting}
-          manualPagination={true}
-          totalRows={totalPosts}
+          columnVisibility={columnVisibility}
+          onColumnVisibilityChange={setColumnVisibility}
+          enableSorting={true}
+          enablePagination={true}
+          pageSize={10}
+          leftStickyColumnsCount={4}
+          rightStickyColumnsCount={1}
+          fullWidth={true}
           isLoading={isLoading}
-          enableColumnPinning={true}
-          initialColumnVisibility={initialColumnVisibility}
-          onRowClick={handleRowClick}
-          customHeaderActions={
-            <>
-              {selectedPosts.size > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">
-                    {selectedPosts.size} selected
-                  </span>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={handleBulkOCR}
-                    disabled={isBulkOCRing}
-                  >
-                    {isBulkOCRing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <FileText className="w-4 h-4 mr-1" />
-                        Run OCR on Selected
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
-            </>
-          }
         />
       </div>
 

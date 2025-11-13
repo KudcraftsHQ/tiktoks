@@ -27,14 +27,14 @@ export function PostingActivityHeatmap({ data, showStreak = false, firstPostDate
     // Get last 3 months from today
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    const threeMonthsAgo = new Date(today)
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
-    threeMonthsAgo.setHours(0, 0, 0, 0)
-    const daysSinceThreeMonthsAgo = Math.floor((today.getTime() - threeMonthsAgo.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    const sixMonthsAgo = new Date(today)
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+    sixMonthsAgo.setHours(0, 0, 0, 0)
+    const daysSinceThreeMonthsAgo = Math.floor((today.getTime() - sixMonthsAgo.getTime()) / (1000 * 60 * 60 * 24)) + 1
 
     // Initialize all days from 3 months ago to today
     for (let i = 0; i < daysSinceThreeMonthsAgo; i++) {
-      const date = new Date(threeMonthsAgo)
+      const date = new Date(sixMonthsAgo)
       date.setDate(date.getDate() + i)
       date.setHours(0, 0, 0, 0)
 
@@ -152,20 +152,34 @@ export function PostingActivityHeatmap({ data, showStreak = false, firstPostDate
     <div className="h-full rounded-lg border border-border bg-card">
       <div className="p-4 pb-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold">Posting activity</h3>
-            {formattedFirstPostDate && (
-              <span className="text-xs text-muted-foreground">
-                Since {formattedFirstPostDate}
-              </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-semibold">Posting activity</h3>
+              {formattedFirstPostDate && (
+                <span className="text-xs text-muted-foreground">
+                  Since {formattedFirstPostDate}
+                </span>
+              )}
+            </div>
+            {showStreak && (
+              <div className="flex items-center gap-1 text-sm">
+                <span className="text-orange-500">🔥</span>
+                <span className="font-medium">You are on a {streak} day streak</span>
+              </div>
             )}
           </div>
-          {showStreak && (
-            <div className="flex items-center gap-1 text-sm">
-              <span className="text-orange-500">🔥</span>
-              <span className="font-medium">You are on a {streak} day streak</span>
+          {/* Legend */}
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <span className="text-[10px] text-muted-foreground">Less</span>
+            <div className="flex gap-1">
+              <div className="h-[14px] w-[14px] rounded-[2px] bg-muted" />
+              <div className="h-[14px] w-[14px] rounded-[2px] bg-purple-200" />
+              <div className="h-[14px] w-[14px] rounded-[2px] bg-purple-400" />
+              <div className="h-[14px] w-[14px] rounded-[2px] bg-purple-600" />
+              <div className="h-[14px] w-[14px] rounded-[2px] bg-purple-700" />
             </div>
-          )}
+            <span className="text-[10px] text-muted-foreground">More</span>
+          </div>
         </div>
       </div>
       <div className="p-4 pt-0">
@@ -218,19 +232,6 @@ export function PostingActivityHeatmap({ data, showStreak = false, firstPostDate
                 </div>
               ))}
             </div>
-          </div>
-
-          {/* Legend */}
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <span className="text-[10px] text-muted-foreground">Less</span>
-            <div className="flex gap-1">
-              <div className="h-[14px] w-[14px] rounded-[2px] bg-muted" />
-              <div className="h-[14px] w-[14px] rounded-[2px] bg-purple-200" />
-              <div className="h-[14px] w-[14px] rounded-[2px] bg-purple-400" />
-              <div className="h-[14px] w-[14px] rounded-[2px] bg-purple-600" />
-              <div className="h-[14px] w-[14px] rounded-[2px] bg-purple-700" />
-            </div>
-            <span className="text-[10px] text-muted-foreground">More</span>
           </div>
         </div>
       </div>

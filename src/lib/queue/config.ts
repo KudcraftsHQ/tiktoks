@@ -21,6 +21,7 @@ const redisConfig = {
 export const QUEUE_NAMES = {
   MEDIA_CACHE: 'media-cache',
   PROFILE_MONITOR: 'profile-monitor',
+  OCR: 'ocr',
 } as const
 
 // Get default queue options (creates new connection each time)
@@ -78,5 +79,16 @@ export interface ProfileMonitorJobResult {
   profileId: string
   postsScraped?: number
   pagesScraped?: number
+  error?: string
+}
+
+// OCR job interfaces
+export interface OCRJobData {
+  postId: string
+}
+
+export interface OCRJobResult {
+  success: boolean
+  postId: string
   error?: string
 }

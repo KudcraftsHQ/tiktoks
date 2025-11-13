@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sticky Columns Debug Test</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+
+    .test-section {
+      margin-bottom: 40px;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    h2 {
+      margin-top: 0;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      position: relative;
+    }
+
+    table {
+      border-collapse: collapse;
+      background: white;
+    }
+
+    th, td {
+      padding: 12px 16px;
+      border: 1px solid #e5e7eb;
+      white-space: nowrap;
+    }
+
+    th {
+      background: #f9fafb;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    /* Sticky columns */
+    .sticky-left-0 {
+      position: sticky;
+      left: 0px;
+      background: white;
+      z-index: 1;
+    }
+
+    .sticky-left-1 {
+      position: sticky;
+      left: 100px; /* This is where the issue is - needs dynamic calculation */
+      background: white;
+      z-index: 1;
+    }
+
+    .sticky-left-2 {
+      position: sticky;
+      left: 200px; /* This is where the issue is - needs dynamic calculation */
+      background: white;
+      z-index: 1;
+    }
+
+    /* Shadow effects */
+    .sticky-left-0.shadow,
+    .sticky-left-1.shadow,
+    .sticky-left-2.shadow {
+      box-shadow: -2px 0 3px -2px rgba(0,0,0,0.3) inset;
+    }
+
+    /* Different column widths to test */
+    .col-select { width: 40px; }
+    .col-narrow { width: 100px; }
+    .col-medium { width: 150px; }
+    .col-wide { width: 200px; }
+
+    .debug-info {
+      margin-top: 10px;
+      padding: 10px;
+      background: #fef3c7;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Sticky Columns Width Calculation Debug</h1>
+
+  <div class="test-section">
+    <h2>Test 1: Issue Reproduction - Hardcoded left positions</h2>
+    <p><strong>Problem:</strong> When columns have different widths, hardcoded left positions cause misalignment</p>
+    <div class="table-wrapper" id="table1">
+      <table>
+        <thead>
+          <tr>
+            <th class="sticky-left-0 col-select">☑</th>
+            <th class="sticky-left-1 col-narrow">Col 1</th>
+            <th class="sticky-left-2 col-medium">Col 2</th>
+            <th class="col-wide">Col 3</th>
+            <th class="col-wide">Col 4</th>
+            <th class="col-wide">Col 5</th>
+            <th class="col-wide">Col 6</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="sticky-left-0 col-select">☑</td>
+            <td class="sticky-left-1 col-narrow">Data 1</td>
+            <td class="sticky-left-2 col-medium">Data 2</td>
+            <td class="col-wide">Data 3</td>
+            <td class="col-wide">Data 4</td>
+            <td class="col-wide">Data 5</td>
+            <td class="col-wide">Data 6</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="debug-info">
+      <div>Column 0 width: 40px, left: 0px ✓</div>
+      <div>Column 1 width: 100px, left: <span style="color: red; font-weight: bold;">100px (WRONG! Should be 40px)</span></div>
+      <div>Column 2 width: 150px, left: <span style="color: red; font-weight: bold;">200px (WRONG! Should be 140px)</span></div>
+    </div>
+  </div>
+
+  <div class="test-section">
+    <h2>Test 2: Fixed with Correct Calculation</h2>
+    <p><strong>Solution:</strong> Calculate cumulative widths dynamically</p>
+    <div class="table-wrapper" id="table2">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-select" style="position: sticky; left: 0px; background: white; z-index: 1;">☑</th>
+            <th class="col-narrow" style="position: sticky; left: 40px; background: white; z-index: 1;">Col 1</th>
+            <th class="col-medium" style="position: sticky; left: 140px; background: white; z-index: 1;">Col 2</th>
+            <th class="col-wide">Col 3</th>
+            <th class="col-wide">Col 4</th>
+            <th class="col-wide">Col 5</th>
+            <th class="col-wide">Col 6</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="col-select" style="position: sticky; left: 0px; background: white; z-index: 1;">☑</td>
+            <td class="col-narrow" style="position: sticky; left: 40px; background: white; z-index: 1;">Data 1</td>
+            <td class="col-medium" style="position: sticky; left: 140px; background: white; z-index: 1;">Data 2</td>
+            <td class="col-wide">Data 3</td>
+            <td class="col-wide">Data 4</td>
+            <td class="col-wide">Data 5</td>
+            <td class="col-wide">Data 6</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="debug-info">
+      <div style="color: green;">Column 0 width: 40px, left: 0px ✓</div>
+      <div style="color: green;">Column 1 width: 100px, left: 40px ✓</div>
+      <div style="color: green;">Column 2 width: 150px, left: 140px ✓</div>
+    </div>
+  </div>
+
+  <div class="test-section">
+    <h2>Test 3: TanStack Table's getStart() Method</h2>
+    <p><strong>How it works:</strong> TanStack Table calculates cumulative positions</p>
+    <div class="debug-info">
+      <strong>What getStart('left') returns:</strong><br>
+      For Column 0: column.getStart('left') = 0<br>
+      For Column 1: column.getStart('left') = sum of all previous column widths = 40<br>
+      For Column 2: column.getStart('left') = sum of all previous column widths = 40 + 100 = 140<br>
+      <br>
+      <strong>Current bug in data-table.tsx:</strong><br>
+      The issue is in how columns are being mapped in the columnPinning state (lines 249-255).<br>
+      <br>
+      When onRowSelectionChange is true:<br>
+      - allColumns = [selectionColumn, ...columns]<br>
+      - But columnPinning.left uses: ['select', ...columns.slice(0, leftStickyColumnsCount)]<br>
+      <br>
+      <strong style="color: red;">THE PROBLEM:</strong><br>
+      If leftStickyColumnsCount=2, we're pinning:<br>
+      - 'select' (correct)<br>
+      - columns[0] (correct)<br>
+      - columns[1] (correct)<br>
+      <br>
+      But the table uses columnsWithSizing which is based on allColumns!<br>
+      So TanStack Table sees the columns in this order:<br>
+      - allColumns[0] = selectionColumn<br>
+      - allColumns[1] = columns[0]<br>
+      - allColumns[2] = columns[1]<br>
+      <br>
+      When calculating positions, if columnsWithSizing has different sizes than the original columns,<br>
+      getStart() will use the wrong widths!<br>
+    </div>
+  </div>
+
+  <div class="test-section">
+    <h2>Root Cause Analysis</h2>
+    <div class="debug-info" style="background: #fee2e2; border-left: 4px solid #dc2626;">
+      <strong>THE ACTUAL BUG:</strong><br><br>
+
+      1. <strong>Column Definition Mismatch:</strong><br>
+         - Table receives: columnsWithSizing (line 226)<br>
+         - Pinning config references: original columns array (lines 252-254)<br><br>
+
+      2. <strong>Width Calculation Timing:</strong><br>
+         - columnsWithSizing is calculated in useMemo (lines 192-222)<br>
+         - It modifies column sizes AFTER allColumns is created<br>
+         - But it's calculated BEFORE the table instance is created<br><br>
+
+      3. <strong>The fullWidth Logic Issue:</strong><br>
+         - Calculates total width of all columns EXCEPT last non-sticky<br>
+         - Sets last non-sticky column to fill remaining space<br>
+         - But this calculation happens on allColumns which includes selection column<br>
+         - The column indices used don't account for the selection column being injected<br><br>
+
+      4. <strong>Why it's "jumpy":</strong><br>
+         - When scrolling, TanStack Table uses getStart() to position columns<br>
+         - getStart() accumulates actual rendered widths<br>
+         - But if columnsWithSizing changed some widths, positions become inconsistent<br>
+         - Browser tries to reconcile sticky positioning with wrong left values<br>
+         - Results in flickering/jumping as scroll position changes<br>
+    </div>
+  </div>
+
+  <script>
+    // Add scroll shadow effect for visual feedback
+    const tableWrappers = document.querySelectorAll('.table-wrapper');
+
+    tableWrappers.forEach(wrapper => {
+      wrapper.addEventListener('scroll', () => {
+        const scrollLeft = wrapper.scrollLeft;
+        const maxScroll = wrapper.scrollWidth - wrapper.clientWidth;
+
+        const stickyColumns = wrapper.querySelectorAll('[class*="sticky-left"]');
+        const lastStickyCol = Array.from(stickyColumns).pop();
+
+        if (lastStickyCol && scrollLeft > 10) {
+          lastStickyCol.classList.add('shadow');
+        } else if (lastStickyCol) {
+          lastStickyCol.classList.remove('shadow');
+        }
+      });
+    });
+  </script>
+</body>
+</html>

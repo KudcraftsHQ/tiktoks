@@ -1,5 +1,6 @@
 'use client'
 
+import { ImageOff } from 'lucide-react'
 import { useState, useEffect, ImgHTMLAttributes, memo } from 'react'
 
 interface SmartImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> {
@@ -115,8 +116,8 @@ const SmartImageComponent = ({
   if (hasError) {
     return (
       <div className={className}>
-        <div className="flex items-center justify-center w-full h-full bg-muted">
-          <span className="text-xs text-muted-foreground">Failed to load</span>
+        <div className="flex items-center justify-center w-full aspect-[9/16] bg-muted">
+          <ImageOff className='w-4 h-4'/>
         </div>
       </div>
     )

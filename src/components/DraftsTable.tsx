@@ -171,9 +171,7 @@ export function DraftsTable({
       <DataTable
         columns={columns}
         data={draftsAsTableRows}
-        getRowId={(draft) => draft.id}
-        showPagination={false}
-        enableColumnPinning={true}
+        enablePagination={false}
       />
     </div>
   )

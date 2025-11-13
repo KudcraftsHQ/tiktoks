@@ -32,7 +32,7 @@ import {
   MoreHorizontal,
   RefreshCw
 } from 'lucide-react'
-import { createSortableHeader } from '@/components/ui/data-table'
+// import { createSortableHeader } from '@/components/ui/data-table'
 import Link from 'next/link'
 
 export interface TikTokProfile {
@@ -285,7 +285,7 @@ export const createProfilesTableColumns = ({
   },
   {
     accessorKey: 'handle',
-    header: createSortableHeader('Handle'),
+    header: 'Handle',
     size: 250,
     meta: { pinned: 'left' },
     cell: ({ row }) => {
@@ -336,7 +336,7 @@ export const createProfilesTableColumns = ({
   },
   {
     accessorKey: 'totalPosts',
-    header: createSortableHeader('Posts'),
+    header: 'Posts',
     cell: ({ row }) => {
       const profile = row.original
       return (
@@ -348,7 +348,7 @@ export const createProfilesTableColumns = ({
   },
   {
     accessorKey: 'totalViews',
-    header: createSortableHeader('Views'),
+    header: 'Views',
     cell: ({ row }) => {
       const profile = row.original
       return (
@@ -360,7 +360,7 @@ export const createProfilesTableColumns = ({
   },
   {
     accessorKey: 'totalLikes',
-    header: createSortableHeader('Likes'),
+    header: 'Likes',
     cell: ({ row }) => {
       const profile = row.original
       return (
@@ -372,7 +372,7 @@ export const createProfilesTableColumns = ({
   },
   {
     accessorKey: 'totalComments',
-    header: createSortableHeader('Comments'),
+    header: 'Comments',
     cell: ({ row }) => {
       const profile = row.original
       return (
@@ -384,7 +384,7 @@ export const createProfilesTableColumns = ({
   },
   {
     accessorKey: 'totalShares',
-    header: createSortableHeader('Shares'),
+    header: 'Shares',
     cell: ({ row }) => {
       const profile = row.original
       return (
@@ -396,7 +396,7 @@ export const createProfilesTableColumns = ({
   },
   {
     accessorKey: 'totalSaves',
-    header: createSortableHeader('Saves'),
+    header: 'Saves',
     cell: ({ row }) => {
       const profile = row.original
       return (
@@ -430,7 +430,7 @@ export const createProfilesTableColumns = ({
   },
   {
     accessorKey: 'updatedAt',
-    header: createSortableHeader('Last Updated'),
+    header: 'Last Updated',
     cell: ({ row }) => {
       const profile = row.original
       const { date, time } = formatDateTime(profile.updatedAt)

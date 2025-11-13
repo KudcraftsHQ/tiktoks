@@ -7,6 +7,8 @@
 
 import { PrismaClient, Prisma } from '@/generated/prisma'
 import { mediaCacheServiceV2 } from './media-cache-service-v2'
+import { ocrQueue } from './queue/ocr-queue'
+import { notificationService } from './notification-service'
 
 /**
  * Split array into chunks
@@ -96,6 +98,7 @@ export interface BulkUpsertResult {
     postsCreated: number
     postsUpdated: number
     totalPosts: number
+    ocrJobsQueued: number
   }
   profileId: string
 }
@@ -427,18 +430,85 @@ export class TikTokBulkUpsertService {
       totalLikes: aggregatedMetrics._sum.likeCount || 0
     })
 
+    // Queue OCR for newly created photo posts
+    console.log(`🔍 [BulkUpsertService] Checking for new photo posts to queue for OCR`)
+    const newPhotoPosts = postsWithCachedMedia.filter(
+      ({ postData, isNew }) => isNew && postData.contentType === 'photo'
+    )
+
+    let ocrJobsQueued = 0
+    if (newPhotoPosts.length > 0) {
+      console.log(`📋 [BulkUpsertService] Found ${newPhotoPosts.length} new photo posts to queue for OCR`)
+
+      // Get the post IDs from the database
+      const tiktokIds = newPhotoPosts.map(({ postData }) => postData.tiktokId)
+      const photoPosts = await this.prisma.tiktokPost.findMany({
+        where: {
+          tiktokId: { in: tiktokIds }
+        },
+        select: { id: true }
+      })
+
+      const postIds = photoPosts.map(p => p.id)
+
+      try {
+        await ocrQueue.addBulkOCRJobs(postIds)
+        ocrJobsQueued = postIds.length
+        console.log(`✅ [BulkUpsertService] Queued ${ocrJobsQueued} OCR jobs for new photo posts`)
+      } catch (error) {
+        console.error(`❌ [BulkUpsertService] Failed to queue OCR jobs:`, error)
+      }
+    } else {
+      console.log(`ℹ️ [BulkUpsertService] No new photo posts to queue for OCR`)
+    }
+
     console.log(`✅ [BulkUpsertService] Completed bulk upsert for profile ${profileData.handle}:`, {
       totalPosts: postsData.length,
       postsCreated: createdCount,
       postsUpdated: updatedCount,
+      ocrJobsQueued,
       profileAvatarCached: !!profileAvatarId
     })
+
+    // Check for high views and send notifications if needed
+    console.log(`🔔 [BulkUpsertService] Checking for high views notifications`)
+    try {
+      // Fetch all posts that were just upserted to check their metrics
+      const tiktokIds = postsData.map(p => p.tiktokId)
+      const postsToCheck = await this.prisma.tiktokPost.findMany({
+        where: {
+          tiktokId: { in: tiktokIds }
+        },
+        select: {
+          id: true,
+          tiktokUrl: true,
+          viewCount: true,
+          likeCount: true,
+          shareCount: true,
+          commentCount: true,
+          title: true,
+          description: true,
+          coverId: true
+        }
+      })
+
+      // Check each post for high views (non-blocking)
+      await Promise.allSettled(
+        postsToCheck.map(post => notificationService.checkAndNotifyHighViews(post))
+      )
+
+      console.log(`✅ [BulkUpsertService] High views check completed`)
+    } catch (error) {
+      console.error(`❌ [BulkUpsertService] Failed to check for notifications:`, error)
+      // Don't fail the whole operation if notifications fail
+    }
 
     return {
       stats: {
         postsCreated: createdCount,
         postsUpdated: updatedCount,
-        totalPosts: postsData.length
+        totalPosts: postsData.length,
+        ocrJobsQueued
       },
       profileId: profile.id
     }

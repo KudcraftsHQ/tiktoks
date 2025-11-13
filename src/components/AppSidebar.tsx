@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Home, FileText, Users, UserCheck, Sparkles, Star, Search, CloudUpload, BookmarkCheck, Edit, Library, Tag, ImageIcon } from 'lucide-react'
+import { Home, FileText, Users, UserCheck, Sparkles, Star, Search, CloudUpload, BookmarkCheck, Edit, Library, Tag, ImageIcon, ScanText, CogIcon, BookText } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -14,26 +14,24 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarHeader,
+  SidebarFooter,
 } from '@/components/ui/sidebar'
 import { ThemeToggle } from '@/components/theme-toggle'
-import { AddProfileDialog } from '@/components/AddProfileDialog'
 
 export function AppSidebar() {
   const pathname = usePathname()
   const router = useRouter()
-
-  const handleProfileAdded = () => {
-    // Refresh the current page if on profiles pages
-    if (pathname.startsWith('/profiles') || pathname === '/my-profiles') {
-      router.refresh()
-    }
-  }
 
   const mainNavigationItems = [
     {
       title: 'Posts',
       url: '/',
       icon: Home,
+    },
+    {
+      title: 'Contents',
+      url: '/?view=content',
+      icon: BookText,
     },
     {
       title: 'Drafts',
@@ -73,12 +71,7 @@ export function AppSidebar() {
 
   const profileNavigationItems = [
     {
-      title: 'My Profiles',
-      url: '/my-profiles',
-      icon: Star,
-    },
-    {
-      title: 'All Profiles',
+      title: 'Profiles',
       url: '/profiles',
       icon: Users,
     },
@@ -99,11 +92,10 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="p-4 border-b">
+      <SidebarHeader className="p-4 h-[56px]">
         <div className="flex items-center justify-between">
           <div className="flex flex-col space-y-2">
             <h2 className="text-lg font-semibold">TikTok Carousel</h2>
-            <p className="text-sm text-muted-foreground">Organize your collection</p>
           </div>
         </div>
       </SidebarHeader>
@@ -111,7 +103,6 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <AddProfileDialog onProfileAdded={handleProfileAdded} />
           <SidebarGroupLabel>Main</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -133,7 +124,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>TikTok Profiles</SidebarGroupLabel>
+          <SidebarGroupLabel>Monitoring</SidebarGroupLabel>
           <SidebarGroupContent className="space-y-2">
             <SidebarMenu>
               {profileNavigationItems.map((item) => {
@@ -195,6 +186,19 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname === '/settings'}>
+              <Link href="/settings">
+                <CogIcon className="h-4 w-4" />
+                <span>Settings</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </Sidebar>
   )
 }

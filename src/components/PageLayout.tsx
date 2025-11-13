@@ -46,8 +46,8 @@ export function PageLayout({
       </header>
 
       {/* Main Content - Scrollable */}
-      <main className="flex flex-col h-full min-h-0">
-        <div className={`${designTokens.container.full} h-full flex flex-col min-h-0 px-4 py-3`}>
+      <main className="flex flex-col h-full min-h-0 min-w-0">
+        <div className={`${designTokens.container.full} h-full flex flex-col min-h-0 min-w-0 space-y-4`}>
           {children}
         </div>
       </main>

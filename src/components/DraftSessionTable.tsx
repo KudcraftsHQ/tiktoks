@@ -298,10 +298,7 @@ export function DraftSessionTable({
         <DataTable
           columns={columns}
           data={allRows}
-          getRowId={(row) => row.id}
-          showPagination={false}
-          enableColumnPinning={true}
-          hideColumnSelector={true}
+          enablePagination={false}
         />
       </div>
 

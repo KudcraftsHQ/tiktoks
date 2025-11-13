@@ -63,7 +63,7 @@ export default function RootLayout({
                 </div>
               </header>
 
-              <main className="flex-1 overflow-auto" style={{ width: 'calc(100vw - var(--sidebar-width))' }}>
+              <main className="flex-1 overflow-auto min-w-0">
                 {children}
               </main>
             </SidebarInset>

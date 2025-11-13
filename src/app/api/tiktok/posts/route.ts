@@ -3,6 +3,7 @@ import { PrismaClient } from '@/generated/prisma'
 import { z } from 'zod'
 import { mediaCacheServiceV2 } from '@/lib/media-cache-service-v2'
 import { cacheAssetService } from '@/lib/cache-asset-service'
+import { notificationService } from '@/lib/notification-service'
 import * as Sentry from '@sentry/nextjs'
 
 const prisma = new PrismaClient()
@@ -151,6 +152,12 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Check for high views and send notification if needed (non-blocking)
+    notificationService.checkAndNotifyHighViews(post).catch(error => {
+      console.error('Failed to check for notifications:', error)
+      // Don't fail the request if notification check fails
+    })
+
     // Convert BigInt to string for JSON serialization
     const responsePost = {
       ...post,
@@ -200,6 +207,11 @@ export async function GET(request: NextRequest) {
     const includeActivityData = searchParams.get('includeActivityData') === 'true'
     const timezone = searchParams.get('timezone') || 'UTC' // Client's IANA timezone (e.g., 'Asia/Jakarta')
 
+    // New advanced filters
+    const accountIds = searchParams.get('accountIds')?.split(',').filter(Boolean) || []
+    const viewCountGt = searchParams.get('viewCountGt')
+    const viewCountLt = searchParams.get('viewCountLt')
+
     // Parse sorting from URL - supports multi-column sorting
     // Format: ?sort=viewCount.desc,likeCount.asc,publishedAt.desc
     // Backward compatible with old format: ?sortBy=viewCount&sortOrder=desc
@@ -240,6 +252,24 @@ export async function GET(request: NextRequest) {
       where.postCategoryId = categoryId
     }
 
+    // Filter by account IDs (profile IDs)
+    if (accountIds.length > 0) {
+      where.profileId = {
+        in: accountIds
+      }
+    }
+
+    // Filter by view count range
+    if (viewCountGt || viewCountLt) {
+      where.viewCount = {}
+      if (viewCountGt) {
+        where.viewCount.gte = BigInt(viewCountGt)
+      }
+      if (viewCountLt) {
+        where.viewCount.lte = BigInt(viewCountLt)
+      }
+    }
+
     // Date range filtering on publishedAt
     if (dateFrom || dateTo) {
       where.publishedAt = {}
@@ -251,33 +281,46 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Multi-term search with AND logic
+    // Example: "accounts post" will search for posts containing BOTH "accounts" AND "post"
     if (search) {
-      where.OR = [
-        {
-          title: {
-            contains: search,
-            mode: 'insensitive' as const
-          }
-        },
-        {
-          description: {
-            contains: search,
-            mode: 'insensitive' as const
-          }
-        },
-        {
-          authorNickname: {
-            contains: search,
-            mode: 'insensitive' as const
-          }
-        },
-        {
-          authorHandle: {
-            contains: search,
-            mode: 'insensitive' as const
-          }
-        }
-      ]
+      // Split by spaces and filter empty terms
+      const searchTerms = search
+        .split(/\s+/)
+        .map(term => term.trim())
+        .filter(term => term.length >= 2) // Minimum 2 characters per term
+
+      if (searchTerms.length > 0) {
+        // Each term must match at least one field (AND across terms, OR across fields)
+        where.AND = searchTerms.map(term => ({
+          OR: [
+            {
+              description: {
+                contains: term,
+                mode: 'insensitive' as const
+              }
+            },
+            {
+              authorNickname: {
+                contains: term,
+                mode: 'insensitive' as const
+              }
+            },
+            {
+              authorHandle: {
+                contains: term,
+                mode: 'insensitive' as const
+              }
+            },
+            // Search in OCR texts (JSON field converted to text)
+            {
+              ocrTexts: {
+                string_contains: term // Case-insensitive JSON text search
+              }
+            }
+          ]
+        }))
+      }
     }
 
     const [posts, total] = await Promise.all([

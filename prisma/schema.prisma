@@ -169,6 +169,7 @@ model TiktokPost {
   collections  CollectionPost[]
   remixes      RemixPost[]
   metricsHistory TikTokPostMetricsHistory[]
+  notifications Notification[]
 
   @@map("tiktok_posts")
   @@index([profileId])
@@ -514,5 +515,31 @@ enum TiktokAccountStatus {
   ACTIVE
   EXPIRED
   REVOKED
+}
+
+// Notification system for tracking events and alerts
+
+model Notification {
+  id        String   @id @default(cuid())
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  postId    String?
+  post      TiktokPost? @relation(fields: [postId], references: [id], onDelete: Cascade)
+  metadata  Json?    // Flexible field for additional data
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("notifications")
+  @@index([read, createdAt])
+  @@index([postId, type])
+}
+
+enum NotificationType {
+  HIGH_VIEWS          // >= 1000 views
+  VIRAL_CONTENT       // Future: very high engagement
+  LOW_PERFORMANCE     // Future: content not performing well
+  NEW_POST            // Future: new post detected
 }
 

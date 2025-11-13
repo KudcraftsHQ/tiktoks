@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { RefreshCw, Users } from 'lucide-react'
 import { TikTokProfile } from '@/components/profiles-table-columns'
 import { PageLayout } from '@/components/PageLayout'
+import { AddProfileDialog } from '@/components/AddProfileDialog'
 
 interface ProfilesResult {
   profiles: TikTokProfile[]
@@ -66,12 +67,13 @@ export default function ProfilesPage() {
   return (
     <PageLayout
       title="TikTok Profiles"
-      description={`Browse and analyze TikTok profiles in your database (${formatNumber(totalProfiles)} total)`}
       headerActions={
-        <Button onClick={handleRefresh} disabled={loading} variant="outline" size="sm">
-          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto items-center">
+          <AddProfileDialog onProfileAdded={handleRefresh} />
+          <Button onClick={handleRefresh} disabled={loading} variant="outline" size="sm" className="w-full sm:w-auto h-8 px-3 text-xs">
+            <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
       }
     >
       {error ? (

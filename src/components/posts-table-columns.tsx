@@ -1,10 +1,11 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import { ColumnDef } from '@tanstack/react-table'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { toast } from 'sonner'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,35 +13,31 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
-  ExternalLink,
-  Video,
-  Image as ImageIcon,
-  Play,
-  Heart,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
+  ExternalLink, Heart,
   MessageCircle,
   Share,
   Bookmark,
-  Eye,
-  Clock,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  Images,
-  Sparkles,
+  Eye, Sparkles,
   CheckCircle2,
   XCircle,
   Loader2,
   FileText,
-  MoreHorizontal
+  MoreHorizontal,
+  Copy
 } from 'lucide-react'
-import { createSortableHeader } from '@/components/ui/data-table'
-import { getProxiedImageUrl } from '@/lib/image-proxy'
 import { SmartImage } from '@/components/SmartImage'
 import { MiniSparkline } from '@/components/MiniSparkline'
 import { SlideClassificationBadge, SlideType } from '@/components/SlideClassificationBadge'
 import { SlideTypeDropdown } from '@/components/SlideTypeDropdown'
 import { InlineEditableText } from '@/components/InlineEditableText'
-import { useRouter } from 'next/navigation'
+import { HighlightedText } from '@/components/HighlightedText'
+import { InlineCategorySelector } from '@/components/InlineCategorySelector'
 
 export interface TikTokPost {
   id: string
@@ -110,6 +107,7 @@ interface PostsTableColumnsProps {
   onSelectAll?: (selected: boolean) => void
   allSelected?: boolean
   viewMode?: 'metrics' | 'content'
+  searchTerms?: string[]
 }
 
 const formatNumber = (num: number): string => {
@@ -175,6 +173,279 @@ const parseImages = (images: any): Array<{ url: string; width: number; height: n
   }
   return []
 }
+// Actions cell component to properly handle hooks
+const ActionsCell = ({
+  post,
+  viewMode,
+  onTriggerOCR,
+  onRemixPost
+}: {
+  post: TikTokPost
+  viewMode?: 'metrics' | 'content'
+  onTriggerOCR?: (postId: string) => Promise<void>
+  onRemixPost?: (post: TikTokPost) => void
+}) => {
+  const [isCopying, setIsCopying] = useState(false)
+
+  const handleTriggerOCR = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!onTriggerOCR) return
+
+    try {
+      await onTriggerOCR(post.id)
+    } catch (err) {
+      // Error handling is done in parent component
+    }
+  }
+
+  const handleCopyToClipboard = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIsCopying(true)
+
+    try {
+      const sections: string[] = []
+
+      // Post counter as H1
+      sections.push(`# Post`)
+      sections.push('')
+
+      // Description as H2
+      if (post.description) {
+        sections.push('## Description')
+        sections.push('')
+        sections.push(post.description)
+        sections.push('')
+      }
+
+      // Parse OCR texts
+      let ocrTexts: Array<{ imageIndex: number; text: string; success: boolean; error?: string }> = []
+      try {
+        if (post.ocrTexts) {
+          const parsed = typeof post.ocrTexts === 'string'
+            ? JSON.parse(post.ocrTexts)
+            : post.ocrTexts
+          ocrTexts = Array.isArray(parsed) ? parsed : []
+        }
+      } catch {
+        ocrTexts = []
+      }
+
+      // Parse slide classifications
+      let slideClassifications: Array<{ slideIndex: number; slideType: string; confidence: number }> = []
+      try {
+        if (post.slideClassifications) {
+          const parsed = typeof post.slideClassifications === 'string'
+            ? JSON.parse(post.slideClassifications)
+            : post.slideClassifications
+          slideClassifications = Array.isArray(parsed) ? parsed : []
+        }
+      } catch {
+        slideClassifications = []
+      }
+
+      // Content text with slides as H2
+      if (post.images && post.images.length > 0) {
+        sections.push('## Content Text')
+        sections.push('')
+
+        post.images.forEach((img, slideIndex) => {
+          // Get OCR text by imageIndex
+          const ocrResult = ocrTexts.find(ocr => ocr.imageIndex === slideIndex)
+          const ocrText = ocrResult?.success ? ocrResult.text : null
+
+          // Get slide type from classifications
+          const classification = slideClassifications.find(c => c.slideIndex === slideIndex)
+          const slideType = classification?.slideType || 'unknown'
+
+          if (ocrText) {
+            sections.push(`### Slide ${slideIndex + 1} - ${slideType}`)
+            sections.push('')
+            sections.push(ocrText)
+            sections.push('')
+          }
+        })
+      }
+
+      const markdownContent = sections.join('\n')
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(markdownContent)
+
+      // Show success toast
+      toast.success('Copied to clipboard', {
+        description: 'Post data is ready to paste'
+      })
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error)
+      toast.error('Failed to copy to clipboard', {
+        description: 'Please try again'
+      })
+    } finally {
+      setIsCopying(false)
+    }
+  }
+
+  // Content mode: Show vertical action buttons with icons only
+  if (viewMode === 'content') {
+    const ocrTooltipText = post.ocrStatus === 'completed'
+      ? 'OCR Complete'
+      : post.ocrStatus === 'processing'
+      ? 'Processing...'
+      : post.ocrStatus === 'failed'
+      ? 'Retry OCR'
+      : 'Run OCR'
+
+    return (
+      <TooltipProvider>
+        <div className="flex flex-col gap-2">
+          {/* Copy to Clipboard Button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCopyToClipboard}
+                disabled={isCopying}
+                className="h-8 w-8 p-0"
+              >
+                {isCopying ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              <p>Copy to Clipboard</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* OCR Button - only for photo posts */}
+          {post.contentType === 'photo' && onTriggerOCR && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleTriggerOCR}
+                  disabled={post.ocrStatus === 'processing'}
+                  className="h-8 w-8 p-0"
+                >
+                  {post.ocrStatus === 'processing' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileText className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">
+                <p>{ocrTooltipText}</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+
+          {/* Open on TikTok Button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  window.open(post.tiktokUrl, '_blank')
+                }}
+                className="h-8 w-8 p-0"
+              >
+                <ExternalLink className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              <p>Open on TikTok</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Create Remix Button - only for photo posts */}
+          {post.contentType === 'photo' && onRemixPost && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onRemixPost(post)
+                  }}
+                  className="h-8 w-8 p-0"
+                >
+                  <Sparkles className="h-4 w-4 text-purple-600" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">
+                <p>Create Remix</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+      </TooltipProvider>
+    )
+  }
+
+  // Metrics mode: Show dropdown menu
+  return (
+    <div className="flex items-center justify-center">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => e.stopPropagation()}
+            className="h-8 w-8 p-0"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+            <span className="sr-only">Open menu</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+          {post.contentType === 'photo' && onTriggerOCR && (
+            <DropdownMenuItem
+              onClick={handleTriggerOCR}
+              disabled={post.ocrStatus === 'processing'}
+            >
+              {post.ocrStatus === 'processing' ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <FileText className="mr-2 h-4 w-4" />
+              )}
+              {post.ocrStatus === 'completed' ? 'OCR Complete' : post.ocrStatus === 'processing' ? 'Processing OCR...' : post.ocrStatus === 'failed' ? 'Retry OCR' : 'Run OCR'}
+            </DropdownMenuItem>
+          )}
+
+          <DropdownMenuItem
+            onClick={(e) => {
+              e.stopPropagation()
+              window.open(post.tiktokUrl, '_blank')
+            }}
+          >
+            <ExternalLink className="mr-2 h-4 w-4" />
+            Open on TikTok
+          </DropdownMenuItem>
+
+          {post.contentType === 'photo' && onRemixPost && (
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation()
+                onRemixPost(post)
+              }}
+            >
+              <Sparkles className="mr-2 h-4 w-4 text-purple-600" />
+              Create Remix
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
+}
 
 export const createPostsTableColumns = ({
   onPreviewPost,
@@ -187,7 +458,8 @@ export const createPostsTableColumns = ({
   onSelectPost,
   onSelectAll,
   allSelected = false,
-  viewMode = 'metrics'
+  viewMode = 'metrics',
+  searchTerms = []
 }: PostsTableColumnsProps): ColumnDef<TikTokPost>[] => [
   {
     id: 'select',
@@ -233,47 +505,17 @@ export const createPostsTableColumns = ({
       )
     },
     size: 50,
+    minSize: 50,
+    maxSize: 50,
     meta: { pinned: 'left' }
   },
   {
-    accessorKey: 'contentType',
-    header: '',
-    size: 50,
-    meta: {
-      pinned: 'left'
-    },
-    cell: ({ row }) => {
-      const post = row.original
-      return (
-        <div className="flex items-center justify-center">
-          {post.contentType === 'video' ? (
-            <div className="flex flex-col items-center">
-              <Video className="w-5 h-5 text-blue-600" />
-              {post.duration && (
-                <span className="text-xs text-muted-foreground mt-1">
-                  {formatDuration(post.duration)}
-                </span>
-              )}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center">
-              <Images className="w-5 h-5 text-green-600" />
-            </div>
-          )}
-        </div>
-      )
-    },
-    enableSorting: true,
-    sortingFn: (rowA, rowB) => {
-      const aType = rowA.original.contentType
-      const bType = rowB.original.contentType
-      if (aType === bType) return 0
-      return aType === 'video' ? -1 : 1
-    }
-  },
-  {
     accessorKey: 'authorHandle',
-    header: createSortableHeader('Author'),
+    header: 'Author',
+    enableSorting: true,
+    size: viewMode === 'content' ? 250 : 180,
+    minSize: viewMode === 'content' ? 250 : 180,
+    maxSize: viewMode === 'content' ? 250 : 180,
     meta: {
       pinned: 'left'
     },
@@ -287,30 +529,194 @@ export const createPostsTableColumns = ({
         }
       }
 
+      // Content mode: show author info + slides content
+      if (viewMode === 'content') {
+        const images = post._proxiedImages || []
+
+        // Parse slide classifications
+        let slideClassifications: Array<{ slideIndex: number; slideType: string; confidence: number }> = []
+        try {
+          if (post.slideClassifications) {
+            const parsed = typeof post.slideClassifications === 'string'
+              ? JSON.parse(post.slideClassifications)
+              : post.slideClassifications
+            slideClassifications = Array.isArray(parsed) ? parsed : []
+          }
+        } catch {
+          slideClassifications = []
+        }
+
+        return (
+          <div className="flex flex-col items-start gap-3 w-full ">
+            {/* Row 1: Author Info */}
+            <div
+              className="flex items-center space-x-2 cursor-pointer hover:bg-muted/50 -mx-2 px-2 py-1 rounded-md transition-colors"
+              onClick={handleClick}
+            >
+              {post._proxiedAuthorAvatar ? (
+                <SmartImage
+                  src={post._proxiedAuthorAvatar}
+                  alt={post.authorHandle}
+                  className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                  fallback={
+                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-semibold">{post.authorHandle?.[0]?.toUpperCase()}</span>
+                    </div>
+                  }
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs font-semibold">{post.authorHandle?.[0]?.toUpperCase()}</span>
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm truncate">
+                  <HighlightedText
+                    text={post.authorNickname || post.authorHandle || ''}
+                    searchTerms={searchTerms}
+                  />
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  @<HighlightedText
+                    text={post.authorHandle || ''}
+                    searchTerms={searchTerms}
+                  />
+                </p>
+              </div>
+            </div>
+
+            {/* Row 2: Slides Content (compact thumbnails like metrics mode) */}
+            {post.contentType === 'photo' && images.length > 0 && (
+              <div className="flex items-center space-x-2">
+                <div className="flex space-x-1">
+                  {images.slice(0, 5).map((image: any, index: number) => {
+                    const isLast = index === images.slice(0, 5).length - 1
+                    const remainingCount = images.length - 5
+
+                    return (
+                      <div key={index} className="relative">
+                        <SmartImage
+                          src={image._proxiedUrl}
+                          alt={`Photo ${index + 1}`}
+                          className="w-10 aspect-[9/16] rounded object-cover cursor-pointer hover:opacity-80 border"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onOpenImageGallery?.(images.map((img: any) => ({ url: img.url, width: img.width, height: img.height })), index)
+                          }}
+                        />
+                        {isLast && remainingCount > 0 && (
+                          <div
+                            className="absolute inset-0 bg-black/70 rounded flex items-center justify-center cursor-pointer hover:bg-black/80 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onOpenImageGallery?.(images.map((img: any) => ({ url: img.url, width: img.width, height: img.height })), index)
+                            }}
+                          >
+                            <span className="text-white text-xs font-bold">
+                              +{remainingCount}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      }
+
+      // Metrics mode: original layout
       return (
         <div
-          className="flex items-center space-x-3 min-w-[180px] cursor-pointer hover:bg-muted/50 -mx-2 px-2 py-1 rounded-md transition-colors"
+          className="flex items-center space-x-2 cursor-pointer hover:bg-muted/50 -mx-2 px-2 py-1 rounded-md transition-colors"
           onClick={handleClick}
         >
           {post._proxiedAuthorAvatar ? (
             <SmartImage
               src={post._proxiedAuthorAvatar}
               alt={post.authorHandle}
-              className="w-10 h-10 rounded-full object-cover"
+              className="w-8 h-8 rounded-full object-cover flex-shrink-0"
               fallback={
-                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
                   <span className="text-xs font-semibold">{post.authorHandle?.[0]?.toUpperCase()}</span>
                 </div>
               }
             />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
               <span className="text-xs font-semibold">{post.authorHandle?.[0]?.toUpperCase()}</span>
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm truncate">{post.authorNickname || post.authorHandle}</p>
-            <p className="text-xs text-muted-foreground truncate">@{post.authorHandle}</p>
+            <p className="font-medium text-sm truncate">
+              <HighlightedText
+                text={post.authorNickname || post.authorHandle || ''}
+                searchTerms={searchTerms}
+              />
+            </p>
+            <p className="text-xs text-muted-foreground truncate">
+              @<HighlightedText
+                text={post.authorHandle || ''}
+                searchTerms={searchTerms}
+              />
+            </p>
+          </div>
+        </div>
+      )
+    }
+  },
+  {
+    id: 'metrics',
+    header: 'Metrics',
+    size: 84,
+    meta: {
+      hideInMetricsMode: true
+    },
+    cell: ({ row }) => {
+      const post = row.original
+
+      return (
+        <div className="flex flex-col gap-2">
+          {/* Views */}
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+              <Eye className="w-3.5 h-3.5 text-blue-500" />
+            </div>
+            <span className="text-sm font-mono">{formatNumber(post.viewCount)}</span>
+          </div>
+
+          {/* Likes */}
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-red-500/10 flex items-center justify-center flex-shrink-0">
+              <Heart className="w-3.5 h-3.5 text-red-500" />
+            </div>
+            <span className="text-sm font-mono">{formatNumber(post.likeCount)}</span>
+          </div>
+
+          {/* Comments */}
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+              <MessageCircle className="w-3.5 h-3.5 text-orange-500" />
+            </div>
+            <span className="text-sm font-mono">{formatNumber(post.commentCount)}</span>
+          </div>
+
+          {/* Shares */}
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-green-500/10 flex items-center justify-center flex-shrink-0">
+              <Share className="w-3.5 h-3.5 text-green-500" />
+            </div>
+            <span className="text-sm font-mono">{formatNumber(post.shareCount)}</span>
+          </div>
+
+          {/* Saves */}
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-yellow-500/10 flex items-center justify-center flex-shrink-0">
+              <Bookmark className="w-3.5 h-3.5 text-yellow-500" />
+            </div>
+            <span className="text-sm font-mono">{formatNumber(post.saveCount)}</span>
           </div>
         </div>
       )
@@ -318,33 +724,36 @@ export const createPostsTableColumns = ({
   },
   {
     accessorKey: 'description',
-    header: createSortableHeader('Description'),
+    header: 'Description',
     meta: {
       hideInMetricsMode: true
     },
+    enableSorting: false,
+    size: 224,
     cell: ({ row }) => {
       const post = row.original
       const description = post.description || ''
 
       return (
-        <div className="min-w-[250px] max-w-[300px]">
-          {post.postCategory && (
-            <div className="mb-2">
-              <Badge variant="secondary" className="text-xs">
-                {post.postCategory.name}
-              </Badge>
-            </div>
-          )}
-          <div className="h-48 overflow-y-auto">
+        <div className="flex-shrink-0 w-52 flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="mb-2">
+            <InlineCategorySelector
+              postId={post.id}
+              currentCategory={post.postCategory}
+              onUpdate={onRefetchPosts}
+            />
+          </div>
+          <div className="overflow-y-auto h-48">
             <InlineEditableText
               value={description || ''}
               onSave={async () => {}} // No-op save
               placeholder="No description"
               fixedHeight={true}
-              heightClass="h-48"
+              heightClass="h-full"
               disabled={false}
               className="text-[12px]"
               rows={8}
+              searchTerms={searchTerms}
             />
           </div>
         </div>
@@ -353,7 +762,8 @@ export const createPostsTableColumns = ({
   },
   {
     accessorKey: 'title',
-    header: createSortableHeader('Content'),
+    header: 'Content',
+    minSize: viewMode === 'content' ? 1720 : 248,
     cell: ({ row }) => {
       const post = row.original as any
       const images = post._proxiedImages || []
@@ -428,6 +838,7 @@ export const createPostsTableColumns = ({
                         disabled={false}
                         className="text-[12px]"
                         rows={8}
+                        searchTerms={searchTerms}
                       />
                     </div>
                   </div>
@@ -490,7 +901,7 @@ export const createPostsTableColumns = ({
           </div>
         </div>
       )
-    }
+    },
   },
   {
     accessorKey: 'viewCount',
@@ -498,22 +909,20 @@ export const createPostsTableColumns = ({
       const isSorted = column.getIsSorted()
 
       return (
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center w-full">
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
             className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'}`}
           >
             <Eye className="w-4 h-4" />
-            {isSorted === 'desc' && <ArrowDown className="ml-1 h-3 w-3" />}
-            {isSorted === 'asc' && <ArrowUp className="ml-1 h-3 w-3" />}
-            {!isSorted && <ArrowUpDown className="ml-1 h-3 w-3 opacity-0 group-hover:opacity-50" />}
           </Button>
         </div>
       )
     },
     meta: {
-      hideInContentMode: true
+      hideInContentMode: true,
+      align: 'center'
     },
     cell: ({ row }) => {
       const viewCount = row.getValue('viewCount') as number
@@ -579,22 +988,20 @@ export const createPostsTableColumns = ({
       const isSorted = column.getIsSorted()
 
       return (
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center w-full">
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
             className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'}`}
           >
             <Heart className={`w-4 h-4 ${isSorted ? 'text-red-600' : 'text-red-400'}`} />
-            {isSorted === 'desc' && <ArrowDown className="ml-1 h-3 w-3" />}
-            {isSorted === 'asc' && <ArrowUp className="ml-1 h-3 w-3" />}
-            {!isSorted && <ArrowUpDown className="ml-1 h-3 w-3 opacity-0 group-hover:opacity-50" />}
           </Button>
         </div>
       )
     },
     meta: {
-      hideInContentMode: true
+      hideInContentMode: true,
+      align: 'center'
     },
     cell: ({ row }) => {
       const likeCount = row.getValue('likeCount') as number
@@ -611,22 +1018,20 @@ export const createPostsTableColumns = ({
       const isSorted = column.getIsSorted()
 
       return (
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center w-full">
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
             className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'}`}
           >
             <MessageCircle className={`w-4 h-4 ${isSorted ? 'text-blue-600' : 'text-blue-400'}`} />
-            {isSorted === 'desc' && <ArrowDown className="ml-1 h-3 w-3" />}
-            {isSorted === 'asc' && <ArrowUp className="ml-1 h-3 w-3" />}
-            {!isSorted && <ArrowUpDown className="ml-1 h-3 w-3 opacity-0 group-hover:opacity-50" />}
           </Button>
         </div>
       )
     },
     meta: {
-      hideInContentMode: true
+      hideInContentMode: true,
+      align: 'center'
     },
     cell: ({ row }) => {
       const commentCount = row.getValue('commentCount') as number
@@ -643,22 +1048,20 @@ export const createPostsTableColumns = ({
       const isSorted = column.getIsSorted()
 
       return (
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center w-full">
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
             className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'}`}
           >
             <Share className={`w-4 h-4 ${isSorted ? 'text-green-600' : 'text-green-400'}`} />
-            {isSorted === 'desc' && <ArrowDown className="ml-1 h-3 w-3" />}
-            {isSorted === 'asc' && <ArrowUp className="ml-1 h-3 w-3" />}
-            {!isSorted && <ArrowUpDown className="ml-1 h-3 w-3 opacity-0 group-hover:opacity-50" />}
           </Button>
         </div>
       )
     },
     meta: {
-      hideInContentMode: true
+      hideInContentMode: true,
+      align: 'center'
     },
     cell: ({ row }) => {
       const shareCount = row.getValue('shareCount') as number
@@ -675,22 +1078,20 @@ export const createPostsTableColumns = ({
       const isSorted = column.getIsSorted()
 
       return (
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center w-full">
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
             className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'}`}
           >
             <Bookmark className={`w-4 h-4 ${isSorted ? 'text-yellow-600' : 'text-yellow-400'}`} />
-            {isSorted === 'desc' && <ArrowDown className="ml-1 h-3 w-3" />}
-            {isSorted === 'asc' && <ArrowUp className="ml-1 h-3 w-3" />}
-            {!isSorted && <ArrowUpDown className="ml-1 h-3 w-3 opacity-0 group-hover:opacity-50" />}
           </Button>
         </div>
       )
     },
     meta: {
-      hideInContentMode: true
+      hideInContentMode: true,
+      align: 'center'
     },
     cell: ({ row }) => {
       const saveCount = row.getValue('saveCount') as number
@@ -703,7 +1104,7 @@ export const createPostsTableColumns = ({
   },
   {
     accessorKey: 'publishedAt',
-    header: createSortableHeader('Published'),
+    header: 'Published',
     meta: {
       hideInContentMode: true
     },
@@ -720,7 +1121,7 @@ export const createPostsTableColumns = ({
   },
   {
     accessorKey: 'updatedAt',
-    header: createSortableHeader('Last Updated'),
+    header: 'Last Updated',
     meta: {
       hideInContentMode: true
     },
@@ -792,164 +1193,19 @@ export const createPostsTableColumns = ({
     }
   },
   {
-    accessorKey: 'slideClassifications',
-    header: 'Classifications',
-    meta: {
-      hideInContentMode: true
-    },
-    cell: ({ row }) => {
-      const post = row.original
-
-      // Only show classifications for photo posts
-      if (post.contentType !== 'photo') {
-        return <div className="text-center text-muted-foreground text-xs">N/A</div>
-      }
-
-      // Parse classifications
-      let classifications: Array<{
-        slideIndex: number
-        type: SlideType
-        categoryId: string
-        categoryName: string
-        confidence?: number
-      }> = []
-
-      try {
-        if (post.slideClassifications) {
-          const parsed = typeof post.slideClassifications === 'string'
-            ? JSON.parse(post.slideClassifications)
-            : post.slideClassifications
-          classifications = Array.isArray(parsed) ? parsed : []
-        }
-      } catch {
-        classifications = []
-      }
-
-      // Show status if no classifications yet
-      if (classifications.length === 0) {
-        const status = post.classificationStatus || 'pending'
-
-        if (status === 'pending' || status === 'processing') {
-          return (
-            <div className="flex items-center justify-center gap-1.5 px-2 py-1 rounded-md bg-muted">
-              {status === 'processing' && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
-              <span className="text-xs text-muted-foreground">
-                {status === 'processing' ? 'Classifying...' : 'Not classified'}
-              </span>
-            </div>
-          )
-        }
-
-        if (status === 'failed') {
-          return (
-            <div className="flex items-center justify-center gap-1.5 px-2 py-1 rounded-md bg-red-50 dark:bg-red-950">
-              <XCircle className="w-3 h-3 text-red-600" />
-              <span className="text-xs text-red-600">Failed</span>
-            </div>
-          )
-        }
-
-        return <div className="text-center text-muted-foreground text-xs">-</div>
-      }
-
-      // Count classifications by type
-      const counts = classifications.reduce((acc, c) => {
-        acc[c.type] = (acc[c.type] || 0) + 1
-        return acc
-      }, {} as Record<SlideType, number>)
-
-      return (
-        <div className="flex flex-wrap gap-1 items-center justify-center max-w-[200px]">
-          {(['HOOK', 'CONTENT', 'CTA'] as SlideType[]).map(type => {
-            const count = counts[type]
-            if (!count) return null
-
-            return (
-              <div key={type} className="flex items-center gap-0.5">
-                <SlideClassificationBadge type={type} />
-                <span className="text-xs text-muted-foreground">×{count}</span>
-              </div>
-            )
-          })}
-        </div>
-      )
-    }
-  },
-  {
     id: 'actions',
-    header: 'Actions',
-    size: 80,
+    header: '',
+    size: viewMode === 'content' ? 50 : 36,
     meta: {
       pinned: 'right'
     },
-    cell: ({ row }) => {
-      const post = row.original
-
-      const handleTriggerOCR = async (e: React.MouseEvent) => {
-        e.stopPropagation()
-        if (!onTriggerOCR) return
-
-        try {
-          await onTriggerOCR(post.id)
-        } catch (err) {
-          // Error handling is done in parent component
-        }
-      }
-
-      return (
-        <div className="flex items-center justify-center">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => e.stopPropagation()}
-                className="h-8 w-8 p-0"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-                <span className="sr-only">Open menu</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-              {post.contentType === 'photo' && onTriggerOCR && (
-                <DropdownMenuItem
-                  onClick={handleTriggerOCR}
-                  disabled={post.ocrStatus === 'processing'}
-                >
-                  {post.ocrStatus === 'processing' ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <FileText className="mr-2 h-4 w-4" />
-                  )}
-                  {post.ocrStatus === 'completed' ? 'OCR Complete' : post.ocrStatus === 'processing' ? 'Processing OCR...' : post.ocrStatus === 'failed' ? 'Retry OCR' : 'Run OCR'}
-                </DropdownMenuItem>
-              )}
-
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation()
-                  window.open(post.tiktokUrl, '_blank')
-                }}
-              >
-                <ExternalLink className="mr-2 h-4 w-4" />
-                Open on TikTok
-              </DropdownMenuItem>
-
-              {post.contentType === 'photo' && onRemixPost && (
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onRemixPost(post)
-                  }}
-                >
-                  <Sparkles className="mr-2 h-4 w-4 text-purple-600" />
-                  Create Remix
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      )
-    }
+    cell: ({ row }) => (
+      <ActionsCell
+        post={row.original}
+        viewMode={viewMode}
+        onTriggerOCR={onTriggerOCR}
+        onRemixPost={onRemixPost}
+      />
+    )
   }
 ]

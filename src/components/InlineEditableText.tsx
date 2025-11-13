@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { HighlightedText } from '@/components/HighlightedText'
 
 interface InlineEditableTextProps {
   value: string
@@ -18,6 +19,7 @@ interface InlineEditableTextProps {
   disabledMessage?: string
   fixedHeight?: boolean
   heightClass?: string
+  searchTerms?: string[]
 }
 
 export function InlineEditableText({
@@ -30,12 +32,17 @@ export function InlineEditableText({
   disabled = false,
   disabledMessage = 'Editing is disabled',
   fixedHeight = false,
-  heightClass = 'h-40'
+  heightClass = 'h-40',
+  searchTerms = []
 }: InlineEditableTextProps) {
   const [localValue, setLocalValue] = useState(value)
   const [isSaving, setIsSaving] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [isFocused, setIsFocused] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Show highlighted text when search terms exist and not focused
+  const showHighlightedView = searchTerms.length > 0 && !isFocused
 
   // Update local value when prop changes
   useEffect(() => {
@@ -73,24 +80,51 @@ export function InlineEditableText({
 
   return (
     <div className={cn('relative group', fixedHeight && 'h-full')}>
-      <Textarea
-        ref={textareaRef}
-        value={localValue}
-        onChange={(e) => setLocalValue(e.target.value)}
-        onBlur={handleBlur}
-        placeholder={placeholder}
-        maxLength={maxLength}
-        rows={fixedHeight ? undefined : rows}
-        disabled={disabled}
-        title={disabled ? disabledMessage : undefined}
-        className={cn(
-          'pr-10 resize-none',
-          isSaving && 'opacity-50 pointer-events-none',
-          disabled && 'cursor-not-allowed bg-muted/50',
-          fixedHeight && 'h-full overflow-y-auto field-sizing-content',
-          className // Apply custom className last to allow overrides
-        )}
-      />
+      {showHighlightedView ? (
+        // Highlighted view when searching
+        <div
+          className={cn(
+            'px-3 py-2 border rounded-md bg-background cursor-text whitespace-pre-wrap overflow-y-auto',
+            fixedHeight && 'h-full',
+            !fixedHeight && `min-h-[${rows * 1.5}rem]`,
+            className
+          )}
+          onClick={() => {
+            setIsFocused(true)
+            textareaRef.current?.focus()
+          }}
+        >
+          {localValue ? (
+            <HighlightedText text={localValue} searchTerms={searchTerms} />
+          ) : (
+            <span className="text-muted-foreground">{placeholder}</span>
+          )}
+        </div>
+      ) : (
+        // Regular textarea when not searching or focused
+        <Textarea
+          ref={textareaRef}
+          value={localValue}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => {
+            setIsFocused(false)
+            handleBlur()
+          }}
+          placeholder={placeholder}
+          maxLength={maxLength}
+          rows={fixedHeight ? undefined : rows}
+          disabled={disabled}
+          title={disabled ? disabledMessage : undefined}
+          className={cn(
+            'pr-10 resize-none',
+            isSaving && 'opacity-50 pointer-events-none',
+            disabled && 'cursor-not-allowed bg-muted/50',
+            fixedHeight && 'h-full overflow-y-auto field-sizing-content',
+            className // Apply custom className last to allow overrides
+          )}
+        />
+      )}
       <Button
         type="button"
         size="icon"
