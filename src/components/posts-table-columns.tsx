@@ -512,7 +512,7 @@ export const createPostsTableColumns = ({
   {
     accessorKey: 'authorHandle',
     header: 'Author',
-    enableSorting: true,
+    enableSorting: viewMode !== 'content',
     size: viewMode === 'content' ? 250 : 180,
     minSize: viewMode === 'content' ? 250 : 180,
     maxSize: viewMode === 'content' ? 250 : 180,
@@ -528,6 +528,9 @@ export const createPostsTableColumns = ({
           window.location.href = `/profiles/${post.authorHandle}`
         }
       }
+
+      const publishedAt = row.getValue('publishedAt') as string
+      const { date, time } = formatDateTime(publishedAt)
 
       // Content mode: show author info + slides content
       if (viewMode === 'content') {
@@ -623,6 +626,12 @@ export const createPostsTableColumns = ({
                 </div>
               </div>
             )}
+
+            {/* Posting date */}
+            <div className="text-xs">
+              <span>{date}</span>
+              <span className="ml-1 text-muted-foreground">{time}</span>
+            </div>
           </div>
         )
       }
@@ -912,14 +921,15 @@ export const createPostsTableColumns = ({
         <div className="flex items-center justify-center w-full">
           <Button
             variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'}`}
+            onClick={() => viewMode !== 'content' && column.toggleSorting(column.getIsSorted() === 'asc')}
+            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'} ${viewMode === 'content' ? 'cursor-default' : ''}`}
           >
             <Eye className="w-4 h-4" />
           </Button>
         </div>
       )
     },
+    enableSorting: viewMode !== 'content',
     meta: {
       hideInContentMode: true,
       align: 'center'
@@ -991,14 +1001,15 @@ export const createPostsTableColumns = ({
         <div className="flex items-center justify-center w-full">
           <Button
             variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'}`}
+            onClick={() => viewMode !== 'content' && column.toggleSorting(column.getIsSorted() === 'asc')}
+            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'} ${viewMode === 'content' ? 'cursor-default' : ''}`}
           >
             <Heart className={`w-4 h-4 ${isSorted ? 'text-red-600' : 'text-red-400'}`} />
           </Button>
         </div>
       )
     },
+    enableSorting: viewMode !== 'content',
     meta: {
       hideInContentMode: true,
       align: 'center'
@@ -1021,14 +1032,15 @@ export const createPostsTableColumns = ({
         <div className="flex items-center justify-center w-full">
           <Button
             variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'}`}
+            onClick={() => viewMode !== 'content' && column.toggleSorting(column.getIsSorted() === 'asc')}
+            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'} ${viewMode === 'content' ? 'cursor-default' : ''}`}
           >
             <MessageCircle className={`w-4 h-4 ${isSorted ? 'text-blue-600' : 'text-blue-400'}`} />
           </Button>
         </div>
       )
     },
+    enableSorting: viewMode !== 'content',
     meta: {
       hideInContentMode: true,
       align: 'center'
@@ -1051,14 +1063,15 @@ export const createPostsTableColumns = ({
         <div className="flex items-center justify-center w-full">
           <Button
             variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'}`}
+            onClick={() => viewMode !== 'content' && column.toggleSorting(column.getIsSorted() === 'asc')}
+            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'} ${viewMode === 'content' ? 'cursor-default' : ''}`}
           >
             <Share className={`w-4 h-4 ${isSorted ? 'text-green-600' : 'text-green-400'}`} />
           </Button>
         </div>
       )
     },
+    enableSorting: viewMode !== 'content',
     meta: {
       hideInContentMode: true,
       align: 'center'
@@ -1081,14 +1094,15 @@ export const createPostsTableColumns = ({
         <div className="flex items-center justify-center w-full">
           <Button
             variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'}`}
+            onClick={() => viewMode !== 'content' && column.toggleSorting(column.getIsSorted() === 'asc')}
+            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'} ${viewMode === 'content' ? 'cursor-default' : ''}`}
           >
             <Bookmark className={`w-4 h-4 ${isSorted ? 'text-yellow-600' : 'text-yellow-400'}`} />
           </Button>
         </div>
       )
     },
+    enableSorting: viewMode !== 'content',
     meta: {
       hideInContentMode: true,
       align: 'center'
