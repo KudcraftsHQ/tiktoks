@@ -45,6 +45,7 @@ interface PostsTableProps {
   onSelectionChange?: (selectedPosts: Set<string>) => void
   viewMode?: 'metrics' | 'content'
   searchQuery?: string
+  rowClassName?: (row: any) => string
 }
 
 export function PostsTable({
@@ -62,6 +63,7 @@ export function PostsTable({
   selectedPosts: externalSelectedPosts,
   onSelectionChange,
   viewMode = 'metrics',
+  rowClassName,
   searchQuery = ''
 }: PostsTableProps) {
   const searchParams = useSearchParams()
@@ -354,11 +356,13 @@ export function PostsTable({
           onColumnVisibilityChange={setColumnVisibility}
           enableSorting={true}
           enablePagination={true}
+          enableSelection={true}
           pageSize={10}
-          leftStickyColumnsCount={4}
+          leftStickyColumnsCount={3}
           rightStickyColumnsCount={1}
           fullWidth={true}
           isLoading={isLoading}
+          rowClassName={rowClassName as any}
         />
       </div>
 

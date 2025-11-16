@@ -166,7 +166,7 @@ model TiktokPost {
 
   profile      TiktokProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   postCategory PostCategory? @relation(fields: [postCategoryId], references: [id], onDelete: SetNull)
-  collections  CollectionPost[]
+  projects     ProjectPost[]
   remixes      RemixPost[]
   metricsHistory TikTokPostMetricsHistory[]
   notifications Notification[]
@@ -180,7 +180,7 @@ model TiktokPost {
   @@index([postCategoryId])
 }
 
-model Collection {
+model Project {
   id          String   @id @default(cuid())
   name        String
   description String?
@@ -189,23 +189,25 @@ model Collection {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  posts       CollectionPost[]
+  posts       ProjectPost[]
+  remixes     RemixPost[]
 
-  @@map("collections")
+  @@map("projects")
 }
 
-model CollectionPost {
-  id           String     @id @default(cuid())
-  collectionId String
-  postId       String
-  addedAt      DateTime   @default(now())
+model ProjectPost {
+  id        String     @id @default(cuid())
+  projectId String
+  postId    String
+  order     Int        @default(0) // Order of reference posts
+  addedAt   DateTime   @default(now())
 
-  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  post         TiktokPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  post      TiktokPost @relation(fields: [postId], references: [id], onDelete: Cascade)
 
-  @@unique([collectionId, postId])
-  @@map("collection_posts")
-  @@index([collectionId])
+  @@unique([projectId, postId])
+  @@map("project_posts")
+  @@index([projectId])
   @@index([postId])
 }
 
@@ -243,6 +245,7 @@ model RemixPost {
   sourcePostIds      String[] @default([]) // NEW: Multiple source posts for multi-post generation
   productContextId   String?  // Reference to ProductContext (optional)
   sessionId          String?  // Reference to DraftSession (optional - groups related drafts)
+  projectId          String?  // Reference to Project (optional - associates remix with project)
   name               String
   description        String?
   generationType     String   @default("manual") // 'manual', 'ai_paraphrase', 'ai_multi_post'
@@ -267,6 +270,7 @@ model RemixPost {
   originalPost       TiktokPost? @relation(fields: [originalPostId], references: [id], onDelete: SetNull)
   productContext     ProductContext? @relation(fields: [productContextId], references: [id], onDelete: SetNull)
   session            DraftSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  project            Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   textStyles         RemixTextStyle[]
   classificationIndexes SlideClassificationIndex[]
 
@@ -274,6 +278,7 @@ model RemixPost {
   @@index([originalPostId])
   @@index([productContextId])
   @@index([sessionId])
+  @@index([projectId])
   @@index([bookmarked])
   @@index([bookmarked, approved])
   @@index([postedUrl])

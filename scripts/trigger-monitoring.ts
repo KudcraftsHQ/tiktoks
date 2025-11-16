@@ -1,4 +1,4 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env bun
 
 /**
  * Trigger Profile Monitoring Script
@@ -7,11 +7,11 @@
  * and enqueues them to the profile-monitor queue.
  *
  * Usage:
- *   pnpm tsx scripts/trigger-monitoring.ts
+ *   bun scripts/trigger-monitoring.ts
  *
  * Coolify Scheduled Task Configuration:
  *   Name: "Profile Monitoring Trigger"
- *   Command: pnpm tsx scripts/trigger-monitoring.ts
+ *   Command: bun scripts/trigger-monitoring.ts
  *   Frequency: 0 * * * * (every hour)
  *   Container: Main app container
  */

@@ -161,3 +161,59 @@ export async function GET(
     )
   }
 }
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const resolvedParams = await params
+    const postId = resolvedParams.id
+
+    if (!postId) {
+      return NextResponse.json(
+        { error: 'Post ID is required' },
+        { status: 400 }
+      )
+    }
+
+    const body = await request.json()
+    const { description } = body
+
+    if (description === undefined) {
+      return NextResponse.json(
+        { error: 'Description is required in request body' },
+        { status: 400 }
+      )
+    }
+
+    // Update the post description
+    const updatedPost = await prisma.tiktokPost.update({
+      where: { id: postId },
+      data: {
+        description: description
+      }
+    })
+
+    return NextResponse.json({
+      success: true,
+      message: 'Post description updated successfully',
+      post: {
+        id: updatedPost.id,
+        description: updatedPost.description
+      }
+    })
+
+  } catch (error) {
+    const resolvedParams = await params
+    console.error(`❌ [API] Failed to update post ${resolvedParams?.id || 'unknown'}:`, error)
+
+    return NextResponse.json(
+      {
+        error: 'Failed to update post',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    )
+  }
+}

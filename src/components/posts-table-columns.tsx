@@ -103,8 +103,8 @@ interface PostsTableColumnsProps {
   onTriggerOCR?: (postId: string) => Promise<void>
   onRefetchPosts?: () => void
   selectedPosts?: Set<string>
-  onSelectPost?: (postId: string, selected: boolean) => void
-  onSelectAll?: (selected: boolean) => void
+  onSelectPost?: (postId: string, checked: boolean) => void
+  onSelectAll?: (checked: boolean) => void
   allSelected?: boolean
   viewMode?: 'metrics' | 'content'
   searchTerms?: string[]
@@ -454,61 +454,13 @@ export const createPostsTableColumns = ({
   onRowClick,
   onTriggerOCR,
   onRefetchPosts,
-  selectedPosts = new Set(),
+  selectedPosts,
   onSelectPost,
   onSelectAll,
-  allSelected = false,
+  allSelected,
   viewMode = 'metrics',
   searchTerms = []
 }: PostsTableColumnsProps): ColumnDef<TikTokPost>[] => [
-  {
-    id: 'select',
-    header: ({ table }) => (
-      <div
-        className="flex items-center justify-center w-full h-full"
-        onClick={(e) => {
-          e.stopPropagation()
-          onSelectAll?.(!allSelected)
-        }}
-      >
-        <Checkbox
-          checked={allSelected}
-          onCheckedChange={(checked) => {
-            onSelectAll?.(checked === true)
-          }}
-          aria-label="Select all"
-        />
-      </div>
-    ),
-    cell: ({ row }) => {
-      const post = row.original
-      // In content mode, show checkbox for all posts; in metrics mode, only photo posts
-      if (viewMode === 'metrics' && post.contentType !== 'photo') {
-        return null
-      }
-      return (
-        <div
-          className="flex items-center justify-center w-full h-full cursor-pointer"
-          onClick={(e) => {
-            e.stopPropagation()
-            onSelectPost?.(post.id, !selectedPosts.has(post.id))
-          }}
-        >
-          <Checkbox
-            checked={selectedPosts.has(post.id)}
-            onCheckedChange={(checked) => {
-              onSelectPost?.(post.id, checked === true)
-            }}
-            aria-label={`Select ${post.authorHandle}`}
-          />
-        </div>
-      )
-    },
-    size: 50,
-    minSize: 50,
-    maxSize: 50,
-    meta: { pinned: 'left' }
-  },
   {
     accessorKey: 'authorHandle',
     header: 'Author',
@@ -840,7 +792,33 @@ export const createPostsTableColumns = ({
                     <div className="h-48 overflow-y-auto">
                       <InlineEditableText
                         value={ocrText}
-                        onSave={async () => {}} // No-op save
+                        onSave={async (newValue) => {
+                          try {
+                            const response = await fetch(`/api/tiktok/posts/${post.id}/ocr`, {
+                              method: 'PATCH',
+                              headers: {
+                                'Content-Type': 'application/json'
+                              },
+                              body: JSON.stringify({
+                                slideIndex: index,
+                                text: newValue
+                              })
+                            })
+
+                            if (!response.ok) {
+                              throw new Error('Failed to update slide text')
+                            }
+
+                            toast.success('Slide text updated')
+                            if (onRefetchPosts) {
+                              onRefetchPosts()
+                            }
+                          } catch (error) {
+                            console.error('Failed to update slide text:', error)
+                            toast.error('Failed to update slide text')
+                            throw error
+                          }
+                        }}
                         placeholder={ocrResult?.success ? 'No text' : 'No text'}
                         fixedHeight={true}
                         heightClass="h-48"

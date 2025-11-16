@@ -1,24 +1,21 @@
 # syntax=docker/dockerfile:1
 
-FROM node:20-alpine AS base
+FROM imbios/bun-node:1-22-debian AS base
 
 # Disabling Telemetry
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN apk add --no-cache libc6-compat curl wget bash openssl
-
-# Enable Corepack for pnpm (faster than npm install -g)
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN apt-get update && apt-get install -y libc6 curl wget bash openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 FROM base AS deps
 WORKDIR /app
 
 # Copy package files and prisma schema
-COPY package.json pnpm-lock.yaml ./
+COPY package.json bun.lock ./
 COPY prisma ./prisma
 
 # Install dependencies with cache mount
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=bun,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile
 
 FROM base AS builder
 WORKDIR /app
@@ -45,18 +42,18 @@ ENV NEXT_PUBLIC_MIDTRANS_CLIENT_KEY=${NEXT_PUBLIC_MIDTRANS_CLIENT_KEY}
 ENV NEXT_PUBLIC_MIDTRANS_BASE_URL=${NEXT_PUBLIC_MIDTRANS_BASE_URL}
 ENV NEXT_PUBLIC_MIDTRANS_API_BASE_URL=${NEXT_PUBLIC_MIDTRANS_API_BASE_URL}
 
-# Build with Next.js cache mount and explicit cache IDs
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+# Build with Next.js cache mount
+RUN --mount=type=cache,id=bun-cache,target=/root/.bun/install/cache \
     --mount=type=cache,id=next-build-cache,target=/app/.next/cache \
-    pnpm run build
+    bun run build
 
-FROM base AS runner
+FROM oven/bun:1-debian AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+RUN groupadd --system --gid 1001 nodejs && \
+    useradd --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
 RUN mkdir .next && chown nextjs:nodejs .next
@@ -67,7 +64,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules/.pnpm ./node_modules/.pnpm
 
 USER nextjs
 
@@ -76,4 +72,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD sh -c "npx prisma migrate deploy && node server.js"
+CMD sh -c "bunx prisma migrate deploy && node server.js"

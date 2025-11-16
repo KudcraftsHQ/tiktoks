@@ -184,6 +184,18 @@ ${contentIdeas}\n`
     ? `Your goal is to **remix and paraphrase** the reference posts above. Keep the core structure, themes, and key messages, but rewrite the text in a fresh way while maintaining the essence of the original content.`
     : `Your goal is to **create new content inspired by** the reference posts above. Use them as inspiration for themes, structure, and style, but create completely new content that explores different angles, examples, or perspectives.`
 
+  // CTA examples for the model to learn from
+  const ctaExamplesSection = productContext
+    ? `
+**CTA SLIDE EXAMPLES (Study These Patterns):**
+   - "The biggest game changer? I stopped guessing. Found this thing called ${productContext.title} that literally shows you what's killing your reach before you post. And how to fix it. Feels like cheating honestly"
+   - "Honestly the only reason I figured this out? Started using ${productContext.title}. It predicts how your video will perform and tells you exactly what needs fixing. I swear it's spooky accurate"
+   - "This part changed everything for me. There's this app ${productContext.title} that basically recreates TikTok's scoring system. Shows you what's hurting your virality before you even post. Game changer ngl"
+
+   Notice the pattern: Benefit first → Personal discovery → Specific feature → Authentic reaction
+`
+    : ''
+
   const prompt = `You are a TikTok carousel content creator. Analyze the reference posts below and generate ${variationCount} variations of carousel content.
 
 ${postsContext}
@@ -194,42 +206,50 @@ ${contentIdeasSection}
 
 **Generation Strategy:**
 ${strategyDescription}
+${ctaExamplesSection}
 
 **CRITICAL REQUIREMENTS:**
 
 1. EXACT Slide Structure (no exceptions):
    - Exactly ONE HOOK slide (must be the first slide)
-   - Exactly ONE CTA slide (preferred to be second-to-last slide, but can also be last slide)${productContext ? ', and ONLY mention the product here' : ''}
+   - Exactly ONE CTA slide (MUST be second-to-last slide)${productContext ? '. This slide should feel like a natural recommendation from a friend, NOT a sales pitch. Lead with the transformation/benefit, then mention the product almost casually as your personal discovery. Use phrases like "I found...", "honestly...", "I swear...", or "ngl" to maintain authenticity' : ''}
    - All other slides must be CONTENT slides (not hooks or CTAs)
-   - The last slide (if not CTA) should be a satisfying conclusion
+   - The last slide MUST be a satisfying conclusion that wraps up after the CTA
 
-2. Content Flow:
-   - HOOK: Create curiosity and establish the topic
-   - CONTENT slides: Build knowledge progressively, each slide flowing naturally from the previous (like telling a story)
-   - CTA: CRITICAL - This is NOT a sales pitch. Continue the storyteller's POV naturally. Example: "This is exactly what I built into [product]..." or "That's why I created [product] - to help you..." The CTA should feel like the storyteller sharing their solution, not selling. ${productContext ? 'Weave in the product context as part of the storyteller\'s personal journey.' : 'If no product context, make it a call to action related to the story (e.g., "try this yourself", "start today", etc.)'}
-   - Optional final slide: If CTA is second-to-last, add a satisfying conclusion/summary as the last slide that wraps up the storyteller's journey
+2. Open Loop Psychology - CRITICAL FOR VIRALITY:
+   - Each slide MUST create an open loop (information gap) that hooks the viewer to swipe to the next slide
+   - Viewers must feel compelled to close this info gap by swiping
+   - Every slide should act as a mini-hook for the next slide, creating continuous engagement
+   - Use techniques like: incomplete thoughts, teasing next information, raising questions, building curiosity
+   - This open loop pattern repeats throughout the entire carousel to maximize retention
+
+3. Viral Slideshow Formats (categorise this one on the response):
+   - **Listicles**: Numbered items that build anticipation (e.g., "3 mistakes...", "5 secrets...")
+   - **Day in the Life**: Personal journey narrative that reveals insights progressively
+   - **This vs That**: Comparative analysis that contrasts two approaches/options
+   - **Problem-Solution Storyline**: Present a relatable problem, then build toward the solution
+   - **Question Hook + Answer Slides**: Open with a provocative question, reveal answers slide by slide
+   - **Subtle Product Showcase**: Demonstrate product value through storytelling, not direct selling
+   - **Educational**: Teach something valuable step-by-step, keeping viewers engaged to complete learning
+
+4. Content Flow:
+   - HOOK: Create curiosity and establish the topic using an open loop technique
+   - CONTENT slides: Build knowledge progressively, each slide flowing naturally from the previous (like telling a story). EACH slide must create a new open loop while closing the previous one
+   - Soft CTA (SECOND-TO-LAST SLIDE): ${productContext ? 'This should read like a genuine personal recommendation, NOT marketing copy. Lead with the transformation/benefit that solves pain points from earlier slides, then casually introduce the product as your personal discovery. Use first-person experience markers ("I found", "I use", "honestly", "I swear") and maintain the same conversational tone as the rest of the carousel. Study the reference posts\' CTA style - notice how they sound like secrets being shared, not products being sold.' : 'Study the reference posts\' CTA style and adapt it naturally without altering the core approach. It should flowing naturally from the previous slide.'}
+   - FINAL SLIDE (LAST SLIDE): Add a satisfying conclusion/summary that wraps up the storyteller's journey and provides closure after the CTA
    - The sequence must feel conversational, not jumpy or disconnected
+   - Open loops should create a natural pull to the next slide, not feel forced${productContext ? '\n\n**CRITICAL: CTA Slide Guidelines (Second-to-Last Slide):**\n   - Frame it as YOUR personal discovery, not a recommendation ("I found this app...", "I\'ve been using...", "I swear...")\n   - Lead with the TRANSFORMATION first, product name second ("tells you how your video might do before you post" → "it\'s called X")\n   - Maintain the same conversational, authentic voice as the rest of the carousel\n   - Include personality markers that show genuine experience ("ngl", "honestly", "feels like cheating", "I swear")\n   - Make it feel like you\'re letting them in on a secret, not selling to them\n   - The benefit should directly address the pain points built up in the CONTENT slides\n   - Keep the same casual rhythm and natural pauses as your storytelling\n   - Example structure: "[Benefit statement]. [Personal discovery of tool]. [Specific feature that delivers benefit]. [Authentic reaction]"' : ''}
 
 3. Slide Count:
    - Generate exactly ${variationCount} variations
    - Each variation should have between ${slidesRange.min} and ${slidesRange.max} slides
    - Maintain the hook → content → cta structure regardless of total slides
 
-4. Language & Style:
+5. Language & Style:
    - Follow the specified language style
    - Ensure each slide builds upon the previous one
    - Use transitions that guide the viewer logically through the content
    - Make each variation unique and valuable
-   - The CTA must feel like the storyteller's personal revelation or solution, written in first-person POV
-
-5. CTA Examples (Soft-Selling, Story-Driven):
-   ✅ GOOD: "This is exactly what I built into [Product] - a tool that analyzes your content before you post"
-   ✅ GOOD: "That's why I created [Product]. It's helped me stay consistent without burning out"
-   ✅ GOOD: "I automated this whole process in [Product] so you don't have to do it manually"
-   ✅ GOOD: "After months of testing, I built [Product] to make this easier for creators like us"
-   ❌ BAD: "Get [Product] now! Limited time offer!" (too salesy)
-   ❌ BAD: "Check out [Product] for all these features!" (feature dump)
-   ❌ BAD: "Click the link to buy [Product]" (direct sales pitch)
 
 6. Variation Metadata:
    - For each variation, create a cohesive "description" field that paraphrases ALL slides as one flowing narrative

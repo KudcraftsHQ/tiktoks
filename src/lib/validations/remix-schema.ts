@@ -204,7 +204,8 @@ const CreateRemixSchema = z.object({
 const UpdateRemixSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).optional(),
-  slides: z.array(RemixSlideSchema).optional()
+  slides: z.array(RemixSlideSchema).optional(),
+  bookmarked: z.boolean().optional()
 })
 
 // Generate remix options interface

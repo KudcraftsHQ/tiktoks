@@ -10,6 +10,7 @@ const prisma = new PrismaClient()
 const generateContentSchema = z.object({
   selectedPostIds: z.array(z.string()).min(1, 'At least one post is required'),
   productContextId: z.string().optional(),
+  projectId: z.string().optional(),
   generationStrategy: z.enum(['remix', 'inspired']).default('remix'),
   languageStyle: z.string().min(1, 'Language style is required'),
   contentIdeas: z.string().optional(),
@@ -26,6 +27,7 @@ export async function POST(request: NextRequest) {
     const {
       selectedPostIds,
       productContextId,
+      projectId,
       generationStrategy,
       languageStyle,
       contentIdeas,
@@ -150,11 +152,12 @@ export async function POST(request: NextRequest) {
         // Create the draft RemixPost
         const draft = await prisma.remixPost.create({
           data: {
-            name: `Generated: ${variation.metadata.mainTheme}`,
+            name: `${variation.metadata.mainTheme}`,
             description: variation.metadata.description, // AI-generated cohesive narrative
             generationType: generationStrategy === 'remix' ? 'ai_remix' : 'ai_inspired',
             sourcePostIds: selectedPostIds,
             productContextId: productContextId || null,
+            projectId: projectId || null,
             sessionId: session.id, // Link to session
             languageStyleTags: [languageStyle],
             generationPrompt: languageStyle + (contentIdeas ? `\n${contentIdeas}` : ''),

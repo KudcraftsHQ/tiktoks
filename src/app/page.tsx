@@ -14,6 +14,7 @@ import {
   LayoutList,
   LayoutGrid,
   MessageSquareIcon,
+  FolderPlus,
 } from 'lucide-react'
 import { PostsTable } from '@/components/PostsTable'
 import { Card, CardContent } from '@/components/ui/card'
@@ -23,7 +24,7 @@ import { designTokens } from '@/lib/design-tokens'
 import { toast } from 'sonner'
 import { SortingState } from '@tanstack/react-table'
 import { ContentAnalysisSidebar } from '@/components/ContentAnalysisSidebar'
-import { GenerateContentDrawer } from '@/components/GenerateContentDrawer'
+import { ProjectSelectorModal } from '@/components/ProjectSelectorModal'
 import { cn } from '@/lib/utils'
 import { DateRange } from '@/components/DateRangeFilter'
 import { PostingTimeChart, PostingTimeChartData, PostingTimeChartBestTime } from '@/components/PostingTimeChart'
@@ -157,7 +158,7 @@ function PostsPageContent() {
   // Selection and Analysis sidebar state
   const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set())
   const [isAnalysisSidebarOpen, setIsAnalysisSidebarOpen] = useState(false)
-  const [isGenerateDrawerOpen, setIsGenerateDrawerOpen] = useState(false)
+  const [isProjectSelectorOpen, setIsProjectSelectorOpen] = useState(false)
 
   // Don't auto-close sidebar when posts are deselected
   // useEffect(() => {
@@ -422,11 +423,6 @@ function PostsPageContent() {
     fetchPosts(currentPage, pageSize, sorting, dateRange, categoryFilter, searchQuery, advancedFilters)
   }, [currentPage, pageSize, sorting, dateRange, categoryFilter, searchQuery, advancedFilters, fetchPosts])
 
-  // Handle content generated callback
-  const handleContentGenerated = useCallback(() => {
-    // Navigation is handled by GenerateContentDrawer
-    // This callback is kept for potential future use
-  }, [])
 
   // Sync state from URL params (for browser back/forward)
   useEffect(() => {
@@ -613,6 +609,37 @@ function PostsPageContent() {
     }
   }, [selectedPosts, posts])
 
+  const handleAddToProject = async (projectId: string) => {
+    const postIds = Array.from(selectedPosts)
+    try {
+      const response = await fetch(`/api/projects/${projectId}/posts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postIds })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to add posts to project')
+      }
+
+      toast.success(data.message || `Added ${postIds.length} post${postIds.length !== 1 ? 's' : ''} to project`, {
+        description: 'View project to see them',
+        action: {
+          label: 'View Project',
+          onClick: () => router.push(`/projects/${projectId}`)
+        }
+      })
+
+      // Clear selection after successful add
+      setSelectedPosts(new Set())
+    } catch (error) {
+      console.error('Failed to add posts to project:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to add posts to project')
+    }
+  }
+
   const formatNumber = (num?: number | null): string => {
     if (!num) return '0'
     if (num >= 1000000) {
@@ -747,12 +774,13 @@ function PostsPageContent() {
                   <Clipboard className="h-3 w-3" />
                 </Button>
                 <Button
-                  variant={isGenerateDrawerOpen ? "default" : "outline"}
-                  onClick={() => setIsGenerateDrawerOpen(!isGenerateDrawerOpen)}
+                  variant="outline"
+                  onClick={() => setIsProjectSelectorOpen(true)}
+                  disabled={selectedPosts.size === 0}
                   className="w-full sm:w-auto h-8 px-3 text-xs"
                 >
-                  <Sparkles className="h-3 w-3" />
-                  Generate {selectedPosts.size > 0 && ` (${selectedPosts.size})`}
+                  <FolderPlus className="h-3 w-3" />
+                  Add to Project {selectedPosts.size > 0 && ` (${selectedPosts.size})`}
                 </Button>
                 <Button
                   variant={isAnalysisSidebarOpen ? "default" : "outline"}
@@ -874,6 +902,9 @@ function PostsPageContent() {
                 onSelectionChange={setSelectedPosts}
                 viewMode={viewMode}
                 searchQuery={searchQuery}
+                rowClassName={(row) => {
+                  return 'bg-background hover:bg-muted'
+                }}
               />
             </>
           ) : (
@@ -899,17 +930,19 @@ function PostsPageContent() {
               onSelectionChange={setSelectedPosts}
               viewMode={viewMode}
               searchQuery={searchQuery}
+                rowClassName={(row) => {
+                  return 'bg-background hover:bg-muted'
+                }}
             />
           )}
         </PageLayout>
       </div>
 
-      {/* Generate Content Sidebar - spans full height */}
-      <GenerateContentDrawer
-        isOpen={isGenerateDrawerOpen}
-        onClose={() => setIsGenerateDrawerOpen(false)}
-        selectedPostIds={Array.from(selectedPosts)}
-        onContentGenerated={handleContentGenerated}
+      {/* Project Selector Modal */}
+      <ProjectSelectorModal
+        isOpen={isProjectSelectorOpen}
+        onClose={() => setIsProjectSelectorOpen(false)}
+        onSelect={handleAddToProject}
       />
 
       {/* Content Analysis Sidebar - spans full height */}

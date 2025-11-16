@@ -1,4 +1,4 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env bun
 
 /**
  * Background Worker Process
@@ -6,7 +6,7 @@
  * Processes background jobs using BullMQ
  *
  * Usage:
- *   pnpm tsx worker.ts
+ *   bun worker.ts
  *
  * Environment Variables:
  *   QUEUE_NAME - Queue to process: 'all', 'media-cache', 'profile-monitor', 'ocr' (default: 'all')

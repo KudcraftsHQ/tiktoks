@@ -49,6 +49,7 @@ interface DataTableProps<TData, TValue> {
   headerActionElement?: React.ReactNode
   footerLeftElement?: React.ReactNode
   selectedRowActions?: React.ReactNode
+  enableSelection?: boolean
   onRowSelectionChange?: (updaterOrValue: RowSelectionState | ((old: RowSelectionState) => RowSelectionState)) => void
   leftStickyColumnsCount?: number
   rightStickyColumnsCount?: number
@@ -60,6 +61,8 @@ interface DataTableProps<TData, TValue> {
   columnVisibility?: VisibilityState
   onColumnVisibilityChange?: (visibility: VisibilityState) => void
   isLoading?: boolean
+  onRowClick?: (row: TData) => void
+  rowClassName?: (row: TData) => string
 }
 
 interface ShadowOpacity {
@@ -74,6 +77,7 @@ export function DataTable<TData, TValue>({
   headerActionElement,
   footerLeftElement,
   selectedRowActions,
+  enableSelection = false,
   onRowSelectionChange,
   leftStickyColumnsCount = 0,
   rightStickyColumnsCount = 0,
@@ -85,6 +89,8 @@ export function DataTable<TData, TValue>({
   columnVisibility: externalColumnVisibility,
   onColumnVisibilityChange,
   isLoading = false,
+  onRowClick,
+  rowClassName,
 }: DataTableProps<TData, TValue>) {
   const [shadowOpacity, setShadowOpacity] = useState<ShadowOpacity>({ left: 0, right: 1 });
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -205,7 +211,7 @@ export function DataTable<TData, TValue>({
   };
 
   // Combine selection column with provided columns if row selection is enabled
-  const allColumns = onRowSelectionChange
+  const allColumns = enableSelection
     ? [selectionColumn, ...columns]
     : columns;
 
@@ -246,16 +252,16 @@ export function DataTable<TData, TValue>({
     data,
     columns: columnsWithSizing,
     getCoreRowModel: getCoreRowModel(),
-    enableRowSelection: Boolean(onRowSelectionChange),
+    enableRowSelection: enableSelection,
     onRowSelectionChange: (updatedSelection) => {
-      if (onRowSelectionChange) {
-        const newSelection = typeof updatedSelection === 'function'
-          ? updatedSelection(rowSelection)
-          : updatedSelection;
+      const newSelection = typeof updatedSelection === 'function'
+        ? updatedSelection(rowSelection)
+        : updatedSelection;
 
-        // Only update if selection actually changed
-        if (JSON.stringify(newSelection) !== JSON.stringify(rowSelection)) {
-          setRowSelection(newSelection);
+      // Only update if selection actually changed
+      if (JSON.stringify(newSelection) !== JSON.stringify(rowSelection)) {
+        setRowSelection(newSelection);
+        if (onRowSelectionChange) {
           onRowSelectionChange(newSelection);
         }
       }
@@ -269,7 +275,7 @@ export function DataTable<TData, TValue>({
     state: {
       columnPinning: {
         left: [
-          ...(onRowSelectionChange ? ['select'] : []),
+          ...(enableSelection ? ['select'] : []),
           ...columns.slice(0, leftStickyColumnsCount).map(col => (col as any).accessorKey || (col as any).id)
         ],
         right: columns.slice(-rightStickyColumnsCount).map(col => (col as any).accessorKey || (col as any).id),
@@ -317,15 +323,16 @@ export function DataTable<TData, TValue>({
           <TableRow
             key={row.id}
             data-state={row.getIsSelected() && "selected"}
-            className="group"
+            className={cn("group", rowClassName?.(row.original), onRowClick && "cursor-pointer")}
+            onClick={() => onRowClick?.(row.original)}
           >
             {row.getVisibleCells().map((cell) => (
               <TableCell
                 key={cell.id}
                 className={cn(
                   cell.column.getIsPinned() && [
-                    'bg-background',
-                    'group-data-[state=selected]:bg-gray-50'
+                    rowClassName?.(row.original),
+                    'group-data-[state=selected]:bg-gray-900'
                   ]
                 )}
                 style={getCommonPinningStyles(cell.column)}
@@ -350,7 +357,7 @@ export function DataTable<TData, TValue>({
         </TableRow>
       )}
     </TableBody>
-  ), [isLoading, currentPageSize, table.getRowModel(), table.getAllColumns(), getCommonPinningStyles]);
+  ), [isLoading, currentPageSize, table.getRowModel(), table.getAllColumns(), getCommonPinningStyles, rowClassName, onRowClick]);
 
   // Memoize the table header content
   const tableHeader = useMemo(() => (

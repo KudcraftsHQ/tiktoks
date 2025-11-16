@@ -22,11 +22,11 @@ export async function GET(
       )
     }
 
-    // Get all collections this post is in
-    const collectionPosts = await prisma.collectionPost.findMany({
+    // Get all projects this post is in
+    const projectPosts = await prisma.projectPost.findMany({
       where: { postId },
       include: {
-        collection: {
+        project: {
           select: {
             id: true,
             name: true,
@@ -37,12 +37,12 @@ export async function GET(
       }
     })
 
-    const collections = collectionPosts.map(cp => cp.collection)
+    const projects = projectPosts.map(pp => pp.project)
 
     return NextResponse.json({
       postId,
-      collections,
-      isBookmarked: collections.length > 0
+      projects,
+      isBookmarked: projects.length > 0
     })
   } catch (error) {
     console.error('Failed to fetch post collections:', error)

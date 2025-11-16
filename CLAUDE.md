@@ -9,19 +9,19 @@ This is a Next.js 15 application for creating and editing TikTok-inspired carous
 ## Development Commands
 
 ### Core Development
-- **Start development server**: `pnpm dev` (with Turbopack)
-- **Build for production**: `pnpm build` (uses Turbopack)
-- **Start production server**: `pnpm start`
-- **Run linting**: `pnpm lint`
+- **Start development server**: `bun dev` (with Turbopack)
+- **Build for production**: `bun run build` (uses Turbopack)
+- **Start production server**: `bun start`
+- **Run linting**: `bun run lint`
 
 ### Testing
-- **Run build tests**: `__NEXT_TEST_MODE=1 pnpm run build`
+- **Run build tests**: `__NEXT_TEST_MODE=1 bun run build`
 
 ### Database
-- **Generate Prisma client**: `pnpm prisma generate`
-- **Run migrations**: `pnpm prisma migrate dev`
-- **Reset database**: `pnpm prisma migrate reset`
-- **View database in browser**: `pnpm prisma studio`
+- **Generate Prisma client**: `bun prisma generate`
+- **Run migrations**: `bun prisma migrate dev`
+- **Reset database**: `bun prisma migrate reset`
+- **View database in browser**: `bun prisma studio`
 
 ## Architecture
 
@@ -31,7 +31,8 @@ This is a Next.js 15 application for creating and editing TikTok-inspired carous
 - **UI**: Tailwind CSS v4 with Shadcn/ui components
 - **Drag & Drop**: @dnd-kit for carousel editor
 - **TypeScript**: Full TypeScript implementation
-- **Package Manager**: pnpm
+- **Package Manager**: Bun
+- **Runtime**: Bun (native TypeScript support)
 
 ### Directory Structure
 ```
@@ -142,7 +143,7 @@ const result = await mediaCacheServiceV2.cacheTikTokPostMedia(...)
 ### Queue System
 Background media processing using BullMQ:
 - **Media Cache Queue**: Handles asset downloading and R2 uploads
-- **Worker Process**: `pnpm run worker` - processes cache jobs
+- **Worker Process**: `bun run worker` - processes cache jobs
 - **Redis**: Queue state management and job persistence
 
 ## Environment Variables Required
@@ -156,10 +157,12 @@ Background media processing using BullMQ:
 - `REDIS_URL`: Redis connection string for queue management
 
 ## Important Notes
-- **Package Manager**: Always use `pnpm` (not npm/yarn)
+- **Package Manager**: Always use `bun` (not npm/yarn/pnpm)
+- **Runtime**: Bun has native TypeScript support - no need for tsx or ts-node
 - **Custom Prisma Location**: Client generated at `src/generated/prisma/` instead of `node_modules`
 - **Import Pattern**: Use `@/generated/prisma` for database imports
 - **Turbopack**: Enabled for both dev and build processes for faster compilation
 - **Asset Pattern**: Always use CacheAssetService for URL resolution in API endpoints
-- **Background Workers**: Run `pnpm run worker` for media processing in development
+- **Background Workers**: Run `bun run worker` for media processing in development
+- **Docker**: Uses `imbios/bun-node` for builds (Prisma compatibility) and `oven/bun` for runtime
 - memorize how you setup next js to have different path for build on dev environment

@@ -2,15 +2,24 @@
 
 This document outlines how this project has been configured to use Bun as the package manager and runtime, covering Next.js with TypeScript and BullMQ workers.
 
+## ✅ Migration Status: COMPLETED
+
+**Migration Date**: November 16, 2025
+**Bun Version**: 1.3.1
+**Previous Package Manager**: pnpm 9.9.0
+
+This project has been fully migrated from pnpm to Bun.
+
 ## Overview
 
 This project uses:
-- **Package Manager**: Bun (v1.1.33)
-- **Framework**: Next.js 16 (with Turbopack)
+- **Package Manager**: Bun (v1.3.1)
+- **Runtime**: Bun (native TypeScript support)
+- **Framework**: Next.js 15 (with Turbopack)
 - **Language**: TypeScript
 - **Task Queue**: BullMQ with Redis
 - **Database**: PostgreSQL (with Prisma ORM)
-- **Container Runtime**: Docker with Bun base image
+- **Container Runtime**: Docker with hybrid Bun images (imbios/bun-node for build, oven/bun for runtime)
 
 ## Package Manager Configuration
 
@@ -18,17 +27,19 @@ This project uses:
 
 ```json
 {
-  "packageManager": "bun@1.1.33"
+  "packageManager": "bun@1.1.42"
 }
 ```
 
-The `packageManager` field ensures that Bun v1.1.33 is enforced when running this project. When you try to use npm/pnpm instead, it will error out.
+The `packageManager` field ensures that Bun v1.1.42 is enforced when running this project. When you try to use npm/pnpm instead, it will error out.
+
+**Note**: tsx dependency has been completely removed as Bun has native TypeScript support.
 
 ### Lock File
 
-- **Lock file name**: `bun.lock` (not `bun.lockb`)
-- This file should be committed to git for reproducible builds
-- Replace pnpm's `pnpm-lock.yaml` with Bun's lock file
+- **Lock file name**: `bun.lockb` (binary format)
+- This file is in .gitignore and should NOT be committed (binary format changes frequently)
+- Replaced pnpm's `pnpm-lock.yaml` with Bun's lock file
 
 ### Installation
 
@@ -193,18 +204,24 @@ The project has **two separate Dockerfiles**:
 
 ### 1. Main Application Dockerfile (Dockerfile)
 
-The project uses a **multi-stage Docker build** with Bun base image for the Next.js application:
+The project uses a **multi-stage Docker build** with **hybrid Bun images** for the Next.js application:
 
 ```dockerfile
-FROM oven/bun:alpine AS base
+FROM imbios/bun-node:1.3-22-debian AS base  # Build stages use Bun + Node.js for Prisma
+FROM oven/bun:1.3-debian AS runner           # Runtime uses pure Bun
 ```
+
+**Why hybrid approach?**
+- Prisma requires Node.js for generation in Docker
+- `imbios/bun-node` provides both Bun and Node.js for build compatibility
+- `oven/bun` provides lightweight runtime for production
 
 **Build stages**:
 
-1. **base**: Alpine Linux with Bun, includes libc6-compat, curl, wget, bash, openssl
+1. **base**: Debian-based image with Bun + Node.js, includes libc6, curl, wget, bash, openssl
 2. **deps**: Install dependencies with `bun install --frozen-lockfile`
-3. **builder**: Build Next.js app and Prisma client
-4. **runner**: Final production image
+3. **builder**: Build Next.js app with Bun
+4. **runner**: Debian-based pure Bun image for runtime
 
 **Key commands in Dockerfile**:
 ```dockerfile
@@ -283,8 +300,14 @@ docker build \
 
 **Worker image**:
 ```bash
-docker build -f worker.Dockerfile -t kudtrading-worker:latest .
+docker build -f worker.Dockerfile -t carousel-master-worker:latest .
 ```
+
+**Implementation Notes**:
+- Uses Debian-based images instead of Alpine for better glibc compatibility with @napi-rs/canvas
+- Lock file is `bun.lockb` instead of `pnpm-lock.yaml`
+- All `pnpm` commands replaced with `bun`
+- `bunx prisma migrate deploy` works correctly in the hybrid setup
 
 ### Docker Compose Example (for local development)
 

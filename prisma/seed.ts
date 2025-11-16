@@ -5,21 +5,21 @@ const prisma = new PrismaClient()
 async function main() {
   console.log('Seeding database...')
 
-  // Create default collection if it doesn't exist
-  const defaultCollection = await prisma.collection.findFirst({
+  // Create default project if it doesn't exist
+  const defaultProject = await prisma.project.findFirst({
     where: { isDefault: true }
   })
 
-  if (!defaultCollection) {
-    await prisma.collection.create({
+  if (!defaultProject) {
+    await prisma.project.create({
       data: {
-        name: 'My Collection',
-        description: 'Default collection for saved posts',
+        name: 'My Project',
+        description: 'Default project for organizing posts',
         color: '#3b82f6',
         isDefault: true
       }
     })
-    console.log('Created default collection')
+    console.log('Created default project')
   }
 
   console.log('Database seeded successfully')

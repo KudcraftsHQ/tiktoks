@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 const prisma = new PrismaClient()
 
-const CreateCollectionSchema = z.object({
+const CreateProjectSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().optional(),
   color: z.string().regex(/^#[0-9A-F]{6}$/i).optional()
@@ -38,39 +38,40 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    const [collections, total] = await Promise.all([
-      prisma.collection.findMany({
+    const [projects, total] = await Promise.all([
+      prisma.project.findMany({
         where,
         include: {
           _count: {
             select: {
-              posts: true
+              posts: true,
+              remixes: true
             }
           }
         },
         orderBy: [
           { isDefault: 'desc' },
-          { createdAt: 'desc' }
+          { updatedAt: 'desc' }
         ],
         skip,
         take: limit
       }),
-      prisma.collection.count({ where })
+      prisma.project.count({ where })
     ])
 
     const hasMore = skip + limit < total
 
     return NextResponse.json({
-      collections,
+      projects,
       hasMore,
       total,
       page,
       limit
     })
   } catch (error) {
-    console.error('Failed to fetch collections:', error)
+    console.error('Failed to fetch projects:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch collections' },
+      { error: 'Failed to fetch projects' },
       { status: 500 }
     )
   }
@@ -79,10 +80,10 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const validatedData = CreateCollectionSchema.parse(body)
+    const validatedData = CreateProjectSchema.parse(body)
 
-    // Check if a collection with the same name already exists
-    const existingCollection = await prisma.collection.findFirst({
+    // Check if a project with the same name already exists
+    const existingProject = await prisma.project.findFirst({
       where: {
         name: {
           equals: validatedData.name,
@@ -91,14 +92,14 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    if (existingCollection) {
+    if (existingProject) {
       return NextResponse.json(
-        { error: 'A collection with this name already exists' },
+        { error: 'A project with this name already exists' },
         { status: 400 }
       )
     }
 
-    const collection = await prisma.collection.create({
+    const project = await prisma.project.create({
       data: {
         name: validatedData.name,
         description: validatedData.description,
@@ -107,13 +108,14 @@ export async function POST(request: NextRequest) {
       include: {
         _count: {
           select: {
-            posts: true
+            posts: true,
+            remixes: true
           }
         }
       }
     })
 
-    return NextResponse.json(collection, { status: 201 })
+    return NextResponse.json(project, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -122,9 +124,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.error('Failed to create collection:', error)
+    console.error('Failed to create project:', error)
     return NextResponse.json(
-      { error: 'Failed to create collection' },
+      { error: 'Failed to create project' },
       { status: 500 }
     )
   }

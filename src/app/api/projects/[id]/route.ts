@@ -1,0 +1,218 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { PrismaClient } from '@/generated/prisma'
+import { z } from 'zod'
+
+const prisma = new PrismaClient()
+
+const UpdateProjectSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().optional(),
+  color: z.string().regex(/^#[0-9A-F]{6}$/i).optional()
+})
+
+// Helper function to convert BigInt and Date values for JSON serialization
+function serializeBigInt(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj
+  }
+
+  if (typeof obj === 'bigint') {
+    return obj.toString()
+  }
+
+  // Handle Date objects
+  if (obj instanceof Date) {
+    return obj.toISOString()
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(serializeBigInt)
+  }
+
+  if (typeof obj === 'object') {
+    const serialized: any = {}
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        serialized[key] = serializeBigInt(obj[key])
+      }
+    }
+    return serialized
+  }
+
+  return obj
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+
+    const project = await prisma.project.findUnique({
+      where: { id },
+      include: {
+        posts: {
+          include: {
+            post: true
+          },
+          orderBy: {
+            addedAt: 'desc'
+          }
+        },
+        remixes: {
+          where: {
+            isDraft: true
+          },
+          include: {
+            productContext: true
+          },
+          orderBy: {
+            createdAt: 'desc'
+          }
+        },
+        _count: {
+          select: {
+            posts: true,
+            remixes: true
+          }
+        }
+      }
+    })
+
+    if (!project) {
+      return NextResponse.json(
+        { error: 'Project not found' },
+        { status: 404 }
+      )
+    }
+
+    // Serialize BigInt values before returning
+    const serializedProject = serializeBigInt(project)
+    return NextResponse.json(serializedProject)
+  } catch (error) {
+    console.error('Failed to fetch project:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch project' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const body = await request.json()
+    const validatedData = UpdateProjectSchema.parse(body)
+
+    // Check if project exists
+    const existingProject = await prisma.project.findUnique({
+      where: { id }
+    })
+
+    if (!existingProject) {
+      return NextResponse.json(
+        { error: 'Project not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check if name is being changed and if it conflicts
+    if (validatedData.name && validatedData.name !== existingProject.name) {
+      const nameConflict = await prisma.project.findFirst({
+        where: {
+          name: {
+            equals: validatedData.name,
+            mode: 'insensitive'
+          },
+          NOT: {
+            id: id
+          }
+        }
+      })
+
+      if (nameConflict) {
+        return NextResponse.json(
+          { error: 'A project with this name already exists' },
+          { status: 400 }
+        )
+      }
+    }
+
+    const project = await prisma.project.update({
+      where: { id },
+      data: validatedData,
+      include: {
+        _count: {
+          select: {
+            posts: true
+          }
+        }
+      }
+    })
+
+    const serializedProject = serializeBigInt(project)
+    return NextResponse.json(serializedProject)
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Invalid request data', details: error.issues },
+        { status: 400 }
+      )
+    }
+
+    console.error('Failed to update project:', error)
+    return NextResponse.json(
+      { error: 'Failed to update project' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+
+    // Check if project exists
+    const existingProject = await prisma.project.findUnique({
+      where: { id }
+    })
+
+    if (!existingProject) {
+      return NextResponse.json(
+        { error: 'Project not found' },
+        { status: 404 }
+      )
+    }
+
+    // Prevent deletion of default project
+    if (existingProject.isDefault) {
+      return NextResponse.json(
+        { error: 'Cannot delete the default project' },
+        { status: 400 }
+      )
+    }
+
+    // Delete the project (cascade will handle ProjectPost records)
+    await prisma.project.delete({
+      where: { id }
+    })
+
+    return NextResponse.json(
+      { message: 'Project deleted successfully' },
+      { status: 200 }
+    )
+  } catch (error) {
+    console.error('Failed to delete project:', error)
+    return NextResponse.json(
+      { error: 'Failed to delete project' },
+      { status: 500 }
+    )
+  }
+}

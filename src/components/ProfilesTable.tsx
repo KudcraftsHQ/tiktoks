@@ -229,9 +229,9 @@ export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps
         columns={columns}
         data={profiles}
         enablePagination={false}
-        leftStickyColumnsCount={2}
+        enableSelection={true}
+        leftStickyColumnsCount={1}
         rightStickyColumnsCount={1}
-
       />
 
       {/* Profile Preview Dialog */}

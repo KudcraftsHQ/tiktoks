@@ -1,37 +1,34 @@
-FROM node:20-alpine AS base
+FROM imbios/bun-node:1-22-debian AS base
 
 # Disabling Telemetry
-ENV NEXT_TELEMETRY_DISABLED 1
-RUN apk add --no-cache libc6-compat curl wget bash openssl
-
-# Install pnpm
-RUN npm install -g pnpm
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN apt-get update && apt-get install -y libc6 curl wget bash openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 FROM base AS deps
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml ./
+COPY package.json bun.lock ./
 COPY prisma ./prisma
-RUN pnpm i --frozen-lockfile
+RUN bun install --frozen-lockfile
 
 # Generate Prisma client
-RUN pnpm prisma generate
+RUN bun prisma generate
 
-FROM base AS runner
+FROM oven/bun:1-debian AS runner
 WORKDIR /app
 
-ENV NODE_ENV production
-ENV QUEUE_NAME all
+ENV NODE_ENV=production
+ENV QUEUE_NAME=all
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 workeruser
+RUN groupadd --system --gid 1001 nodejs
+RUN useradd --system --uid 1001 workeruser
 
 # Copy dependencies and generated Prisma client
 COPY --from=deps --chown=workeruser:nodejs /app/node_modules ./node_modules
 COPY --from=deps --chown=workeruser:nodejs /app/src/generated ./src/generated
 
 # Copy application files
-COPY --chown=workeruser:nodejs package.json pnpm-lock.yaml ./
+COPY --chown=workeruser:nodejs package.json bun.lock ./
 COPY --chown=workeruser:nodejs prisma ./prisma
 COPY --chown=workeruser:nodejs worker.ts ./
 COPY --chown=workeruser:nodejs src ./src
@@ -40,4 +37,4 @@ COPY --chown=workeruser:nodejs tsconfig.json ./
 
 USER workeruser
 
-CMD ["pnpm", "run", "worker"]
+CMD ["bun", "run", "worker"]

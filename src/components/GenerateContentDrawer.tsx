@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { X, Sparkles, Loader2, Package, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,16 +34,19 @@ interface GenerateContentDrawerProps {
   isOpen: boolean
   onClose: () => void
   selectedPostIds: string[]
-  onContentGenerated?: () => void
+  selectedPosts?: PostPreview[] // Optional: if provided, skips fetching
+  onContentGenerated?: (drafts?: any[]) => void
+  projectId?: string // Optional: associates generated remixes with a project
 }
 
 export function GenerateContentDrawer({
   isOpen,
   onClose,
   selectedPostIds,
-  onContentGenerated
+  selectedPosts,
+  onContentGenerated,
+  projectId
 }: GenerateContentDrawerProps) {
-  const router = useRouter()
   const [isGenerating, setIsGenerating] = useState(false)
   const [isLoadingPosts, setIsLoadingPosts] = useState(false)
   const [isLoadingProducts, setIsLoadingProducts] = useState(false)
@@ -60,16 +62,23 @@ export function GenerateContentDrawer({
   const [generationStrategy, setGenerationStrategy] = useState<'remix' | 'inspired'>('remix')
   const [languageStyle, setLanguageStyle] = useState('follow the reference content language style')
   const [contentIdeas, setContentIdeas] = useState('')
-  const [variationCount, setVariationCount] = useState(5)
-  const [minSlides, setMinSlides] = useState(5)
-  const [maxSlides, setMaxSlides] = useState(8)
+  const [variationCount, setVariationCount] = useState<number | ''>('')
+  const [minSlides, setMinSlides] = useState<number | ''>('')
+  const [maxSlides, setMaxSlides] = useState<number | ''>('')
 
-  // Fetch post previews when drawer opens or selectedPostIds changes
+  // Fetch post previews when drawer opens or selectedPostIds changes (only if not provided)
   useEffect(() => {
     if (isOpen && selectedPostIds.length > 0) {
-      fetchPostPreviews()
+      if (selectedPosts && selectedPosts.length > 0) {
+        // Use provided posts instead of fetching
+        setPostPreviews(selectedPosts)
+        setIsLoadingPosts(false)
+      } else {
+        // Fetch from API
+        fetchPostPreviews()
+      }
     }
-  }, [isOpen, selectedPostIds])
+  }, [isOpen, selectedPostIds, selectedPosts])
 
   // Fetch product contexts when drawer opens
   useEffect(() => {
@@ -85,9 +94,9 @@ export function GenerateContentDrawer({
       setGenerationStrategy('remix')
       setLanguageStyle('follow the reference content language style')
       setContentIdeas('')
-      setVariationCount(5)
-      setMinSlides(5)
-      setMaxSlides(8)
+      setVariationCount('')
+      setMinSlides('')
+      setMaxSlides('')
     }
   }, [isOpen])
 
@@ -139,6 +148,11 @@ export function GenerateContentDrawer({
       return
     }
 
+    // Ensure defaults are applied
+    const finalVariationCount = variationCount === '' ? 5 : variationCount
+    const finalMinSlides = minSlides === '' ? 5 : minSlides
+    const finalMaxSlides = maxSlides === '' ? 8 : maxSlides
+
     setIsGenerating(true)
     try {
       const response = await fetch('/api/remixes/generate-content', {
@@ -147,13 +161,14 @@ export function GenerateContentDrawer({
         body: JSON.stringify({
           selectedPostIds,
           productContextId: selectedProductId || undefined,
+          projectId: projectId || undefined,
           generationStrategy,
           languageStyle,
           contentIdeas: contentIdeas.trim() || undefined,
-          variationCount,
+          variationCount: finalVariationCount,
           slidesRange: {
-            min: minSlides,
-            max: maxSlides
+            min: finalMinSlides,
+            max: finalMaxSlides
           }
         })
       })
@@ -165,21 +180,14 @@ export function GenerateContentDrawer({
 
       const data = await response.json()
 
-      toast.success(`Generated ${data.count} draft variations!`, {
-        description: 'Opening draft session...'
-      })
+      toast.success(`Generated ${data.count} draft variations!`)
 
       // Close drawer
       onClose()
 
-      // Navigate to the draft session detail page
-      if (data.sessionId) {
-        router.push(`/drafts/${data.sessionId}`)
-      }
-
-      // Optional callback
+      // Optional callback - pass drafts to parent
       if (onContentGenerated) {
-        onContentGenerated()
+        onContentGenerated(data.drafts)
       }
     } catch (error) {
       console.error('Generation failed:', error)
@@ -364,11 +372,32 @@ export function GenerateContentDrawer({
                 <Label htmlFor="variations">Number of Variations</Label>
                 <Input
                   id="variations"
-                  type="number"
-                  min={1}
-                  max={50}
+                  type="text"
+                  inputMode="numeric"
                   value={variationCount}
-                  onChange={(e) => setVariationCount(parseInt(e.target.value) || 1)}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    // Allow empty string or digits only
+                    if (value === '' || /^\d+$/.test(value)) {
+                      if (value === '') {
+                        setVariationCount('')
+                      } else {
+                        const num = parseInt(value)
+                        // Allow any number while typing (will be validated on blur)
+                        setVariationCount(num)
+                      }
+                    }
+                  }}
+                  onBlur={() => {
+                    // Set to default (5) if empty on blur
+                    if (variationCount === '') {
+                      setVariationCount(5)
+                    } else {
+                      // Enforce min/max constraints
+                      const num = typeof variationCount === 'number' ? variationCount : parseInt(String(variationCount))
+                      setVariationCount(Math.min(Math.max(num, 1), 50))
+                    }
+                  }}
                   className="mt-1.5"
                 />
               </div>
@@ -379,11 +408,43 @@ export function GenerateContentDrawer({
                   <Label htmlFor="minSlides">Min Slides</Label>
                   <Input
                     id="minSlides"
-                    type="number"
-                    min={3}
-                    max={15}
+                    type="text"
+                    inputMode="numeric"
                     value={minSlides}
-                    onChange={(e) => setMinSlides(parseInt(e.target.value) || 3)}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      // Allow empty string or digits only
+                      if (value === '' || /^\d+$/.test(value)) {
+                        if (value === '') {
+                          setMinSlides('')
+                        } else {
+                          const num = parseInt(value)
+                          // Allow any number while typing (will be validated on blur)
+                          setMinSlides(num)
+                        }
+                      }
+                    }}
+                    onBlur={() => {
+                      // Set to default (5) if empty on blur
+                      if (minSlides === '') {
+                        setMinSlides(5)
+                        // Also update maxSlides if it's empty or less than 5
+                        if (maxSlides === '' || maxSlides < 5) {
+                          setMaxSlides(8)
+                        }
+                      } else {
+                        // Enforce min/max constraints
+                        const num = typeof minSlides === 'number' ? minSlides : parseInt(String(minSlides))
+                        const validMin = Math.min(Math.max(num, 3), 15)
+                        setMinSlides(validMin)
+                        // Ensure maxSlides is >= minSlides
+                        if (maxSlides !== '' && validMin > maxSlides) {
+                          setMaxSlides(validMin)
+                        } else if (maxSlides === '') {
+                          setMaxSlides(Math.max(validMin, 8))
+                        }
+                      }
+                    }}
                     className="mt-1.5"
                   />
                 </div>
@@ -391,11 +452,38 @@ export function GenerateContentDrawer({
                   <Label htmlFor="maxSlides">Max Slides</Label>
                   <Input
                     id="maxSlides"
-                    type="number"
-                    min={minSlides}
-                    max={20}
+                    type="text"
+                    inputMode="numeric"
                     value={maxSlides}
-                    onChange={(e) => setMaxSlides(parseInt(e.target.value) || minSlides)}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      // Allow empty string or digits only
+                      if (value === '' || /^\d+$/.test(value)) {
+                        if (value === '') {
+                          setMaxSlides('')
+                        } else {
+                          const num = parseInt(value)
+                          // Allow any number while typing (will be validated on blur)
+                          setMaxSlides(num)
+                        }
+                      }
+                    }}
+                    onBlur={() => {
+                      // Set to default (8) if empty on blur
+                      if (maxSlides === '') {
+                        setMaxSlides(8)
+                        // Also update minSlides if it's empty or greater than 8
+                        if (minSlides === '' || minSlides > 8) {
+                          setMinSlides(5)
+                        }
+                      } else {
+                        // Enforce min/max constraints
+                        const num = typeof maxSlides === 'number' ? maxSlides : parseInt(String(maxSlides))
+                        const effectiveMin = minSlides === '' ? 5 : minSlides
+                        const validMax = Math.min(Math.max(num, effectiveMin), 20)
+                        setMaxSlides(validMax)
+                      }
+                    }}
                     className="mt-1.5"
                   />
                 </div>
@@ -416,12 +504,12 @@ export function GenerateContentDrawer({
           {isGenerating ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Generating {variationCount} Variations...
+              Generating {variationCount === '' ? 5 : variationCount} Variations...
             </>
           ) : (
             <>
               <Sparkles className="h-4 w-4 mr-2" />
-              Generate {variationCount} Variations
+              Generate {variationCount === '' ? 5 : variationCount} Variations
             </>
           )}
         </Button>

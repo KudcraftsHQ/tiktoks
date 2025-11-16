@@ -207,7 +207,7 @@ export async function PUT(
       )
     }
 
-    const { name, description, slides } = validation.data
+    const { name, description, slides, bookmarked } = validation.data
 
     console.log(`📝 [API] Updating remix: ${remixId}`)
 
@@ -218,6 +218,7 @@ export async function PUT(
         ...(name !== undefined && { name }),
         ...(description !== undefined && { description }),
         ...(slides !== undefined && { slides: JSON.stringify(slides) }),
+        ...(bookmarked !== undefined && { bookmarked }),
         updatedAt: new Date()
       },
       include: {
