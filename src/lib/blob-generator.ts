@@ -14,6 +14,8 @@ export interface TextHuggingBlobOptions {
   lineHeight: number
   spread: number // padding in pixels
   roundness: number // 0-1, 0 = sharp corners, 1 = very smooth
+  align?: 'left' | 'center' | 'right'
+  containerWidth?: number // Explicit container width for true CSS-like alignment
 }
 
 /**
@@ -104,192 +106,183 @@ export function scaleBlobPath(path: string, scale: number): string {
   return path
 }
 
+import polygonClipping from 'polygon-clipping'
+
 /**
- * Generate a TikTok-style blob by tracing outline and rounding corners
- * This creates stable, clean blobs that perfectly hug the text
+ * Generate a TikTok-style blob by constructing rounded rectangles for each line
+ * and unioning them together.
+ * This creates the correct "pill-merged" look.
  */
 export function generateTextHuggingBlob(options: TextHuggingBlobOptions): string {
-  const { lines, lineHeight, spread, roundness } = options
+  const { lines, lineHeight, spread, roundness, align = 'left', containerWidth } = options
 
   if (lines.length === 0) return ''
 
   // Map roundness (0-1) to corner radius in pixels
-  const radius = roundness * spread
+  // TikTok style is usually quite round, so we maximize the radius
+  // but cap it at half the line height (full pill shape)
+  const maxRadius = (lineHeight + spread * 2) / 2
+  const radius = roundness * maxRadius
 
-  // Calculate bounding box for each line
-  interface LineBox {
-    x: number
-    y: number
-    width: number
-    height: number
-  }
+  // Determine the reference width for alignment
+  // If containerWidth is provided (best for true CSS alignment), use it
+  // Otherwise fallback to the widest line (mimics "fit-content")
+  const maxLineWidth = Math.max(...lines.map(l => l.width))
+  const referenceWidth = containerWidth ?? maxLineWidth
 
-  const lineBoxes: LineBox[] = lines.map((line, i) => ({
-    x: -spread,
-    y: i * lineHeight - spread,
-    width: line.width + spread * 2,
-    height: lineHeight + spread * 2,
-  }))
+  // 1. Generate polygon points for each line as a rounded rectangle
+  // We approximate the rounded corners with 8 points per corner for smoothness
+  const linePolygons: Array<[number, number][]> = lines.map((line, i) => {
+    let x = 0
 
-  if (lineBoxes.length === 0) return ''
-
-  // Build polygon points by tracing the outline smoothly
-  const points: [number, number][] = []
-
-  // Start from top-left, trace clockwise
-  const firstBox = lineBoxes[0]
-  const lastBox = lineBoxes[lineBoxes.length - 1]
-
-  // Top edge - follow the widest line at the top
-  points.push([firstBox.x, firstBox.y])
-  points.push([firstBox.x + firstBox.width, firstBox.y])
-
-  // Right side - trace down following each line's right edge
-  for (let i = 0; i < lineBoxes.length; i++) {
-    const box = lineBoxes[i]
-    const nextBox = lineBoxes[i + 1]
-
-    // Right edge of current line
-    const rightX = box.x + box.width
-    const bottomY = box.y + box.height
-
-    // Only add corner points where width changes significantly
-    if (!nextBox) {
-      // Last line - go to bottom right
-      points.push([rightX, bottomY])
+    // Calculate alignment offset based on the REFERENCE width (container or max line)
+    if (align === 'center') {
+      // Center alignment: Line is centered within the reference width
+      x = (referenceWidth - line.width) / 2
+    } else if (align === 'right') {
+      // Right alignment: Line is pushed to the right edge of the reference width
+      x = (referenceWidth - line.width)
     } else {
-      const nextRightX = nextBox.x + nextBox.width
-      // Add point if there's a significant width change
-      if (Math.abs(rightX - nextRightX) > 1) {
-        points.push([rightX, bottomY])
-      }
+      // Left alignment: Line starts at 0
+      x = 0
     }
-  }
 
-  // Bottom edge
-  points.push([lastBox.x, lastBox.y + lastBox.height])
+    const y = i * lineHeight
+    
+    // Vertical offset adjustment to better center text within line height
+    // Standard fonts often sit slightly lower visually than the mathematical center
+    // A small offset helps the blob feel more "centered" on the glyphs
+    // const yOffset = lineHeight * 0.12
+    // const adjustedY = y + yOffset
 
-  // Left side - trace up following each line's left edge
-  for (let i = lineBoxes.length - 1; i >= 0; i--) {
-    const box = lineBoxes[i]
-    const prevBox = lineBoxes[i - 1]
+    const width = line.width + spread * 2
+    const height = lineHeight + spread * 2
 
-    const leftX = box.x
-    const topY = box.y
-
-    // Only add corner points where width changes significantly
-    if (!prevBox) {
-      // First line - go to top left
-      points.push([leftX, topY])
-    } else {
-      const prevLeftX = prevBox.x
-      // Add point if there's a significant width change
-      if (Math.abs(leftX - prevLeftX) > 1) {
-        points.push([leftX, topY])
-      }
+    // Determine corner radii for this line to create straight edges on aligned sides
+    // Default to all rounded
+    const corners = {
+      tl: radius,
+      tr: radius,
+      br: radius,
+      bl: radius
     }
+
+    // If left aligned, straighten the internal left corners
+    if (align === 'left') {
+      // If not the first line, straighten top-left
+      if (i > 0) corners.tl = 0
+      // If not the last line, straighten bottom-left
+      if (i < lines.length - 1) corners.bl = 0
+    }
+    
+    // If right aligned, straighten the internal right corners
+    if (align === 'right') {
+      // If not the first line, straighten top-right
+      if (i > 0) corners.tr = 0
+      // If not the last line, straighten bottom-right
+      if (i < lines.length - 1) corners.br = 0
+    }
+
+    return generateRoundedRectPoints(x, y, width, height, corners)
+  })
+
+  if (linePolygons.length === 0) return ''
+
+  try {
+    // 2. Union all polygons together
+    // polygon-clipping takes [[[x,y], ...]] format
+    const inputPolygons = linePolygons.map(poly => [poly] as [number, number][][])
+    
+    // Perform the union
+    const mergedPolygons = polygonClipping.union(inputPolygons as any)
+
+    if (mergedPolygons.length === 0) return ''
+
+    // 3. Convert the result back to SVG path
+    // We usually get one main polygon, but could get multiples if lines are disconnected
+    return mergedPolygons.map(multiPoly => {
+      return multiPoly.map(ring => {
+        return ring.map((point, i) => {
+          const [x, y] = point as [number, number]
+          return `${i === 0 ? 'M' : 'L'} ${x} ${y}`
+        }).join(' ') + ' Z'
+      }).join(' ')
+    }).join(' ')
+
+  } catch (e) {
+    console.error('Error merging blob polygons:', e)
+    // Fallback to simple bounding box if merge fails
+    const totalHeight = lines.length * lineHeight + spread * 2
+    const maxWidth = referenceWidth + spread * 2
+    
+    // For fallback, we also need to respect the origin logic
+    // We use 0,0 as top-left of blob
+    return `M 0 0 L ${maxWidth} 0 L ${maxWidth} ${totalHeight} L 0 ${totalHeight} Z`
   }
-
-  // Round the polygon corners
-  const roundedCommands = roundPolygonCorners(points, radius)
-
-  // Convert to SVG path
-  return commandsToPath(roundedCommands)
 }
 
 /**
- * Round polygon corners using quadratic bezier curves
+ * Generate points for a rounded rectangle (approximated)
  */
-function roundPolygonCorners(
-  points: [number, number][],
-  radius: number
-): Array<['M' | 'L' | 'Q', number, number, number?, number?]> {
-  const commands: Array<['M' | 'L' | 'Q', number, number, number?, number?]> = []
-
-  for (let i = 0; i < points.length; i++) {
-    const prev = points[(i - 1 + points.length) % points.length]
-    const cur = points[i]
-    const next = points[(i + 1) % points.length]
-
-    // Vectors from current point to neighbors
-    const v1 = normalize([cur[0] - prev[0], cur[1] - prev[1]])
-    const v2 = normalize([cur[0] - next[0], cur[1] - next[1]])
-
-    // Points at radius distance from corner
-    const p1: [number, number] = [cur[0] - v1[0] * radius, cur[1] - v1[1] * radius]
-    const p2: [number, number] = [cur[0] - v2[0] * radius, cur[1] - v2[1] * radius]
-
-    // Line to start of curve
-    commands.push(['L', p1[0], p1[1]])
-    // Quadratic curve through corner to end of curve
-    commands.push(['Q', cur[0], cur[1], p2[0], p2[1]])
-  }
-
-  return commands
-}
-
-/**
- * Normalize a 2D vector
- */
-function normalize(v: [number, number]): [number, number] {
-  const len = Math.hypot(v[0], v[1])
-  if (len === 0) return [0, 0]
-  return [v[0] / len, v[1] / len]
-}
-
-/**
- * Convert commands to SVG path string
- */
-function commandsToPath(
-  commands: Array<['M' | 'L' | 'Q', number, number, number?, number?]>
-): string {
-  return commands
-    .map((cmd, i) => {
-      if (i === 0) {
-        // First command becomes M (move)
-        return `M ${cmd[1]} ${cmd[2]}`
-      } else if (cmd[0] === 'Q') {
-        // Quadratic curve
-        return `Q ${cmd[1]} ${cmd[2]} ${cmd[3]} ${cmd[4]}`
-      } else {
-        // Line
-        return `L ${cmd[1]} ${cmd[2]}`
-      }
-    })
-    .join(' ') + ' Z'
-}
-
-/**
- * Create an SVG path for a rounded rectangle
- * Uses the more efficient arc commands for corners
- */
-function createRoundedRectPath(
+function generateRoundedRectPoints(
   x: number,
   y: number,
   width: number,
   height: number,
-  radius: number
-): string {
-  // Clamp radius to not exceed half of smallest dimension
-  const r = Math.min(radius, width / 2, height / 2)
+  radius: number | { tl: number, tr: number, br: number, bl: number },
+  steps: number = 8
+): [number, number][] {
+  const points: [number, number][] = []
+  
+  // Normalize radius input
+  const radii = typeof radius === 'number' 
+    ? { tl: radius, tr: radius, br: radius, bl: radius }
+    : radius
 
-  if (r <= 0) {
-    // No rounding - simple rectangle
-    return `M ${x} ${y} L ${x + width} ${y} L ${x + width} ${y + height} L ${x} ${y + height} Z`
+  // Top-right corner
+  {
+    const r = Math.min(radii.tr, width / 2, height / 2)
+    for (let i = 0; i <= steps; i++) {
+      const theta = (i / steps) * (Math.PI / 2)
+      const px = x + width - r + r * Math.sin(theta)
+      const py = y + r - r * Math.cos(theta)
+      points.push([px, py])
+    }
   }
 
-  // Rounded rectangle path
-  // Start at top-left corner (after the curve)
-  return `
-    M ${x + r} ${y}
-    L ${x + width - r} ${y}
-    Q ${x + width} ${y} ${x + width} ${y + r}
-    L ${x + width} ${y + height - r}
-    Q ${x + width} ${y + height} ${x + width - r} ${y + height}
-    L ${x + r} ${y + height}
-    Q ${x} ${y + height} ${x} ${y + height - r}
-    L ${x} ${y + r}
-    Q ${x} ${y} ${x + r} ${y}
-    Z
-  `.replace(/\s+/g, ' ').trim()
+  // Bottom-right corner
+  {
+    const r = Math.min(radii.br, width / 2, height / 2)
+    for (let i = 0; i <= steps; i++) {
+      const theta = (Math.PI / 2) + (i / steps) * (Math.PI / 2)
+      const px = x + width - r + r * Math.sin(theta)
+      const py = y + height - r - r * Math.cos(theta)
+      points.push([px, py])
+    }
+  }
+
+  // Bottom-left corner
+  {
+    const r = Math.min(radii.bl, width / 2, height / 2)
+    for (let i = 0; i <= steps; i++) {
+      const theta = Math.PI + (i / steps) * (Math.PI / 2)
+      const px = x + r + r * Math.sin(theta)
+      const py = y + height - r - r * Math.cos(theta)
+      points.push([px, py])
+    }
+  }
+
+  // Top-left corner
+  {
+    const r = Math.min(radii.tl, width / 2, height / 2)
+    for (let i = 0; i <= steps; i++) {
+      const theta = (3 * Math.PI / 2) + (i / steps) * (Math.PI / 2)
+      const px = x + r + r * Math.sin(theta)
+      const py = y + r - r * Math.cos(theta)
+      points.push([px, py])
+    }
+  }
+
+  return points
 }
+
