@@ -119,7 +119,10 @@ export async function GET(request: NextRequest) {
             'Content-Type': 'image/jpeg',
             'Content-Disposition': 'inline', // Force inline display
             'Cache-Control': 'public, max-age=31536000, immutable', // Cache for 1 year
-            'Cross-Origin-Resource-Policy': 'cross-origin'
+            'Cross-Origin-Resource-Policy': 'cross-origin',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type'
           }
         })
       } catch (conversionError) {
@@ -135,7 +138,10 @@ export async function GET(request: NextRequest) {
         'Content-Type': contentType,
         'Content-Disposition': 'inline', // Force inline display instead of download
         'Cache-Control': 'public, max-age=31536000, immutable', // Cache for 1 year
-        'Cross-Origin-Resource-Policy': 'cross-origin'
+        'Cross-Origin-Resource-Policy': 'cross-origin',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type'
       }
     })
 
