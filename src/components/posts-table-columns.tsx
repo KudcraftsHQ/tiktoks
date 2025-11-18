@@ -31,7 +31,6 @@ import {
   MoreHorizontal,
   Copy
 } from 'lucide-react'
-import { SmartImage } from '@/components/SmartImage'
 import { MiniSparkline } from '@/components/MiniSparkline'
 import { SlideClassificationBadge, SlideType } from '@/components/SlideClassificationBadge'
 import { SlideTypeDropdown } from '@/components/SlideTypeDropdown'
@@ -509,15 +508,10 @@ export const createPostsTableColumns = ({
               onClick={handleClick}
             >
               {post._proxiedAuthorAvatar ? (
-                <SmartImage
+                <img
                   src={post._proxiedAuthorAvatar}
                   alt={post.authorHandle}
                   className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-                  fallback={
-                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                      <span className="text-xs font-semibold">{post.authorHandle?.[0]?.toUpperCase()}</span>
-                    </div>
-                  }
                 />
               ) : (
                 <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
@@ -550,7 +544,7 @@ export const createPostsTableColumns = ({
 
                     return (
                       <div key={index} className="relative">
-                        <SmartImage
+                        <img
                           src={image._proxiedUrl}
                           alt={`Photo ${index + 1}`}
                           className="w-10 aspect-[9/16] rounded object-cover cursor-pointer hover:opacity-80 border"
@@ -595,15 +589,10 @@ export const createPostsTableColumns = ({
           onClick={handleClick}
         >
           {post._proxiedAuthorAvatar ? (
-            <SmartImage
+            <img
               src={post._proxiedAuthorAvatar}
               alt={post.authorHandle}
               className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-              fallback={
-                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                  <span className="text-xs font-semibold">{post.authorHandle?.[0]?.toUpperCase()}</span>
-                </div>
-              }
             />
           ) : (
             <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
@@ -724,6 +713,7 @@ export const createPostsTableColumns = ({
   {
     accessorKey: 'title',
     header: 'Content',
+    enableSorting: false,
     minSize: viewMode === 'content' ? 1720 : 248,
     cell: ({ row }) => {
       const post = row.original as any
@@ -848,7 +838,7 @@ export const createPostsTableColumns = ({
 
                   return (
                     <div key={index} className="relative">
-                      <SmartImage
+                      <img
                         src={image._proxiedUrl}
                         alt={`Photo ${index + 1}`}
                         className="w-10 aspect-[9/16] rounded object-cover cursor-pointer hover:opacity-80 border"
@@ -875,7 +865,7 @@ export const createPostsTableColumns = ({
                 })}
               </div>
             ) : post._proxiedCoverUrl ? (
-              <SmartImage
+              <img
                 src={post._proxiedCoverUrl}
                 alt="Cover"
                 className="w-10 h-10 rounded object-cover cursor-pointer hover:opacity-80"

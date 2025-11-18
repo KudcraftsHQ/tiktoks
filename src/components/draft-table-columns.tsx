@@ -20,7 +20,6 @@ import {
 import { SlideClassificationBadge } from '@/components/SlideClassificationBadge'
 import { RemixSlideTypeDropdown } from '@/components/RemixSlideTypeDropdown'
 import { InlineEditableText } from '@/components/InlineEditableText'
-import { SmartImage } from '@/components/SmartImage'
 import type { RemixPost } from '@/types/remix'
 
 // Extend RemixPost to include additional fields needed for the table
@@ -103,17 +102,10 @@ export const createDraftTableColumns = ({
             <div className="flex items-center space-x-3 min-w-[260px]">
               {/* Profile avatar */}
               {referencePost.authorAvatarUrl ? (
-                <SmartImage
+                <img
                   src={referencePost.authorAvatarUrl}
                   alt={referencePost.authorHandle || 'Profile'}
                   className="w-10 h-10 rounded-full object-cover"
-                  fallback={
-                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                      <span className="text-xs font-semibold">
-                        {referencePost.authorHandle?.[0]?.toUpperCase() || '?'}
-                      </span>
-                    </div>
-                  }
                 />
               ) : (
                 <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
@@ -141,7 +133,7 @@ export const createDraftTableColumns = ({
 
                       return (
                         <div key={index} className="relative">
-                          <SmartImage
+                          <img
                             src={image.url}
                             alt={`Photo ${index + 1}`}
                             className="w-10 aspect-[9/16] rounded object-cover cursor-pointer hover:opacity-80 border"

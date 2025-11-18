@@ -30,7 +30,6 @@ import {
   Trash2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { SmartImage } from "@/components/SmartImage"
 import { getProxiedImageUrlById } from "@/lib/image-proxy"
 import { Streamdown } from "streamdown"
 import { toast } from "sonner"
@@ -486,7 +485,7 @@ export function ContentAnalysisSidebar({
                       className="flex items-start gap-2 p-2 bg-secondary/50 rounded-lg group hover:bg-secondary transition-colors"
                     >
                       {firstImage?.cacheAssetId ? (
-                        <SmartImage
+                        <img
                           src={getProxiedImageUrlById(
                             firstImage.cacheAssetId
                           )}
@@ -494,7 +493,7 @@ export function ContentAnalysisSidebar({
                           className="w-12 h-16 rounded object-cover flex-shrink-0"
                         />
                       ) : post.authorAvatarId ? (
-                        <SmartImage
+                        <img
                           src={getProxiedImageUrlById(post.authorAvatarId)}
                           alt={post.authorHandle}
                           className="w-12 h-16 rounded object-cover flex-shrink-0"

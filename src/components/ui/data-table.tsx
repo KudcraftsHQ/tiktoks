@@ -63,6 +63,10 @@ interface DataTableProps<TData, TValue> {
   isLoading?: boolean
   onRowClick?: (row: TData) => void
   rowClassName?: (row: TData) => string
+  // Server-side sorting props (controlled mode)
+  sorting?: SortingState
+  onSortingChange?: (updaterOrValue: SortingState | ((old: SortingState) => SortingState)) => void
+  manualSorting?: boolean
 }
 
 interface ShadowOpacity {
@@ -91,9 +95,12 @@ export function DataTable<TData, TValue>({
   isLoading = false,
   onRowClick,
   rowClassName,
+  sorting: externalSorting,
+  onSortingChange: externalOnSortingChange,
+  manualSorting = false,
 }: DataTableProps<TData, TValue>) {
   const [shadowOpacity, setShadowOpacity] = useState<ShadowOpacity>({ left: 0, right: 1 });
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const [internalSorting, setInternalSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [internalColumnVisibility, setInternalColumnVisibility] = useState<VisibilityState>({});
   const [{ pageIndex, pageSize: currentPageSize }, setPagination] = useState<PaginationState>({
@@ -106,6 +113,10 @@ export function DataTable<TData, TValue>({
   // Use external column visibility if provided, otherwise use internal state
   const columnVisibility = externalColumnVisibility ?? internalColumnVisibility;
   const setColumnVisibility = onColumnVisibilityChange ?? setInternalColumnVisibility;
+
+  // Use external sorting if provided (server-side), otherwise use internal state (client-side)
+  const sorting = externalSorting ?? internalSorting;
+  const setSorting = externalOnSortingChange ?? setInternalSorting;
 
   useEffect(() => {
     const handleScroll = () => {
@@ -290,7 +301,16 @@ export function DataTable<TData, TValue>({
     onColumnVisibilityChange: setColumnVisibility,
     ...(enableSorting && {
       onSortingChange: setSorting,
-      getSortedRowModel: getSortedRowModel(),
+      enableSortingRemoval: true, // Allow clearing sort on third click
+      sortDescFirst: true, // Start with descending on first click
+      // Only use client-side sorting model when NOT in manual/server-side mode
+      ...(!manualSorting && {
+        getSortedRowModel: getSortedRowModel(),
+      }),
+      // Enable manual sorting for server-side sorting
+      ...(manualSorting && {
+        manualSorting: true,
+      }),
     }),
     ...(enablePagination && {
       getPaginationRowModel: getPaginationRowModel(),

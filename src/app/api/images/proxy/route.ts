@@ -68,16 +68,12 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // If it's a presigned R2 URL, redirect to it (browser will cache with our headers)
-    // This is more efficient than proxying the bytes through our server
-    if (isPresignedUrl && (urlObj.hostname.includes('r2.dev') || urlObj.hostname.includes('r2.cloudflarestorage.com'))) {
-      return NextResponse.redirect(finalImageUrl, {
-        status: 307, // Temporary redirect (preserves cache headers from R2)
-        headers: {
-          'Cache-Control': 'public, max-age=31536000, immutable',
-        }
-      })
-    }
+    // Always proxy through the server (no redirect optimization)
+    // This ensures:
+    // 1. Stable proxy URLs
+    // 2. Proper CORS headers
+    // 3. HEIC conversion on-the-fly when R2 cache isn't ready yet
+    // 4. Guaranteed JPEG output
 
     // Fetch the image with user agent to avoid blocks
     const response = await fetch(finalImageUrl, {

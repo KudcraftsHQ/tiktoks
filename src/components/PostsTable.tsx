@@ -14,7 +14,6 @@ import { DataTable } from '@/components/ui/data-table'
 import { createPostsTableColumns, TikTokPost } from '@/components/posts-table-columns'
 import { ImageGallery } from '@/components/ImageGallery'
 import { getProxiedImageUrlById } from '@/lib/image-proxy'
-import { SmartImage } from '@/components/SmartImage'
 import { PostAnalyticsSheet } from '@/components/PostAnalyticsSheet'
 import { SortingState } from '@tanstack/react-table'
 import { FileText, Loader2, Sparkles } from 'lucide-react'
@@ -363,6 +362,9 @@ export function PostsTable({
           fullWidth={true}
           isLoading={isLoading}
           rowClassName={rowClassName as any}
+          sorting={sorting}
+          onSortingChange={onSortingChange}
+          manualSorting={enableServerSideSorting}
         />
       </div>
 
@@ -395,7 +397,7 @@ export function PostsTable({
                 </div>
               ) : selectedPost.coverId && (
                 <div className="flex justify-center">
-                  <SmartImage
+                  <img
                     src={getStableProxyUrl(selectedPost.coverId)}
                     alt="Post cover"
                     className="max-w-full h-auto rounded-lg"

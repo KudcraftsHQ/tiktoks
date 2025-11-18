@@ -14,7 +14,6 @@ import { DataTable } from '@/components/ui/data-table'
 import { createPostsTableColumns, TikTokPost } from '@/components/posts-table-columns'
 import { ImageGallery } from '@/components/ImageGallery'
 import { getProxiedImageUrlById } from '@/lib/image-proxy'
-import { SmartImage } from '@/components/SmartImage'
 import { PostAnalyticsSheet } from '@/components/PostAnalyticsSheet'
 import { ThumbnailStrip } from '@/components/ThumbnailStrip'
 import { invalidateSlideThumbnail } from '@/components/SlideThumbnail'
@@ -1626,7 +1625,7 @@ export function ProjectPostsTable({
                 </div>
               ) : selectedPost.coverId && (
                 <div className="flex justify-center">
-                  <SmartImage
+                  <img
                     src={getStableProxyUrl(selectedPost.coverId)}
                     alt="Post cover"
                     className="max-w-full h-auto rounded-lg"

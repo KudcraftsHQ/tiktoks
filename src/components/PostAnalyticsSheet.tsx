@@ -11,7 +11,6 @@ import {
 } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { SmartImage } from '@/components/SmartImage'
 import { getProxiedImageUrl } from '@/lib/image-proxy'
 import {
   Eye,
@@ -293,7 +292,7 @@ export function PostAnalyticsSheet({ post, open, onOpenChange }: PostAnalyticsSh
               {/* Author Info */}
               <div className="flex items-center gap-3">
                 {proxiedPost._proxiedAuthorAvatar ? (
-                  <SmartImage
+                  <img
                     src={proxiedPost._proxiedAuthorAvatar}
                     alt={post.authorHandle || 'Author'}
                     className="w-12 h-12 rounded-full object-cover"
@@ -313,7 +312,7 @@ export function PostAnalyticsSheet({ post, open, onOpenChange }: PostAnalyticsSh
               {post.contentType === 'photo' && proxiedPost._proxiedImages && proxiedPost._proxiedImages.length > 0 ? (
                 <div className="grid grid-cols-5 gap-2">
                   {proxiedPost._proxiedImages.slice(0, 5).map((image: any, index: number) => (
-                    <SmartImage
+                    <img
                       key={index}
                       src={image._proxiedUrl}
                       alt={`Photo ${index + 1}`}
@@ -327,7 +326,7 @@ export function PostAnalyticsSheet({ post, open, onOpenChange }: PostAnalyticsSh
                   )}
                 </div>
               ) : proxiedPost._proxiedCoverUrl ? (
-                <SmartImage
+                <img
                   src={proxiedPost._proxiedCoverUrl}
                   alt="Cover"
                   className="w-full aspect-video rounded object-cover"

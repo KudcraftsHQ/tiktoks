@@ -40,6 +40,7 @@ COPY --from=builder --chown=workeruser:nodejs /app/src/generated ./src/generated
 COPY --chown=workeruser:nodejs package.json bun.lock ./
 COPY --chown=workeruser:nodejs prisma ./prisma
 COPY --chown=workeruser:nodejs src ./src
+COPY --chown=workeruser:nodejs scripts ./scripts
 COPY --chown=workeruser:nodejs tsconfig.json ./
 COPY --chown=workeruser:nodejs worker.ts ./
 
