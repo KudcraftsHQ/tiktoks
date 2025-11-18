@@ -10,11 +10,15 @@ WORKDIR /app
 COPY package.json bun.lock ./
 COPY prisma ./prisma
 
-# Create src directory for Prisma generation
-RUN mkdir -p src/generated
-
 RUN --mount=type=cache,id=bun,target=/root/.bun/install/cache \
     bun install --frozen-lockfile
+
+FROM base AS builder
+WORKDIR /app
+
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
 
 # Generate Prisma client (outputs to src/generated/prisma)
 RUN bunx prisma generate
@@ -28,8 +32,9 @@ ENV QUEUE_NAME=all
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 workeruser
 
-# Copy dependencies from deps stage
+# Copy dependencies and generated Prisma client
 COPY --from=deps --chown=workeruser:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=workeruser:nodejs /app/src/generated ./src/generated
 
 # Copy application files
 COPY --chown=workeruser:nodejs package.json bun.lock ./
@@ -37,9 +42,6 @@ COPY --chown=workeruser:nodejs prisma ./prisma
 COPY --chown=workeruser:nodejs src ./src
 COPY --chown=workeruser:nodejs tsconfig.json ./
 COPY --chown=workeruser:nodejs worker.ts ./
-
-# Copy generated Prisma client from deps stage (after src copy to avoid overwrite)
-COPY --from=deps --chown=workeruser:nodejs /app/src/generated ./src/generated
 
 USER workeruser
 
