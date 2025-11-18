@@ -61,8 +61,6 @@ RUN mkdir .next && chown nextjs:nodejs .next
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-# Copy generated Prisma client (custom output location)
-COPY --from=builder --chown=nextjs:nodejs /app/src/generated ./src/generated
 # Copy complete node_modules to include all Prisma WASM files
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
 
