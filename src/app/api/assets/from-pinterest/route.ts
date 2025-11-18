@@ -56,17 +56,17 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     if (!imageUrl || !pinUrl) {
-      const validationResponse = NextResponse.json(
+      return NextResponse.json(
         { error: 'imageUrl and pinUrl are required' },
-        { status: 400 }
+        {
+          status: 400,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+          }
+        }
       )
-
-      // Add CORS headers
-      validationResponse.headers.set('Access-Control-Allow-Origin', '*')
-      validationResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
-      validationResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type')
-
-      return validationResponse
     }
 
     // Check for duplicate (unless force mode)
@@ -79,21 +79,21 @@ export async function POST(request: NextRequest) {
       })
 
       if (existingAsset) {
-        const duplicateResponse = NextResponse.json(
+        return NextResponse.json(
           {
             error: 'Asset already exists',
             code: 'DUPLICATE_ASSET',
             existingAssetId: existingAsset.id
           },
-          { status: 409 }
+          {
+            status: 409,
+            headers: {
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Methods': 'POST, OPTIONS',
+              'Access-Control-Allow-Headers': 'Content-Type',
+            }
+          }
         )
-
-        // Add CORS headers
-        duplicateResponse.headers.set('Access-Control-Allow-Origin', '*')
-        duplicateResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        duplicateResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type')
-
-        return duplicateResponse
       }
     }
 
@@ -149,36 +149,38 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    const response = NextResponse.json({
-      success: true,
-      asset: {
-        ...asset,
-        url
+    return NextResponse.json(
+      {
+        success: true,
+        asset: {
+          ...asset,
+          url
+        }
+      },
+      {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        }
       }
-    })
-
-    // Add CORS headers
-    response.headers.set('Access-Control-Allow-Origin', '*')
-    response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
-    response.headers.set('Access-Control-Allow-Headers', 'Content-Type')
-
-    return response
+    )
   } catch (error) {
     console.error('Failed to upload Pinterest asset:', error)
-    const errorResponse = NextResponse.json(
+    return NextResponse.json(
       {
         error: 'Failed to upload Pinterest asset',
         details: error instanceof Error ? error.message : 'Unknown error'
       },
-      { status: 500 }
+      {
+        status: 500,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        }
+      }
     )
-
-    // Add CORS headers to error response
-    errorResponse.headers.set('Access-Control-Allow-Origin', '*')
-    errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
-    errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type')
-
-    return errorResponse
   }
 }
 
@@ -186,9 +188,12 @@ export async function POST(request: NextRequest) {
  * OPTIONS handler for CORS preflight
  */
 export async function OPTIONS() {
-  const response = new NextResponse(null, { status: 204 })
-  response.headers.set('Access-Control-Allow-Origin', '*')
-  response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type')
-  return response
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    }
+  })
 }
