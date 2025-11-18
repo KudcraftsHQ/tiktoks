@@ -100,7 +100,7 @@ const BackgroundLayerSchema = z.object({
   type: z.enum(['image', 'color', 'gradient']),
 
   // For image backgrounds
-  imageId: z.string().min(1).optional(),
+  cacheAssetId: z.string().min(1).optional(),
 
   // Position and scaling (relative to canvas)
   x: z.number().min(-5).max(5).default(0),
@@ -119,8 +119,8 @@ const BackgroundLayerSchema = z.object({
   blendMode: z.enum(['normal', 'multiply', 'screen', 'overlay', 'soft-light', 'hard-light', 'color-dodge', 'color-burn', 'darken', 'lighten', 'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity']).default('normal'),
   zIndex: z.number().min(1).max(100).default(1)
 }).refine(data => {
-  // Validation: if type is 'image', imageId is required
-  if (data.type === 'image' && !data.imageId) {
+  // Validation: if type is 'image', cacheAssetId is required
+  if (data.type === 'image' && !data.cacheAssetId) {
     return false
   }
   // Validation: if type is 'color', color is required
@@ -239,6 +239,7 @@ export {
 
 // Utility functions for common canvas sizes
 export const CANVAS_SIZES = {
+  TIKTOK_PHOTO_MODE: { width: 1080, height: 1440, unit: 'px' as const }, // 3:4 Portrait (default)
   INSTAGRAM_STORY: { width: 1080, height: 1920, unit: 'px' as const },
   INSTAGRAM_POST: { width: 1080, height: 1080, unit: 'px' as const },
   INSTAGRAM_LANDSCAPE: { width: 1080, height: 566, unit: 'px' as const },
@@ -272,13 +273,13 @@ export function createDefaultBackgroundLayers(overrides?: Partial<BackgroundLaye
 
 // Utility function to create image background layer
 export function createImageBackgroundLayer(
-  imageId: string,
+  cacheAssetId: string,
   overrides?: Partial<BackgroundLayerType>
 ): BackgroundLayerType {
   return {
     id: `bg_${Date.now()}_${Math.random()}`,
     type: 'image',
-    imageId,
+    cacheAssetId,
     x: 0,
     y: 0,
     width: 1,

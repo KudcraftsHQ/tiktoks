@@ -43,7 +43,7 @@ async function getCanvasModule() {
 interface BackgroundLayer {
   id: string
   type: 'image' | 'color' | 'gradient'
-  imageId?: string
+  cacheAssetId?: string
   color?: string
   gradient?: {
     type: 'linear' | 'radial'
@@ -351,11 +351,11 @@ export class RemixExportService {
           break
         }
         case 'image': {
-          if (layer.imageId) {
-            console.log(`🖼️ [Export] Loading background image: ${layer.imageId}`)
-            const imageUrl = await cacheAssetService.getUrl(layer.imageId)
+          if (layer.cacheAssetId) {
+            console.log(`🖼️ [Export] Loading background image: ${layer.cacheAssetId}`)
+            const imageUrl = await cacheAssetService.getUrl(layer.cacheAssetId)
             if (!imageUrl) {
-              console.warn(`⚠️ [Export] No URL available for image: ${layer.imageId}`)
+              console.warn(`⚠️ [Export] No URL available for image: ${layer.cacheAssetId}`)
               break
             }
 

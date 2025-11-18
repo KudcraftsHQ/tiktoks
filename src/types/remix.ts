@@ -37,6 +37,7 @@ export interface RemixPost {
   session?: DraftSession
   createdAt: string
   updatedAt?: string
+  canvasSize?: CanvasSettings
   slides: RemixSlide[]
   slideClassifications?: SlideClassification[]
   productContext?: ProductContext
@@ -96,7 +97,7 @@ export interface CanvasSettings {
 export interface BackgroundLayer {
   id?: string
   type: 'image' | 'color' | 'gradient'
-  imageId?: string
+  cacheAssetId?: string
   x: number
   y: number
   width: number

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { PrismaClient } from '@/generated/prisma'
 import { CANVAS_SIZES, createDefaultBackgroundLayers } from '@/lib/validations/remix-schema'
+import { suggestLayout } from '@/lib/style-presets'
 
 const prisma = new PrismaClient()
 
@@ -32,17 +33,36 @@ export async function POST(request: NextRequest) {
 
     console.log(`🎬 [API] Creating standalone remix: ${name}`)
 
-    // Create empty slides
-    const slides = Array.from({ length: slideCount }, (_, index) => ({
-      id: `slide_${Date.now()}_${index}`,
-      displayOrder: index,
-      canvas: CANVAS_SIZES.INSTAGRAM_STORY,
-      backgroundLayers: createDefaultBackgroundLayers(),
-      originalImageIndex: index,
-      paraphrasedText: '',
-      originalText: '',
-      textBoxes: []
-    }))
+    // Helper to determine slide type based on position
+    const getSlideType = (index: number, total: number): 'Hook' | 'Content' | 'CTA' => {
+      if (index === 0) return 'Hook'
+      if (index === total - 1 && total > 2) return 'CTA'
+      return 'Content'
+    }
+
+    // Create slides with smart layout presets
+    const slides = Array.from({ length: slideCount }, (_, index) => {
+      const slideType = getSlideType(index, slideCount)
+      const placeholderText = slideType === 'Hook'
+        ? 'Hook: Start with something attention-grabbing'
+        : slideType === 'CTA'
+        ? 'CTA: End with a call-to-action'
+        : `Slide ${index + 1}: Add your content here`
+
+      // Generate smart text box with appropriate preset
+      const textBox = suggestLayout(placeholderText, slideType, 1080, 1920)
+
+      return {
+        id: `slide_${Date.now()}_${index}`,
+        displayOrder: index,
+        canvas: CANVAS_SIZES.INSTAGRAM_STORY,
+        backgroundLayers: createDefaultBackgroundLayers(),
+        originalImageIndex: index,
+        paraphrasedText: placeholderText,
+        originalText: '',
+        textBoxes: [textBox]
+      }
+    })
 
     // Create the remix without an original post
     const createdRemix = await prisma.remixPost.create({

@@ -175,12 +175,12 @@ export function CanvasEditor({
         <Layer>
           {/* Background layers */}
           {slide.backgroundLayers?.map((layer) => {
-            if (layer.type === 'image' && layer.imageId) {
+            if (layer.type === 'image' && layer.cacheAssetId) {
               return (
                 <KonvaBackgroundImage
                   key={layer.id}
                   layer={layer as any}
-                  imageUrl={backgroundImageUrls[layer.imageId] || `/api/assets/${layer.imageId}`}
+                  imageUrl={backgroundImageUrls[layer.cacheAssetId] || `/api/assets/${layer.cacheAssetId}`}
                   isSelected={selectedBackgroundLayerId === layer.id}
                   onSelect={() => handleBackgroundClick(null, layer.id)}
                   onUpdate={(updates) => onBackgroundLayerUpdate(layer.id, updates as any)}

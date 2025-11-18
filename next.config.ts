@@ -34,6 +34,7 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: [
     '@napi-rs/canvas',
+    '@resvg/resvg-js',
     // Platform-specific packages will be externalized automatically
   ],
   turbopack: {
@@ -48,11 +49,13 @@ const nextConfig: NextConfig = {
       // This prevents webpack from trying to bundle native modules
       config.externals = config.externals || [];
       
-      // Add canvas packages to externals
+      // Add canvas and resvg packages to externals
       if (Array.isArray(config.externals)) {
         config.externals.push(
           '@napi-rs/canvas',
           /@napi-rs\/canvas-.*/,  // All platform-specific packages
+          '@resvg/resvg-js',
+          /@resvg\/resvg-.*/,     // All platform-specific resvg packages
         );
       }
     } else {
@@ -61,6 +64,7 @@ const nextConfig: NextConfig = {
         ...config.resolve.fallback,
         canvas: false,
         '@napi-rs/canvas': false,
+        '@resvg/resvg-js': false,
       };
     }
     return config;

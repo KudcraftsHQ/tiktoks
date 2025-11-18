@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { PageLayout } from '@/components/PageLayout'
 import { Button } from '@/components/ui/button'
-import { Sparkles, Pencil, Trash2, FilePlus, Clipboard } from 'lucide-react'
+import { Sparkles, Pencil, Trash2, FilePlus, Clipboard, ExternalLink, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import { GenerateContentDrawer } from '@/components/GenerateContentDrawer'
 import { ProjectPostsTable, ProjectTableRow } from '@/components/ProjectPostsTable'
@@ -329,6 +329,18 @@ export default function ProjectDetailPage() {
 
   const [isCopyingToClipboard, setIsCopyingToClipboard] = useState(false)
 
+  const handleCopyProjectId = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(projectId)
+      toast.success('Project ID copied to clipboard', {
+        description: 'Paste this into your Canva app to load drafts'
+      })
+    } catch (error) {
+      console.error('Failed to copy project ID:', error)
+      toast.error('Failed to copy project ID')
+    }
+  }, [projectId])
+
   const handleCopyToClipboard = useCallback(async () => {
     if (!project) return
     const selectedIds = getSelectedIds(combinedTableData, rowSelection)
@@ -623,6 +635,15 @@ export default function ProjectDetailPage() {
                   </>
                 )
               })()}
+              <Button
+                variant="outline"
+                onClick={handleCopyProjectId}
+                className="w-full sm:w-auto h-8 px-3 text-xs"
+                title="Copy Project ID for Canva App"
+              >
+                <Copy className="h-3 w-3" />
+                Copy ID
+              </Button>
               <Button
                 variant="outline"
                 onClick={handleCreateNewDraft}

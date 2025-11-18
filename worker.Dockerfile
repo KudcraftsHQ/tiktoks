@@ -7,6 +7,9 @@ RUN apt-get update && apt-get install -y libc6 curl wget bash openssl ca-certifi
 FROM base AS deps
 WORKDIR /app
 
+# Copy Node.js for Prisma compatibility
+COPY --from=node:22 /usr/local/bin/node /usr/local/bin/node
+
 COPY package.json bun.lock ./
 COPY prisma ./prisma
 RUN bun install --frozen-lockfile
@@ -16,6 +19,9 @@ RUN bun prisma generate
 
 FROM oven/bun:1-debian AS runner
 WORKDIR /app
+
+# Copy Node.js for Prisma compatibility
+COPY --from=node:22 /usr/local/bin/node /usr/local/bin/node
 
 ENV NODE_ENV=production
 ENV QUEUE_NAME=all

@@ -5,7 +5,7 @@ const prisma = new PrismaClient()
 
 /**
  * PATCH /api/remixes/[id]/slides/[slideIndex]
- * Update a specific slide's text content
+ * Update a specific slide's text content, textBoxes, or backgroundLayers
  */
 export async function PATCH(
   request: NextRequest,
@@ -31,11 +31,12 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const { paraphrasedText } = body
+    const { paraphrasedText, textBoxes, backgroundLayers } = body
 
-    if (paraphrasedText === undefined) {
+    // At least one field must be provided
+    if (paraphrasedText === undefined && textBoxes === undefined && backgroundLayers === undefined) {
       return NextResponse.json(
-        { error: 'paraphrasedText is required in request body' },
+        { error: 'At least one of paraphrasedText, textBoxes, or backgroundLayers is required' },
         { status: 400 }
       )
     }
@@ -73,10 +74,12 @@ export async function PATCH(
       )
     }
 
-    // Update the slide text
+    // Update the slide with provided fields
     slides[slideIndex] = {
       ...slides[slideIndex],
-      paraphrasedText
+      ...(paraphrasedText !== undefined && { paraphrasedText }),
+      ...(textBoxes !== undefined && { textBoxes }),
+      ...(backgroundLayers !== undefined && { backgroundLayers })
     }
 
     // Update the remix in database

@@ -67,9 +67,9 @@ export const HiddenSlideRenderer = forwardRef<HiddenSlideRendererRef, HiddenSlid
             >
               {/* Background Layers */}
               {slide.backgroundLayers && slide.backgroundLayers.map((layer) => {
-                if (layer.type === 'image' && layer.imageId) {
+                if (layer.type === 'image' && layer.cacheAssetId) {
                   // Render image background layer
-                  const imageUrl = backgroundImageUrls[layer.imageId] || `/api/assets/${layer.imageId}`
+                  const imageUrl = backgroundImageUrls[layer.cacheAssetId] || `/api/assets/${layer.cacheAssetId}`
                   
                   return (
                     <div

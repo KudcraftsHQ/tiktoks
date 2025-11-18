@@ -184,6 +184,34 @@ ${contentIdeas}\n`
     ? `Your goal is to **remix and paraphrase** the reference posts above. Keep the core structure, themes, and key messages, but rewrite the text in a fresh way while maintaining the essence of the original content.`
     : `Your goal is to **create new content inspired by** the reference posts above. Use them as inspiration for themes, structure, and style, but create completely new content that explores different angles, examples, or perspectives.`
 
+  // Hook examples for the model to learn from
+  const hookExamplesSection = `
+**HOOK SLIDE FORMULA (CRITICAL - Study These Patterns):**
+
+Reference examples from successful viral content:
+   - "My harvard marketing professor did a lecture about the tiktok algorithm, heres what ive learned..."
+   - "The wildest things I've learned about the algorithm during my internship at tiktok..."
+   - "I've been posting consistently for 5 months, heres what ive learned..."
+   - "I've been watching my bf grow his account to 800k, and heres what ive learned..."
+
+Pattern breakdown:
+   1. [Authority/Credibility Source] → establishes trust (Harvard prof, TikTok internship, 800k account)
+   2. [Tease the topic] → creates curiosity (don't reveal the actual insight)
+   3. "heres what ive learned..." → promises value WITHOUT revealing it
+
+CRITICAL HOOK RULES:
+   ❌ DO NOT reveal the actual insight in the hook (save it for slide 2+)
+   ❌ DO NOT use dramatic language ("truth bomb", "mind blown", "changed EVERYTHING", "totally")
+   ❌ DO NOT be overly polished - use casual, lowercase, imperfect grammar ("heres" not "here's", "ive" not "I've")
+   ❌ DO NOT add unnecessary hype words or all caps for emphasis
+   ✅ DO create an information gap that can ONLY be closed by swiping to the next slide
+   ✅ DO establish credibility/authority naturally (professor, internship, successful friend, personal experience)
+   ✅ DO keep it conversational - like texting a friend, not writing marketing copy
+   ✅ DO end with the "heres what ive learned" pattern or similar casual promise
+
+The hook should feel like a friend about to share a secret, not a marketer making a pitch.
+`
+
   // CTA examples for the model to learn from
   const ctaExamplesSection = productContext
     ? `
@@ -206,6 +234,7 @@ ${contentIdeasSection}
 
 **Generation Strategy:**
 ${strategyDescription}
+${hookExamplesSection}
 ${ctaExamplesSection}
 
 **CRITICAL REQUIREMENTS:**
@@ -233,8 +262,8 @@ ${ctaExamplesSection}
    - **Educational**: Teach something valuable step-by-step, keeping viewers engaged to complete learning
 
 4. Content Flow:
-   - HOOK: Create curiosity and establish the topic using an open loop technique
-   - CONTENT slides: Build knowledge progressively, each slide flowing naturally from the previous (like telling a story). EACH slide must create a new open loop while closing the previous one
+   - HOOK: Follow the HOOK SLIDE FORMULA above exactly. Establish authority/credibility, tease the topic, end with "heres what ive learned" pattern. DO NOT reveal the insight - create an open loop that MUST be closed by swiping.
+   - CONTENT slides: Build knowledge progressively, each slide flowing naturally from the previous (like telling a story). EACH slide must create a new open loop while closing the previous one. Maintain the casual, authentic voice from the hook.
    - Soft CTA (SECOND-TO-LAST SLIDE): ${productContext ? 'This should read like a genuine personal recommendation, NOT marketing copy. Lead with the transformation/benefit that solves pain points from earlier slides, then casually introduce the product as your personal discovery. Use first-person experience markers ("I found", "I use", "honestly", "I swear") and maintain the same conversational tone as the rest of the carousel. Study the reference posts\' CTA style - notice how they sound like secrets being shared, not products being sold.' : 'Study the reference posts\' CTA style and adapt it naturally without altering the core approach. It should flowing naturally from the previous slide.'}
    - FINAL SLIDE (LAST SLIDE): Add a satisfying conclusion/summary that wraps up the storyteller's journey and provides closure after the CTA
    - The sequence must feel conversational, not jumpy or disconnected
@@ -245,10 +274,16 @@ ${ctaExamplesSection}
    - Each variation should have between ${slidesRange.min} and ${slidesRange.max} slides
    - Maintain the hook → content → cta structure regardless of total slides
 
-5. Language & Style:
-   - Follow the specified language style
-   - Ensure each slide builds upon the previous one
-   - Use transitions that guide the viewer logically through the content
+5. Language & Style - AUTHENTICITY IS CRITICAL:
+   - Follow the specified language style, but prioritize authenticity over perfection
+   - Write like you're texting a friend, NOT writing an essay or marketing copy
+   - Use casual, lowercase grammar naturally: "heres" not "here's", "ive" not "I've", "dont" not "don't"
+   - AVOID dramatic marketing language: NO "truth bomb", "mind blown", "changed EVERYTHING", "totally", "absolutely"
+   - AVOID all caps for emphasis unless it's natural/conversational
+   - Keep it conversational and imperfect - this builds trust and feels authentic
+   - Study the reference posts' casual tone and replicate it exactly across ALL slides
+   - Each slide should sound like it came from the same real person, not a copywriter
+   - Ensure each slide builds upon the previous one with natural transitions
    - Make each variation unique and valuable
 
 6. Variation Metadata:

@@ -54,7 +54,7 @@ export async function exportSlideAsImage(
 
     // Add background layers
     slide.backgroundLayers?.forEach((bgLayer) => {
-      if (bgLayer.type === 'image' && bgLayer.imageId) {
+      if (bgLayer.type === 'image' && bgLayer.cacheAssetId) {
         const img = new Image()
         img.crossOrigin = 'anonymous'
         img.onload = () => {
@@ -70,10 +70,10 @@ export async function exportSlideAsImage(
           checkAllLoaded()
         }
         img.onerror = () => {
-          console.error('Failed to load image for export:', bgLayer.imageId)
+          console.error('Failed to load image for export:', bgLayer.cacheAssetId)
           checkAllLoaded()
         }
-        img.src = backgroundImageUrls[bgLayer.imageId] || `/api/assets/${bgLayer.imageId}`
+        img.src = backgroundImageUrls[bgLayer.cacheAssetId] || `/api/assets/${bgLayer.cacheAssetId}`
       } else if (bgLayer.type === 'color') {
         const rect = new Konva.Rect({
           x: 0,
