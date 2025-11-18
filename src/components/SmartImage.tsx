@@ -45,11 +45,11 @@ const SmartImageComponent = ({
   }
 
   const handleError = async () => {
-    // If we've already tried conversion or the URL doesn't look like HEIC, just show error
-    if (conversionAttempted || !isHeicUrl(src)) {
+    // If we've already tried conversion, just show error
+    if (conversionAttempted) {
       console.error('❌ [SmartImage] Image failed to load:', {
         src,
-        reason: conversionAttempted ? 'Conversion already attempted' : 'Not a HEIC URL',
+        reason: 'Conversion already attempted',
         timestamp: new Date().toISOString()
       })
       setHasError(true)
@@ -60,13 +60,14 @@ const SmartImageComponent = ({
     setConversionAttempted(true)
     setIsConverting(true)
 
-    console.log('🔍 [SmartImage] Image load failed, attempting HEIC conversion...', {
+    console.log('🔍 [SmartImage] Image load failed, checking if HEIC conversion needed...', {
       src,
+      looksLikeHeic: isHeicUrl(src),
       timestamp: new Date().toISOString()
     })
 
     try {
-      // Fetch the image as blob
+      // Fetch the image as blob to check actual content type
       const response = await fetch(src)
       if (!response.ok) {
         throw new Error(`Failed to fetch image: ${response.status}`)
