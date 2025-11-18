@@ -47,6 +47,11 @@ const SmartImageComponent = ({
   const handleError = async () => {
     // If we've already tried conversion or the URL doesn't look like HEIC, just show error
     if (conversionAttempted || !isHeicUrl(src)) {
+      console.error('❌ [SmartImage] Image failed to load:', {
+        src,
+        reason: conversionAttempted ? 'Conversion already attempted' : 'Not a HEIC URL',
+        timestamp: new Date().toISOString()
+      })
       setHasError(true)
       return
     }
@@ -54,6 +59,11 @@ const SmartImageComponent = ({
     // Mark that we're attempting conversion
     setConversionAttempted(true)
     setIsConverting(true)
+
+    console.log('🔍 [SmartImage] Image load failed, attempting HEIC conversion...', {
+      src,
+      timestamp: new Date().toISOString()
+    })
 
     try {
       // Fetch the image as blob
@@ -63,10 +73,18 @@ const SmartImageComponent = ({
       }
 
       const blob = await response.blob()
+      console.log('📦 [SmartImage] Blob fetched:', {
+        type: blob.type,
+        size: blob.size,
+        src
+      })
 
-      // Only convert if it's actually HEIC/HEIF
-      if (blob.type === 'image/heic' || blob.type === 'image/heif' || isHeicUrl(src)) {
-        console.log('🔄 Converting HEIC image on client side...')
+      // Only convert if the blob type is actually HEIC/HEIF
+      if (blob.type === 'image/heic' || blob.type === 'image/heif') {
+        console.log('🔄 [SmartImage] Converting HEIC image on client side...', {
+          blobType: blob.type,
+          blobSize: blob.size
+        })
 
         // Dynamically import heic2any to avoid SSR issues
         const { default: heic2any } = await import('heic2any')
@@ -83,14 +101,27 @@ const SmartImageComponent = ({
 
         setImageSrc(objectUrl)
         setIsConverting(false)
-        console.log('✅ HEIC conversion successful')
+        console.log('✅ [SmartImage] HEIC conversion successful', {
+          originalSize: blob.size,
+          convertedSize: finalBlob.size,
+          objectUrl
+        })
       } else {
         // Not actually HEIC, just a regular load error
+        console.warn('⚠️ [SmartImage] Blob type is not HEIC, showing error state:', {
+          expectedTypes: ['image/heic', 'image/heif'],
+          actualType: blob.type,
+          src
+        })
         setHasError(true)
         setIsConverting(false)
       }
     } catch (error) {
-      console.error('❌ Client-side HEIC conversion failed:', error)
+      console.error('❌ [SmartImage] Client-side HEIC conversion failed:', {
+        error: error instanceof Error ? error.message : String(error),
+        src,
+        stack: error instanceof Error ? error.stack : undefined
+      })
       setHasError(true)
       setIsConverting(false)
     }
