@@ -358,6 +358,8 @@ model Asset {
   name            String?  // Optional custom name
   width           Int?
   height          Int?
+  sourceType      String?  // 'pinterest' | 'instagram' | null for manual uploads
+  sourceUrl       String?  // Pinterest pin URL or Instagram post URL for deduplication
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -366,6 +368,7 @@ model Asset {
   @@map("assets")
   @@index([folderId])
   @@index([cacheAssetId])
+  @@index([sourceUrl])
 }
 
 // Product Context for storing product information and prompts
