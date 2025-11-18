@@ -16,8 +16,12 @@ import { ImageGallery } from '@/components/ImageGallery'
 import { getProxiedImageUrlById } from '@/lib/image-proxy'
 import { SmartImage } from '@/components/SmartImage'
 import { PostAnalyticsSheet } from '@/components/PostAnalyticsSheet'
+import { ThumbnailStrip } from '@/components/ThumbnailStrip'
+import { invalidateSlideThumbnail } from '@/components/SlideThumbnail'
+import { DraftSettingsDialog } from '@/components/DraftSettingsDialog'
+import type { RemixSlideType } from '@/lib/validations/remix-schema'
 import { SortingState, RowSelectionState } from '@tanstack/react-table'
-import { FileText, Loader2, Sparkles, Edit, ExternalLink, Trash2, Copy, Plus, X, GripVertical } from 'lucide-react'
+import { FileText, Loader2, Sparkles, Edit, ExternalLink, Trash2, Copy, Plus, X, GripVertical, Settings, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { DateRange } from '@/components/DateRangeFilter'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
@@ -162,6 +166,7 @@ function SortableSlide({
           className="text-[12px]"
           rows={8}
           searchTerms={searchTerms}
+          textBoxMode={true}
         />
       </div>
     </div>
@@ -228,6 +233,8 @@ export function ProjectPostsTable({
   const [isBulkOCRing, setIsBulkOCRing] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [itemToDelete, setItemToDelete] = useState<{ id: string; type: 'post' | 'draft'; name: string } | null>(null)
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
+  const [selectedDraftForSettings, setSelectedDraftForSettings] = useState<{ id: string; canvasSize?: { width: number; height: number } } | null>(null)
 
   // Parse search terms from search query
   const searchTerms = useMemo(() => {
@@ -415,6 +422,52 @@ export function ProjectPostsTable({
     }
   }, [])
 
+  // Handler to open settings dialog
+  const handleSettingsClick = useCallback((draft: RemixPost) => {
+    setSelectedDraftForSettings({
+      id: draft.id,
+      canvasSize: draft.canvasSize as { width: number; height: number } | undefined
+    })
+    setSettingsDialogOpen(true)
+  }, [])
+
+  // Handler to download draft as ZIP
+  const handleDownloadDraft = useCallback(async (draft: RemixPost) => {
+    try {
+      toast.info('Generating export...', {
+        description: 'This may take a moment'
+      })
+
+      const response = await fetch(`/api/remixes/${draft.id}/export`, {
+        method: 'POST'
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to generate export')
+      }
+
+      const result = await response.json()
+
+      // Download the file
+      const link = document.createElement('a')
+      link.href = result.downloadUrl
+      link.download = result.filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      toast.success('Export ready', {
+        description: `${result.slideCount} slides, ${result.imageCount} images`
+      })
+    } catch (error) {
+      console.error('Failed to download draft:', error)
+      toast.error('Failed to generate export', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
+    }
+  }, [])
+
   // Handler to update post description
   const handleSavePostDescription = useCallback(async (postId: string, newDescription: string) => {
     try {
@@ -465,6 +518,31 @@ export function ProjectPostsTable({
     }
   }, [])
 
+  // Handler to update draft name/title
+  const handleSaveDraftName = useCallback(async (draftId: string, newName: string) => {
+    try {
+      const response = await fetch(`/api/remixes/${draftId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: newName
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update draft name')
+      }
+
+      toast.success('Draft name updated')
+    } catch (error) {
+      console.error('Failed to update draft name:', error)
+      toast.error('Failed to update draft name')
+      throw error
+    }
+  }, [])
+
   // Helper to safely get slides array from draft row
   const getSlidesArray = useCallback((slides: any): any[] => {
     try {
@@ -478,6 +556,77 @@ export function ProjectPostsTable({
 
   // Handler to update draft slide text
   const handleSaveDraftSlideText = useCallback(async (draftId: string, slideIndex: number, newText: string) => {
+    // Find the draft to get current slide data
+    const draftIndex = displayRows.findIndex(r => r.id === draftId && r._rowType === 'draft')
+    if (draftIndex === -1) return
+
+    const draft = displayRows[draftIndex] as RemixPost & { _rowType: 'draft' }
+    const slides = getSlidesArray(draft.slides)
+    const currentSlide = slides[slideIndex]
+    if (!currentSlide) return
+
+    // Split newText by newlines to create textBoxes array
+    const textLines = newText.split('\n').filter(line => line.trim() !== '')
+
+    // Create textBoxes from lines, preserving existing textBox properties or creating new ones
+    const updatedTextBoxes = textLines.map((line, index) => {
+      const existingTextBox = currentSlide.textBoxes?.[index]
+
+      if (existingTextBox) {
+        // Update existing text box
+        return {
+          ...existingTextBox,
+          text: line
+        }
+      } else {
+        // Create new text box with default properties
+        return {
+          id: `text_${Date.now()}_${index}`,
+          text: line,
+          x: 0.1,
+          y: 0.3 + (index * 0.15), // Stack vertically
+          width: 0.8,
+          height: 0.12,
+          fontSize: 44,
+          fontFamily: 'Poppins',
+          fontWeight: 'bold' as const,
+          color: '#000000',
+          textAlign: 'center' as const,
+          backgroundColor: '#ffffff',
+          backgroundOpacity: 1,
+          borderRadius: 12,
+          paddingTop: 24,
+          paddingRight: 32,
+          paddingBottom: 24,
+          paddingLeft: 32,
+          lineHeight: 1.2,
+          zIndex: index
+        }
+      }
+    })
+
+    // Optimistically update the UI
+    const updatedSlides = [...slides]
+    updatedSlides[slideIndex] = {
+      ...currentSlide,
+      paraphrasedText: newText,
+      textBoxes: updatedTextBoxes
+    }
+
+    console.log('Saving slide with textBoxes:', updatedTextBoxes.map(tb => ({ text: tb.text })))
+
+    const updatedDraft = {
+      ...draft,
+      slides: updatedSlides
+    }
+
+    const updatedRows = [...displayRows]
+    updatedRows[draftIndex] = updatedDraft
+    setOptimisticRows(updatedRows)
+
+    // Invalidate thumbnail cache for this slide
+    invalidateSlideThumbnail(updatedSlides[slideIndex])
+
     try {
       const response = await fetch(`/api/remixes/${draftId}/slides/${slideIndex}`, {
         method: 'PATCH',
@@ -485,7 +634,8 @@ export function ProjectPostsTable({
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          paraphrasedText: newText
+          paraphrasedText: newText,
+          textBoxes: updatedTextBoxes
         })
       })
 
@@ -493,13 +643,21 @@ export function ProjectPostsTable({
         throw new Error('Failed to update slide text')
       }
 
+      // Trigger data refetch to update thumbnails
+      if (onRefetchData) {
+        onRefetchData()
+      }
+
       toast.success('Slide text updated')
     } catch (error) {
       console.error('Failed to update slide text:', error)
       toast.error('Failed to update slide text')
+
+      // Revert optimistic update
+      setOptimisticRows(rows)
       throw error
     }
-  }, [])
+  }, [displayRows, getSlidesArray, onRefetchData, rows])
 
   // Handler to add a new slide to a draft
   const handleAddSlide = useCallback(async (draftId: string) => {
@@ -724,6 +882,100 @@ export function ProjectPostsTable({
     }
   }, [displayRows, rows, getSlidesArray])
 
+  // Handler to set slide background image
+  const handleSetSlideBackground = useCallback(async (draftId: string, slideIndex: number, cacheAssetId: string) => {
+    // Find the draft in current rows
+    const draftIndex = displayRows.findIndex(row => row.id === draftId && row._rowType === 'draft')
+    if (draftIndex === -1) return
+
+    const draft = displayRows[draftIndex] as RemixPost & { _rowType: 'draft' }
+
+    // Parse existing slides
+    let existingSlides = getSlidesArray(draft.slides)
+    const currentSlide = existingSlides[slideIndex]
+    if (!currentSlide) return
+
+    // Create or update background layer with image
+    const backgroundLayers = currentSlide.backgroundLayers || []
+    const imageLayerIndex = backgroundLayers.findIndex(layer => layer.type === 'image')
+
+    let updatedBackgroundLayers
+    if (imageLayerIndex !== -1) {
+      // Update existing image layer
+      updatedBackgroundLayers = [...backgroundLayers]
+      updatedBackgroundLayers[imageLayerIndex] = {
+        ...updatedBackgroundLayers[imageLayerIndex],
+        cacheAssetId: cacheAssetId
+      }
+    } else {
+      // Add new image layer
+      const newImageLayer = {
+        id: `bg_${Date.now()}_image`,
+        type: 'image' as const,
+        cacheAssetId: cacheAssetId,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+        rotation: 0,
+        fitMode: 'cover' as const,
+        opacity: 1,
+        blendMode: 'normal' as const,
+        zIndex: 1
+      }
+      updatedBackgroundLayers = [newImageLayer, ...backgroundLayers]
+    }
+
+    // Optimistically update the UI
+    const updatedSlides = [...existingSlides]
+    updatedSlides[slideIndex] = {
+      ...currentSlide,
+      backgroundLayers: updatedBackgroundLayers
+    }
+
+    const updatedDraft = {
+      ...draft,
+      slides: updatedSlides
+    }
+
+    const updatedRows = [...displayRows]
+    updatedRows[draftIndex] = updatedDraft
+    setOptimisticRows(updatedRows)
+
+    // Invalidate thumbnail cache for this slide
+    invalidateSlideThumbnail(updatedSlides[slideIndex])
+
+    try {
+      const response = await fetch(`/api/remixes/${draftId}/slides/${slideIndex}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          backgroundLayers: updatedBackgroundLayers
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update slide background')
+      }
+
+      // Trigger data refetch to update thumbnails
+      if (onRefetchData) {
+        onRefetchData()
+      }
+
+      toast.success('Background image updated')
+    } catch (error) {
+      console.error('Failed to update slide background:', error)
+      toast.error('Failed to update background image')
+
+      // Revert optimistic update
+      setOptimisticRows(rows)
+      throw error
+    }
+  }, [displayRows, getSlidesArray, onRefetchData, rows])
+
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return
 
@@ -831,7 +1083,8 @@ export function ProjectPostsTable({
         if (row._rowType === 'draft') {
           // Handle specific columns for drafts
           if (columnId === 'authorHandle') {
-            // Show draft icon and name
+            // Show thumbnail strip + metadata for drafts
+            const slides = getSlidesArray(row.slides)
             const createdDate = new Date(row.createdAt)
             const formattedDateTime = createdDate.toLocaleString('en-US', {
               month: 'short',
@@ -843,15 +1096,33 @@ export function ProjectPostsTable({
             })
 
             return (
-              <div className="flex items-center space-x-3 min-w-[260px]">
-                <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-blue-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">{row.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {formattedDateTime} • {getSlidesArray(row.slides).length} slides
-                  </p>
+              <div className="flex flex-col gap-2 min-w-[260px]" onClick={(e) => e.stopPropagation()}>
+                {/* Thumbnail Strip */}
+                <ThumbnailStrip
+                  slides={slides}
+                  size="sm"
+                  draftId={row.id}
+                  onBackgroundImageSelect={async (slideIndex, asset) => {
+                    await handleSetSlideBackground(row.id, slideIndex, asset.cacheAssetId)
+                  }}
+                />
+
+                {/* Metadata */}
+                <div className="text-sm space-y-0.5">
+                  <div className="font-medium text-foreground">
+                    <InlineEditableText
+                      value={row.name}
+                      onSave={async (newValue) => {
+                        await handleSaveDraftName(row.id, newValue)
+                      }}
+                      placeholder="Untitled Draft"
+                      disabled={false}
+                      className="text-sm font-medium"
+                    />
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {formattedDateTime} • {slides.length} slides
+                  </div>
                   <div className="flex flex-wrap gap-1 mt-1">
                     <Badge variant="outline" className="text-xs">
                       {row.generationType}
@@ -1094,6 +1365,46 @@ export function ProjectPostsTable({
                       </TooltipContent>
                     </Tooltip>
 
+                    {/* Settings Button */}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleSettingsClick(draft)
+                          }}
+                          className="h-8 w-8 p-0"
+                        >
+                          <Settings className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="left">
+                        <p>Draft Settings</p>
+                      </TooltipContent>
+                    </Tooltip>
+
+                    {/* Download Button */}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDownloadDraft(draft)
+                          }}
+                          className="h-8 w-8 p-0"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="left">
+                        <p>Download ZIP</p>
+                      </TooltipContent>
+                    </Tooltip>
+
                     {/* Delete Draft Button */}
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -1199,7 +1510,7 @@ export function ProjectPostsTable({
       }
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handlePreviewPost, handleOpenImageGallery, handleRemixPost, handleRowClick, handleTriggerOCR, onRefetchData, viewMode, searchTerms, formatDate, handleDeleteClick, handleCopyDraftToClipboard, handleSavePostDescription, handleSaveDraftDescription, handleSaveDraftSlideText, getSlidesArray, handleAddSlide, handleRemoveSlide, handleReorderSlides, handleToggleBookmark])
+  }, [handlePreviewPost, handleOpenImageGallery, handleRemixPost, handleRowClick, handleTriggerOCR, onRefetchData, viewMode, searchTerms, formatDate, handleDeleteClick, handleCopyDraftToClipboard, handleSavePostDescription, handleSaveDraftDescription, handleSaveDraftName, handleSaveDraftSlideText, getSlidesArray, handleAddSlide, handleRemoveSlide, handleReorderSlides, handleToggleBookmark, handleSetSlideBackground])
   // Note: Intentionally excluding selectedRows, handleSelectRow, handleSelectAll, allPostsSelected
   // The checkbox cells read current selection state when they render, but columns don't need to recreate
 
@@ -1408,6 +1719,23 @@ export function ProjectPostsTable({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Draft Settings Dialog */}
+      {selectedDraftForSettings && (
+        <DraftSettingsDialog
+          open={settingsDialogOpen}
+          onClose={() => {
+            setSettingsDialogOpen(false)
+            setSelectedDraftForSettings(null)
+          }}
+          draftId={selectedDraftForSettings.id}
+          currentCanvasSize={selectedDraftForSettings.canvasSize}
+          onSave={() => {
+            // Refresh the page to reload draft data
+            window.location.reload()
+          }}
+        />
+      )}
     </>
   )
 }
