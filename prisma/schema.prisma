@@ -44,6 +44,19 @@ enum CacheStatus {
 
 // New models for TikTok Profile Explorer
 
+model ProfileGroup {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  profiles    TiktokProfile[]
+
+  @@map("profile_groups")
+  @@index([name])
+}
+
 model TiktokProfile {
   id          String   @id @default(cuid())
   handle      String   @unique // TikTok username (unique_id)
@@ -51,6 +64,10 @@ model TiktokProfile {
   avatarId    String?  @db.Uuid // Cache asset ID reference
   bio         String?  // Profile bio/description
   verified    Boolean  @default(false)
+
+  // Group assignment
+  profileGroupId String?
+  profileGroup   ProfileGroup? @relation(fields: [profileGroupId], references: [id], onDelete: SetNull)
 
   // Deprecated - kept for backwards compatibility, not used
   followerCount Int?   @default(0)
@@ -84,6 +101,7 @@ model TiktokProfile {
   @@index([handle])
   @@index([monitoringEnabled, nextMonitoringRun])
   @@index([isOwnProfile])
+  @@index([profileGroupId])
 }
 
 // Post Category for TikTok content classification

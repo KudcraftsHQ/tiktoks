@@ -5,10 +5,10 @@ const prisma = new PrismaClient()
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ postId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { postId } = await params
+    const { id: postId } = await params
 
     // Check if post exists
     const post = await prisma.tiktokPost.findUnique({

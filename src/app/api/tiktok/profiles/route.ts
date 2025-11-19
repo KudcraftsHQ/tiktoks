@@ -14,11 +14,23 @@ export async function GET(request: NextRequest) {
     const minFollowers = searchParams.get('minFollowers')
     const maxFollowers = searchParams.get('maxFollowers')
     const isOwnProfile = searchParams.get('isOwnProfile')
+    const groupId = searchParams.get('groupId')
+    const dateFrom = searchParams.get('dateFrom')
+    const dateTo = searchParams.get('dateTo')
 
     const skip = (page - 1) * limit
 
-    // Build where clause
+    // Build where clause for profiles (NOT filtered by date)
     const where: any = {}
+
+    // Filter by group
+    if (groupId) {
+      if (groupId === 'ungrouped') {
+        where.profileGroupId = null
+      } else {
+        where.profileGroupId = groupId
+      }
+    }
 
     // Filter by own profile flag
     if (isOwnProfile === 'true') {
@@ -70,12 +82,40 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Build where clause for posts (filtered by date)
+    const postWhere: any = {}
+    if (dateFrom || dateTo) {
+      postWhere.publishedAt = {}
+      if (dateFrom) {
+        postWhere.publishedAt.gte = new Date(dateFrom)
+      }
+      if (dateTo) {
+        postWhere.publishedAt.lte = new Date(dateTo)
+      }
+    }
+
     const [profiles, total] = await Promise.all([
       prisma.tiktokProfile.findMany({
         where,
         include: {
           _count: {
             select: { posts: true }
+          },
+          profileGroup: {
+            select: {
+              id: true,
+              name: true
+            }
+          },
+          posts: {
+            where: postWhere,
+            select: {
+              viewCount: true,
+              likeCount: true,
+              shareCount: true,
+              commentCount: true,
+              saveCount: true
+            }
           }
         },
         orderBy: {
@@ -89,24 +129,44 @@ export async function GET(request: NextRequest) {
 
     const hasMore = skip + limit < total
 
-    // Resolve avatar URLs for all profiles
+    // Resolve avatar URLs and calculate date-filtered metrics for all profiles
     console.log(`🔗 [API] Resolving avatar URLs for ${profiles.length} profiles`)
     const profilesWithAvatars = await Promise.all(
       profiles.map(async (profile) => {
         const avatarUrl = await cacheAssetService.getUrl(profile.avatarId)
+
+        // Calculate metrics from date-filtered posts
+        let totalPosts = profile.posts.length
+        let totalViews = BigInt(0)
+        let totalLikes = 0
+        let totalComments = 0
+        let totalShares = 0
+        let totalSaves = 0
+
+        profile.posts.forEach(post => {
+          totalViews += post.viewCount || BigInt(0)
+          totalLikes += post.likeCount || 0
+          totalComments += post.commentCount || 0
+          totalShares += post.shareCount || 0
+          totalSaves += post.saveCount || 0
+        })
+
         return {
           ...profile,
           avatar: avatarUrl,
-          // Serialize BigInt fields to strings for JSON
-          totalViews: profile.totalViews?.toString() || '0',
-          totalLikes: profile.totalLikes?.toString() || '0',
-          totalShares: profile.totalShares?.toString() || '0',
-          totalComments: profile.totalComments?.toString() || '0',
-          totalSaves: profile.totalSaves?.toString() || '0'
+          // Use date-filtered metrics instead of profile aggregates
+          totalPosts,
+          totalViews: totalViews.toString(),
+          totalLikes: totalLikes.toString(),
+          totalShares: totalShares.toString(),
+          totalComments: totalComments.toString(),
+          totalSaves: totalSaves.toString(),
+          // Remove posts array from response
+          posts: undefined
         }
       })
     )
-    console.log(`✅ [API] Resolved avatar URLs for all profiles`)
+    console.log(`✅ [API] Resolved avatar URLs and calculated metrics for all profiles`)
 
     return NextResponse.json({
       profiles: profilesWithAvatars,

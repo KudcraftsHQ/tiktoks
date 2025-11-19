@@ -404,7 +404,7 @@ export default function ProjectDetailPage() {
           }
 
           // Content text with slides as H3
-          if (post.images && post.images.length > 0) {
+          if (post.images && Array.isArray(post.images) && post.images.length > 0) {
             postContent.push('### Content Text')
             postContent.push('')
 

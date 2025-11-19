@@ -216,11 +216,37 @@ The hook should feel like a friend about to share a secret, not a marketer makin
   const ctaExamplesSection = productContext
     ? `
 **CTA SLIDE EXAMPLES (Study These Patterns):**
-   - "The biggest game changer? I stopped guessing. Found this thing called ${productContext.title} that literally shows you what's killing your reach before you post. And how to fix it. Feels like cheating honestly"
-   - "Honestly the only reason I figured this out? Started using ${productContext.title}. It predicts how your video will perform and tells you exactly what needs fixing. I swear it's spooky accurate"
-   - "This part changed everything for me. There's this app ${productContext.title} that basically recreates TikTok's scoring system. Shows you what's hurting your virality before you even post. Game changer ngl"
 
-   Notice the pattern: Benefit first → Personal discovery → Specific feature → Authentic reaction
+Example 1 (55-60 words):
+"one of the biggest changes? i stopped guessing and started actually analyzing.
+
+i use this app called ${productContext.title}. it not only predicts my vids performance, it tells me exactly what to fix: pacing, hook, captions... it's like getting coached by the algorithm itself"
+
+Example 2 (50-55 words):
+"some apps can really do the heavy lifting for you.
+
+used to be like 'why did this flop?' now i check my videos in ${productContext.title} before i post. it's like a lil algorithm bff that gives notes while i do my skincare 🫶"
+
+Example 3 (45-50 words):
+"easy to overthink your own content endlessly.
+
+started using ${productContext.title} recently to analyze my videos before posting. gives you an outside perspective on what needs work. pretty helpful honestly"
+
+Example 4 (50-55 words):
+"they pay close attention to what works.
+
+tools like ${productContext.title} help with that. they show what's holding people, what's not, and how to improve without the guesswork"
+
+**CRITICAL CTA PATTERNS:**
+1. LENGTH: 45-60 words minimum (current examples are too short!)
+2. TWO-PART STRUCTURE:
+   - Part 1: Relatable problem/realization (1-2 sentences)
+   - Part 2: Casual tool discovery woven into daily life (2-3 sentences)
+3. AUTHENTIC MARKERS: "honestly", "lol", "ngl", "pretty helpful", "i swear"
+4. LIFESTYLE INTEGRATION: Reference daily activities ("while i do my skincare", "before i post", "sipping iced coffee")
+5. SPECIFIC BENEFITS: Mention 2-3 concrete features without sounding like a sales pitch
+6. CONVERSATIONAL TONE: Use lowercase, natural pauses, incomplete thoughts
+7. PERSONAL EXPERIENCE: "i use", "i found", "started using", NOT "you should try"
 `
     : ''
 
@@ -267,7 +293,7 @@ ${ctaExamplesSection}
    - Soft CTA (SECOND-TO-LAST SLIDE): ${productContext ? 'This should read like a genuine personal recommendation, NOT marketing copy. Lead with the transformation/benefit that solves pain points from earlier slides, then casually introduce the product as your personal discovery. Use first-person experience markers ("I found", "I use", "honestly", "I swear") and maintain the same conversational tone as the rest of the carousel. Study the reference posts\' CTA style - notice how they sound like secrets being shared, not products being sold.' : 'Study the reference posts\' CTA style and adapt it naturally without altering the core approach. It should flowing naturally from the previous slide.'}
    - FINAL SLIDE (LAST SLIDE): Add a satisfying conclusion/summary that wraps up the storyteller's journey and provides closure after the CTA
    - The sequence must feel conversational, not jumpy or disconnected
-   - Open loops should create a natural pull to the next slide, not feel forced${productContext ? '\n\n**CRITICAL: CTA Slide Guidelines (Second-to-Last Slide):**\n   - Frame it as YOUR personal discovery, not a recommendation ("I found this app...", "I\'ve been using...", "I swear...")\n   - Lead with the TRANSFORMATION first, product name second ("tells you how your video might do before you post" → "it\'s called X")\n   - Maintain the same conversational, authentic voice as the rest of the carousel\n   - Include personality markers that show genuine experience ("ngl", "honestly", "feels like cheating", "I swear")\n   - Make it feel like you\'re letting them in on a secret, not selling to them\n   - The benefit should directly address the pain points built up in the CONTENT slides\n   - Keep the same casual rhythm and natural pauses as your storytelling\n   - Example structure: "[Benefit statement]. [Personal discovery of tool]. [Specific feature that delivers benefit]. [Authentic reaction]"' : ''}
+   - Open loops should create a natural pull to the next slide, not feel forced${productContext ? '\n\n**CRITICAL: CTA Slide Guidelines (Second-to-Last Slide):**\n   - LENGTH REQUIREMENT: 45-60 words MINIMUM (this is crucial - short CTAs underperform!)\n   - TWO-PART STRUCTURE:\n     • Part 1 (15-20 words): Start with a relatable realization or problem ("one of the biggest changes?", "easy to overthink your content", "used to be like \'why did this flop?\'")\n     • Part 2 (30-40 words): Casual tool introduction with specific benefits\n   - Frame it as YOUR personal discovery, not a recommendation ("i use this app called...", "started using...", "i found...")\n   - LIFESTYLE INTEGRATION: Weave into daily routine ("while i do my skincare", "before i post", "sipping my coffee")\n   - SPECIFIC FEATURES: Mention 2-3 concrete benefits ("predicts performance", "tells me what to fix", "shows hook strength") WITHOUT sounding like marketing\n   - AUTHENTIC MARKERS: Include natural reactions ("honestly", "ngl", "pretty helpful honestly", "it\'s like...", "i swear")\n   - CONVERSATIONAL TONE: Use lowercase, natural pauses, incomplete thoughts, casual rhythm\n   - The benefit should directly address pain points built up in CONTENT slides\n   - Make it feel like sharing a secret with a friend, NOT selling a product' : ''}
 
 3. Slide Count:
    - Generate exactly ${variationCount} variations

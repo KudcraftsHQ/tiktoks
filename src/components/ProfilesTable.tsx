@@ -20,12 +20,23 @@ import { ExternalLink, Users, Heart, Video, CheckCircle, PlayCircle, PauseCircle
 interface ProfilesTableProps {
   profiles: TikTokProfile[]
   onProfilesChange?: () => void
+  selectedProfiles?: Set<string>
+  onSelectionChange?: (selectedProfiles: Set<string>) => void
 }
 
-export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps) {
+export function ProfilesTable({
+  profiles,
+  onProfilesChange,
+  selectedProfiles: externalSelectedProfiles,
+  onSelectionChange
+}: ProfilesTableProps) {
   const router = useRouter()
   const [selectedProfile, setSelectedProfile] = useState<TikTokProfile | null>(null)
-  const [selectedProfiles, setSelectedProfiles] = useState<Set<string>>(new Set())
+  const [internalSelectedProfiles, setInternalSelectedProfiles] = useState<Set<string>>(new Set())
+
+  // Use external selection state if provided, otherwise use internal state
+  const selectedProfiles = externalSelectedProfiles ?? internalSelectedProfiles
+  const setSelectedProfiles = onSelectionChange ?? setInternalSelectedProfiles
   const [isBulkToggling, setIsBulkToggling] = useState(false)
   const [isBulkUpdating, setIsBulkUpdating] = useState(false)
   const [forceRecache, setForceRecache] = useState(false)
@@ -67,8 +78,8 @@ export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps
     setSelectedProfile(profile)
   }
 
-  const handleRowClick = (profile: TikTokProfile) => {
-    router.push(`/profiles/${profile.handle}`)
+  const handleNavigateToProfile = (handle: string) => {
+    router.push(`/profiles/${handle}`)
   }
 
   const handleToggleOwnProfile = async (profileId: string, isOwn: boolean) => {
@@ -232,6 +243,8 @@ export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps
     onToggleOwnProfile: handleToggleOwnProfile,
     onToggleMonitoring: handleToggleMonitoring,
     onTriggerUpdate: handleTriggerUpdate,
+    onProfileUpdate: onProfilesChange,
+    onNavigateToProfile: handleNavigateToProfile,
     selectedProfiles,
     onSelectProfile: handleSelectProfile,
     onSelectAll: handleSelectAll,
@@ -246,9 +259,11 @@ export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps
         enablePagination={false}
         enableSelection={true}
         onRowSelectionChange={handleRowSelectionChange}
-        onRowClick={handleRowClick}
-        leftStickyColumnsCount={1}
+        leftStickyColumnsCount={3}
         rightStickyColumnsCount={1}
+        rowClassName={(row) => {
+          return 'bg-background'
+        }}
       />
 
       {/* Profile Preview Dialog */}

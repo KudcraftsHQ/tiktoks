@@ -34,6 +34,7 @@ import {
 } from 'lucide-react'
 // import { createSortableHeader } from '@/components/ui/data-table'
 import Link from 'next/link'
+import { InlineProfileGroupSelector } from '@/components/InlineProfileGroupSelector'
 
 export interface TikTokProfile {
   id: string
@@ -43,6 +44,9 @@ export interface TikTokProfile {
   avatarId?: string // Cache asset ID (for reference, usually not used directly in UI)
   bio?: string
   verified: boolean
+
+  // Group assignment
+  profileGroup?: { id: string; name: string } | null
 
   // Deprecated - kept for backwards compatibility
   followerCount?: number
@@ -78,6 +82,8 @@ interface ProfilesTableColumnsProps {
   onToggleOwnProfile?: (profileId: string, isOwn: boolean) => Promise<void>
   onToggleMonitoring?: (profileId: string, enabled: boolean) => Promise<void>
   onTriggerUpdate?: (profileId: string) => Promise<void>
+  onProfileUpdate?: () => void
+  onNavigateToProfile?: (handle: string) => void
   selectedProfiles?: Set<string>
   onSelectProfile?: (profileId: string, selected: boolean) => void
   onSelectAll?: (selected: boolean) => void
@@ -248,6 +254,8 @@ export const createProfilesTableColumns = ({
   onToggleOwnProfile,
   onToggleMonitoring,
   onTriggerUpdate,
+  onProfileUpdate,
+  onNavigateToProfile,
   selectedProfiles = new Set(),
   onSelectProfile,
   onSelectAll,
@@ -261,7 +269,15 @@ export const createProfilesTableColumns = ({
     cell: ({ row }) => {
       const profile = row.original
       return (
-        <div className="flex items-center space-x-3">
+        <div
+          className="flex items-center space-x-3 cursor-pointer hover:opacity-70 transition-opacity"
+          onClick={(e) => {
+            e.stopPropagation()
+            if (onNavigateToProfile) {
+              onNavigateToProfile(profile.handle)
+            }
+          }}
+        >
           {profile.avatar ? (
             <img
               src={profile.avatar}
@@ -293,6 +309,8 @@ export const createProfilesTableColumns = ({
   {
     accessorKey: 'bio',
     header: 'Bio',
+    size: 200,
+    meta: { pinned: 'left' },
     cell: ({ row }) => {
       const profile = row.original
       return profile.bio ? (
@@ -301,6 +319,22 @@ export const createProfilesTableColumns = ({
         </div>
       ) : (
         <span className="text-muted-foreground text-sm">No bio</span>
+      )
+    }
+  },
+  {
+    accessorKey: 'profileGroup',
+    header: 'Group',
+    size: 150,
+    meta: { pinned: 'left' },
+    cell: ({ row }) => {
+      const profile = row.original
+      return (
+        <InlineProfileGroupSelector
+          profileId={profile.id}
+          currentGroup={profile.profileGroup || null}
+          onUpdate={onProfileUpdate}
+        />
       )
     }
   },

@@ -289,10 +289,10 @@ export function ProjectPostsTable({
           ...row,
           _proxiedAuthorAvatar: getStableProxyUrl(row.authorAvatarId),
           _proxiedCoverUrl: getStableProxyUrl(row.coverId),
-          _proxiedImages: row.images?.map(img => ({
+          _proxiedImages: Array.isArray(row.images) ? row.images.map(img => ({
             ...img,
             _proxiedUrl: getStableProxyUrl(img.cacheAssetId)
-          }))
+          })) : []
         }
       }
       // For drafts, no proxying needed yet

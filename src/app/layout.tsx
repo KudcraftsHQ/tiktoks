@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/lib/theme-provider";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Toaster } from "@/components/ui/sonner";
+import NextTopLoader from 'nextjs-toploader';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -52,6 +53,12 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased dark theme-mono`}
       >
+          <NextTopLoader
+            color="#FFFFFF"
+            height={2}
+            shadow="0 0 10px #990FFA, 0 0 5px #990FFA"
+            showSpinner={false}
+          />
           <SidebarProvider>
             <AppSidebar />
             <SidebarInset>

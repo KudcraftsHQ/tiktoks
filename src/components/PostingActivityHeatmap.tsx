@@ -11,9 +11,10 @@ interface PostingActivityHeatmapProps {
   data: HeatmapData[]
   showStreak?: boolean
   firstPostDate?: string | null // ISO date string of the first post
+  dateRange?: { from?: Date; to?: Date } // Optional date range to limit display
 }
 
-export function PostingActivityHeatmap({ data, showStreak = false, firstPostDate }: PostingActivityHeatmapProps) {
+export function PostingActivityHeatmap({ data, showStreak = false, firstPostDate, dateRange }: PostingActivityHeatmapProps) {
   const heatmapData = useMemo(() => {
     // Convert data to internal format
     const processedData: { date: Date; count: number; month: string; dayOfWeek: number }[] = []
@@ -24,17 +25,32 @@ export function PostingActivityHeatmap({ data, showStreak = false, firstPostDate
       dataMap.set(item.date, item.count)
     })
 
-    // Get last 3 months from today
+    // Determine date range to display
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    const sixMonthsAgo = new Date(today)
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
-    sixMonthsAgo.setHours(0, 0, 0, 0)
-    const daysSinceThreeMonthsAgo = Math.floor((today.getTime() - sixMonthsAgo.getTime()) / (1000 * 60 * 60 * 24)) + 1
 
-    // Initialize all days from 3 months ago to today
-    for (let i = 0; i < daysSinceThreeMonthsAgo; i++) {
-      const date = new Date(sixMonthsAgo)
+    let startDate: Date
+    let endDate: Date
+
+    if (dateRange?.from && dateRange?.to) {
+      // Use provided date range
+      startDate = new Date(dateRange.from)
+      startDate.setHours(0, 0, 0, 0)
+      endDate = new Date(dateRange.to)
+      endDate.setHours(0, 0, 0, 0)
+    } else {
+      // Default to last 6 months
+      endDate = today
+      startDate = new Date(today)
+      startDate.setMonth(startDate.getMonth() - 6)
+      startDate.setHours(0, 0, 0, 0)
+    }
+
+    const totalDays = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
+
+    // Initialize all days in the range
+    for (let i = 0; i < totalDays; i++) {
+      const date = new Date(startDate)
       date.setDate(date.getDate() + i)
       date.setHours(0, 0, 0, 0)
 
@@ -50,7 +66,7 @@ export function PostingActivityHeatmap({ data, showStreak = false, firstPostDate
     }
 
     return processedData
-  }, [data])
+  }, [data, dateRange])
 
   // Calculate max count for color intensity
   const maxCount = Math.max(...heatmapData.map(d => d.count), 1)

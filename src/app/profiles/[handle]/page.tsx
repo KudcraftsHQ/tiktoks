@@ -881,7 +881,11 @@ function ProfileDetailPageContent() {
                 </div>
               </div>
             ) : (
-              <PostingActivityHeatmap data={displayActivityData} firstPostDate={displayFirstPostDate} />
+              <PostingActivityHeatmap
+                data={displayActivityData}
+                firstPostDate={displayFirstPostDate}
+                dateRange={dateRange}
+              />
             )}
             {/* Posting Time Analysis Chart */}
             {timeAnalysisLoading ? (

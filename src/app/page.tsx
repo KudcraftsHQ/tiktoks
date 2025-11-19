@@ -870,7 +870,11 @@ function PostsPageContent() {
             )}
 
             {/* Posting Activity Heatmap */}
-            <PostingActivityHeatmap data={displayActivityData} firstPostDate={displayFirstPostDate} />
+            <PostingActivityHeatmap
+              data={displayActivityData}
+              firstPostDate={displayFirstPostDate}
+              dateRange={dateRange}
+            />
 
             {/* Posting Time Chart */}
             <PostingTimeChart
