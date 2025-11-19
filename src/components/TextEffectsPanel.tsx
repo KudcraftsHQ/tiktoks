@@ -206,6 +206,36 @@ export function TextEffectsPanel({ textBox, onUpdate }: TextEffectsPanelProps) {
         </>
       )}
 
+      {/* Outline Controls */}
+      <div>
+        <label style={{ fontSize: '12px', fontWeight: 500, display: 'block', marginBottom: '6px' }}>
+          Outline Width: {textBox.outlineWidth ?? 0}px
+        </label>
+        <input
+          type="range"
+          min="0"
+          max="20"
+          value={textBox.outlineWidth ?? 0}
+          onChange={(e) => onUpdate({ outlineWidth: parseInt(e.target.value) })}
+          style={{ width: '100%' }}
+        />
+      </div>
+      
+      {/* Outline Color */}
+      {(textBox.outlineWidth ?? 0) > 0 && (
+        <div>
+          <label style={{ fontSize: '12px', fontWeight: 500, display: 'block', marginBottom: '6px' }}>
+            Outline Color
+          </label>
+          <input
+            type="color"
+            value={textBox.outlineColor || '#000000'}
+            onChange={(e) => onUpdate({ outlineColor: e.target.value })}
+            style={{ width: '100%', height: '36px', border: '1px solid #e0e0e0', borderRadius: '4px' }}
+          />
+        </div>
+      )}
+
       {/* Enable Blob Background */}
       <div>
         <label style={{ fontSize: '12px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px' }}>

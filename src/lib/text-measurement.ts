@@ -23,7 +23,11 @@ export interface TextMeasurementOptions {
  */
 export function measureTextLines(options: TextMeasurementOptions): LineMeasurement[] {
   if (typeof window === 'undefined') {
-    throw new Error('measureTextLines can only be used in browser environment')
+    // Return fallback or empty array for server-side rendering
+    return options.text.split('\n').map(line => ({
+      text: line,
+      width: line.length * options.fontSize * 0.6 // Rough estimate
+    }))
   }
 
   const {
@@ -87,7 +91,11 @@ export function measureTextLines(options: TextMeasurementOptions): LineMeasureme
  */
 export function measureTextWithWrapping(options: TextMeasurementOptions): LineMeasurement[] {
   if (typeof window === 'undefined') {
-    throw new Error('measureTextWithWrapping can only be used in browser environment')
+    // Return fallback or empty array for server-side rendering
+    return options.text.split('\n').map(line => ({
+      text: line,
+      width: line.length * options.fontSize * 0.6 // Rough estimate
+    }))
   }
 
   const {

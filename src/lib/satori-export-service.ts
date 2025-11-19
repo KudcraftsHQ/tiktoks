@@ -80,6 +80,15 @@ class SatoriExportService {
 
     // Convert JSX to SVG using Satori
     console.log('🎨 [Satori] Converting JSX to SVG...')
+    console.log('🎨 [Satori] Font data:', fonts.map(f => ({ name: f.name, weight: f.weight, style: f.style })))
+
+    // Debug: Log the JSX structure to see what we're passing to Satori
+    try {
+      console.log('🎨 [Satori] JSX props:', JSON.stringify(jsx.props, null, 2))
+    } catch (e) {
+      console.log('🎨 [Satori] Could not stringify JSX props')
+    }
+
     const svg = await satori(jsx, {
       width,
       height,
@@ -114,7 +123,17 @@ class SatoriExportService {
   /**
    * Parse font weight string to number
    */
-  private parseFontWeight(weight: string): number {
+  private parseFontWeight(weight: string | number | undefined | null): number {
+    // Handle undefined/null/empty values
+    if (!weight || (typeof weight === 'string' && weight.trim() === '')) {
+      return 400 // Default to regular weight
+    }
+
+    // If already a number, return it
+    if (typeof weight === 'number') {
+      return weight
+    }
+
     const weightMap: Record<string, number> = {
       thin: 100,
       extralight: 200,
@@ -128,7 +147,7 @@ class SatoriExportService {
       black: 900,
     }
 
-    const normalized = weight.toLowerCase()
+    const normalized = weight.toLowerCase().trim()
     return weightMap[normalized] || parseInt(weight) || 400
   }
 

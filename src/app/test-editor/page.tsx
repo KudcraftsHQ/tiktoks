@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { SlideEditor } from '@/components/SlideEditor'
 import type { SlideData } from '@/lib/satori-renderer'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
+import html2canvas from 'html2canvas-pro'
 
 export default function TestEditorPage() {
   const [isExporting, setIsExporting] = useState(false)
+  const previewContainerRef = useRef<HTMLDivElement>(null)
 
   // Initial slide data with new effect examples
   const [slideData, setSlideData] = useState<SlideData>({
@@ -86,52 +88,90 @@ export default function TestEditorPage() {
   })
 
   const handleExport = async () => {
+    if (!previewContainerRef.current) {
+      toast.error('Preview container not found')
+      return
+    }
+
     setIsExporting(true)
 
     try {
-      const response = await fetch('/api/test-satori/export', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          slide: slideData,
-          options: {
-            format: 'png',
-            quality: 0.95,
-          },
-        }),
-      })
+      console.log('🚀 Starting frontend export with html2canvas-pro...')
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || 'Export failed')
+      // Find the canvas element inside the preview container
+      const canvasElement = previewContainerRef.current.querySelector('[data-slide-canvas]')
+
+      if (!canvasElement) {
+        throw new Error('Slide canvas not found')
       }
 
-      // Download the image
-      const blob = await response.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `slide-export-${Date.now()}.png`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      const currentWidth = (canvasElement as HTMLElement).offsetWidth
+      const currentHeight = (canvasElement as HTMLElement).offsetHeight
+      const targetWidth = slideData.canvas.width
+      const targetHeight = slideData.canvas.height
+      const scaleRatio = targetWidth / currentWidth
 
-      toast.success('Slide exported successfully!')
+      console.log('📸 Canvas element found:', {
+        tagName: canvasElement.tagName,
+        currentWidth,
+        currentHeight,
+        targetWidth,
+        targetHeight,
+        scaleRatio,
+        childrenCount: canvasElement.children.length,
+      })
+
+      console.log('📸 Capturing canvas element at full resolution...')
+
+      // Use html2canvas-pro to capture the canvas element directly
+      // html2canvas-pro supports modern CSS colors like oklch/lab
+      // Set width/height to render at full size (1080x1920) instead of preview size (432x768)
+      const canvas = await html2canvas(canvasElement as HTMLElement, {
+        backgroundColor: '#ffffff',
+        width: targetWidth,
+        height: targetHeight,
+        scale: 1, // No additional scaling needed since we're specifying exact dimensions
+        logging: true, // Enable logging to debug
+        useCORS: true, // Handle cross-origin images
+        allowTaint: true, // Allow tainted canvas for now
+      })
+
+      console.log('✅ Canvas captured:', {
+        width: canvas.width,
+        height: canvas.height
+      })
+
+      // Convert to blob and download
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          throw new Error('Failed to create image blob')
+        }
+
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `slide-export-${Date.now()}.png`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+
+        console.log('✅ Export completed successfully')
+        toast.success('Slide exported successfully!')
+        setIsExporting(false)
+      }, 'image/png', 0.95)
+
     } catch (error) {
-      console.error('Export error:', error)
+      console.error('💥 Export error:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to export slide')
-    } finally {
       setIsExporting(false)
     }
   }
 
   return (
-    <div className="w-screen h-screen flex flex-col bg-background">
+    <div className="w-full min-h-screen flex flex-col bg-background text-foreground">
       {/* Header */}
-      <div className="p-4 border-b flex justify-between items-center bg-white z-10">
+      <div className="p-4 border-b flex justify-between items-center bg-background z-10">
         <div>
           <h1 className="text-2xl font-bold">New Carousel Editor</h1>
           <p className="text-sm text-muted-foreground">Testing improved text effects and renderer parity</p>
@@ -150,7 +190,7 @@ export default function TestEditorPage() {
       </div>
 
       {/* Editor */}
-      <div className="flex-1 overflow-hidden">
+      <div ref={previewContainerRef} className="flex-1 overflow-hidden">
         <SlideEditor slideData={slideData} onSlideDataChange={setSlideData} />
       </div>
     </div>

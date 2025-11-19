@@ -4,7 +4,8 @@
  */
 
 import { generateTextHuggingBlob } from './blob-generator'
-import { estimateTextMeasurements } from './text-measurement-server'
+import { measureTextLinesSync, getFontPath, estimateTextMeasurements } from './text-measurement-server'
+import { parseTextWithEmojis } from './text-parser'
 import type React from 'react'
 
 export interface BackgroundLayer {
@@ -41,17 +42,19 @@ export interface TextBox {
   textAlign: 'left' | 'center' | 'right'
   zIndex: number
 
-  // Text effects
+  // Text effects (mutually exclusive recommended)
+  // Effect 1: Shadow
   enableShadow?: boolean
   shadowColor?: string
   shadowBlur?: number
   shadowOffsetX?: number
   shadowOffsetY?: number
 
+  // Effect 2: Outline (Character Outline)
   outlineWidth?: number
   outlineColor?: string
 
-  // Blob background (only background option)
+  // Effect 3: Blob background (Hugging Background)
   enableBlobBackground?: boolean
   blobColor?: string
   blobOpacity?: number
@@ -110,21 +113,25 @@ function renderBackgroundLayer(layer: BackgroundLayer, canvasWidth: number, canv
     top: `${layer.y * canvasHeight}px`,
     width: `${layer.width * canvasWidth}px`,
     height: `${layer.height * canvasHeight}px`,
-    opacity: layer.opacity,
+    opacity: layer.opacity ?? 1,
     display: 'flex',
   }
 
   if (layer.type === 'color' && layer.color) {
     style.backgroundColor = layer.color
   } else if (layer.type === 'gradient' && layer.gradient) {
-    const { type, colors, angle = 0 } = layer.gradient
+    const { type, colors = [], angle = 0 } = layer.gradient
 
-    if (type === 'linear') {
-      const colorStops = colors.join(', ')
-      style.backgroundImage = `linear-gradient(${angle}deg, ${colorStops})`
-    } else {
-      const colorStops = colors.join(', ')
-      style.backgroundImage = `radial-gradient(circle, ${colorStops})`
+    // Filter out any undefined/null colors and ensure they're strings
+    const validColors = colors.filter(c => c != null).map(c => String(c).trim())
+
+    if (validColors.length > 0) {
+      const colorStops = validColors.join(', ')
+      if (type === 'linear') {
+        style.backgroundImage = `linear-gradient(${angle}deg, ${colorStops})`
+      } else {
+        style.backgroundImage = `radial-gradient(circle, ${colorStops})`
+      }
     }
   } else if (layer.type === 'image' && layer.imageUrl) {
     // For images, use img tag instead of backgroundImage
@@ -147,7 +154,7 @@ function renderBackgroundLayer(layer: BackgroundLayer, canvasWidth: number, canv
 }
 
 /**
- * Render a text box with optional blob background
+ * Render a text box with optional blob background or character outline
  */
 function renderTextBox(textBox: TextBox, canvasWidth: number, canvasHeight: number): React.ReactElement {
   const boxX = textBox.x * canvasWidth
@@ -168,89 +175,109 @@ function renderTextBox(textBox: TextBox, canvasWidth: number, canvasHeight: numb
     width: `${boxWidth}px`,
     height: `${boxHeight}px`,
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: textBox.textAlign === 'center' ? 'center' : textBox.textAlign === 'right' ? 'flex-end' : 'flex-start',
+    flexDirection: 'column', // Changed to column to support multiline properly if needed
+    justifyContent: 'flex-start', // Align based on content flow
+    alignItems: textBox.textAlign === 'center' ? 'center' : textBox.textAlign === 'right' ? 'flex-end' : 'flex-start',
   }
 
-  // Text style
-  const textStyle: React.CSSProperties = {
-    fontFamily: textBox.fontFamily,
+  // Ensure all font properties are properly defined strings/numbers
+  const fontFamily = String(textBox.fontFamily || 'Poppins').trim()
+  const fontWeight = textBox.fontWeight || 400
+  const fontStyle = String(textBox.fontStyle || 'normal').trim()
+  const textAlign = String(textBox.textAlign || 'left').trim()
+  const textDecoration = String(textBox.textDecoration || 'none').trim()
+
+  // Base text style with safe defaults - only include defined values
+  const baseTextStyle: React.CSSProperties = {
+    fontFamily,
     fontSize: `${textBox.fontSize}px`,
-    fontWeight: textBox.fontWeight,
-    fontStyle: textBox.fontStyle,
-    color: textBox.color,
-    textAlign: textBox.textAlign,
-    textDecoration: textBox.textDecoration,
+    fontWeight,
+    fontStyle: fontStyle as 'normal' | 'italic',
+    textAlign: textAlign as 'left' | 'center' | 'right',
+    textDecoration,
     lineHeight: textBox.lineHeight ?? 1.2,
-    letterSpacing: textBox.letterSpacing ? `${textBox.letterSpacing}px` : undefined,
     paddingTop: `${paddingTop}px`,
     paddingRight: `${paddingRight}px`,
     paddingBottom: `${paddingBottom}px`,
     paddingLeft: `${paddingLeft}px`,
     display: 'flex',
-    alignItems: 'center',
+    flexWrap: 'wrap', // Essential for word wrapping
+    width: '100%', // Take full width of container
     justifyContent: textBox.textAlign === 'center' ? 'center' : textBox.textAlign === 'right' ? 'flex-end' : 'flex-start',
+    wordBreak: 'break-word', // Ensure breaking matches browser behavior
   }
 
-  // Background removed - only blob background is supported
+  // Only add letterSpacing if it's defined
+  if (textBox.letterSpacing) {
+    baseTextStyle.letterSpacing = `${textBox.letterSpacing}px`
+  }
 
-  // Add shadow
-  if (textBox.enableShadow) {
+  // Apply shadow if enabled (and not using outline)
+  if (textBox.enableShadow && !textBox.outlineWidth) {
     const shadowColor = textBox.shadowColor || 'rgba(0, 0, 0, 0.3)'
     const shadowBlur = textBox.shadowBlur ?? 4
     const shadowOffsetX = textBox.shadowOffsetX ?? 2
     const shadowOffsetY = textBox.shadowOffsetY ?? 2
-    textStyle.boxShadow = `${shadowOffsetX}px ${shadowOffsetY}px ${shadowBlur}px ${shadowColor}`
-  }
-
-  // Note: Satori doesn't support text-stroke, so outline will be approximated with shadow
-  if (textBox.outlineWidth && textBox.outlineWidth > 0) {
-    const outlineColor = textBox.outlineColor || '#000000'
-    // Use multiple shadows to simulate outline
-    const outlineSize = textBox.outlineWidth
-    textStyle.textShadow = `
-      ${outlineSize}px ${outlineSize}px 0 ${outlineColor},
-      -${outlineSize}px ${outlineSize}px 0 ${outlineColor},
-      ${outlineSize}px -${outlineSize}px 0 ${outlineColor},
-      -${outlineSize}px -${outlineSize}px 0 ${outlineColor}
-    `.trim()
+    baseTextStyle.boxShadow = `${shadowOffsetX}px ${shadowOffsetY}px ${shadowBlur}px ${shadowColor}`
   }
 
   const elements: React.ReactElement[] = []
 
-  // Add blob background if enabled
+  // 1. Blob Background (Hugging Text)
   if (textBox.enableBlobBackground) {
     const blobColor = textBox.blobColor || '#ffffff'
     const blobOpacity = textBox.blobOpacity ?? 1
     const blobSpread = textBox.blobSpread ?? 20
     const blobRoundness = textBox.blobRoundness ?? 0.5
 
-    // Measure text lines (using server-side estimation)
-    const lines = estimateTextMeasurements(textBox.text, textBox.fontSize, textBox.fontFamily)
+    // Measure text lines (using server-side accurate measurement if available)
+    // We try to use fontkit for pixel-perfect matching with frontend
+    let lines
+    try {
+      const fontPath = getFontPath(textBox.fontFamily, textBox.fontWeight)
+      lines = measureTextLinesSync({
+        text: textBox.text,
+        fontSize: textBox.fontSize,
+        fontPath,
+        lineHeight: textBox.lineHeight
+      })
+    } catch (e) {
+      console.warn('Falling back to estimated measurements:', e)
+      lines = estimateTextMeasurements(textBox.text, textBox.fontSize, textBox.fontFamily)
+    }
 
-    // Generate TikTok-style blob path (stable rounded rectangles)
+    // Calculate available width for text (excluding padding)
+    // Note: Satori rendering needs this for proper alignment calculation
+    // The container width is the full width of the text box minus padding
+    const availableWidth = boxWidth - paddingLeft - paddingRight
+
+    // Generate TikTok-style blob path
     const blobPath = generateTextHuggingBlob({
       lines,
       lineHeight: textBox.fontSize * (textBox.lineHeight ?? 1.2),
       spread: blobSpread,
       roundness: blobRoundness,
+      align: textBox.textAlign,
+      containerWidth: availableWidth // Pass container width
     })
 
     // Calculate blob dimensions
-    const maxLineWidth = Math.max(...lines.map((l) => l.width))
+    const maxLineWidth = Math.max(...lines.map((l) => l.width), 0)
     const totalTextHeight = lines.length * textBox.fontSize * (textBox.lineHeight ?? 1.2)
-    const viewBoxWidth = maxLineWidth + blobSpread * 2
+    
+    // Use availableWidth to ensure viewBox covers full container width for alignment offsets
+    const viewBoxWidth = availableWidth + blobSpread * 2
     const viewBoxHeight = totalTextHeight + blobSpread * 2
 
     elements.push(
       <svg
         key={`${textBox.id}-blob`}
-        viewBox={`${-blobSpread} ${-blobSpread} ${viewBoxWidth} ${viewBoxHeight}`}
+        viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
         xmlns="http://www.w3.org/2000/svg"
         style={{
           position: 'absolute',
-          left: `${paddingLeft}px`,
-          top: `${paddingTop}px`,
+          left: `${paddingLeft - blobSpread}px`, // Shift left by spread to align visual origin
+          top: `${paddingTop - blobSpread}px`, // Shift up by spread
           width: `${viewBoxWidth}px`,
           height: `${viewBoxHeight}px`,
           opacity: blobOpacity,
@@ -261,12 +288,57 @@ function renderTextBox(textBox: TextBox, canvasWidth: number, canvasHeight: numb
     )
   }
 
-  // Add text
-  elements.push(
-    <div key={`${textBox.id}-text`} style={textStyle}>
-      {textBox.text}
-    </div>
-  )
+  // 2. Render Text Content
+  // Check if we need to render segments (for outline + emojis)
+  if (textBox.outlineWidth && textBox.outlineWidth > 0) {
+    const outlineColor = textBox.outlineColor || '#000000'
+    const outlineWidth = textBox.outlineWidth
+    const textColor = textBox.color || '#000000'
+    const segments = parseTextWithEmojis(textBox.text)
+
+    // For outlines, we need to be careful.
+    // Satori supports standard CSS text-stroke-width and text-stroke-color.
+    // Emojis should NOT have this stroke.
+
+    elements.push(
+      <div key={`${textBox.id}-text`} style={baseTextStyle}>
+        {segments.map((segment, i) => {
+          if (segment.isEmoji) {
+            // Emojis: No stroke
+            return (
+              <span key={i} style={{
+                color: textColor,
+              }}>
+                {segment.content}
+              </span>
+            )
+          } else {
+            // Text: Apply stroke
+            // Note: textStroke is supported by Satori but not widely in TS types yet, so we cast to any or use style object
+            return (
+              <span key={i} style={{
+                color: textColor,
+                // @ts-ignore
+                WebkitTextStroke: `${outlineWidth}px ${outlineColor}`,
+              }}>
+                {segment.content}
+              </span>
+            )
+          }
+        })}
+      </div>
+    )
+  } else {
+    // Standard rendering (no outline logic needed)
+    elements.push(
+      <div key={`${textBox.id}-text`} style={{
+        ...baseTextStyle,
+        color: textBox.color || '#000000',
+      }}>
+        {textBox.text}
+      </div>
+    )
+  }
 
   return (
     <div key={textBox.id} style={containerStyle}>
@@ -274,6 +346,7 @@ function renderTextBox(textBox: TextBox, canvasWidth: number, canvasHeight: numb
     </div>
   )
 }
+
 
 /**
  * Render slide to JSX for Satori

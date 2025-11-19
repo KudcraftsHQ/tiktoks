@@ -12,6 +12,7 @@ export interface BlobOptions {
 export interface TextHuggingBlobOptions {
   lines: Array<{ text: string; width: number }>
   lineHeight: number
+  fontSize?: number // Added to calculate vertical centering
   spread: number // padding in pixels
   roundness: number // 0-1, 0 = sharp corners, 1 = very smooth
   align?: 'left' | 'center' | 'right'
@@ -109,180 +110,147 @@ export function scaleBlobPath(path: string, scale: number): string {
 import polygonClipping from 'polygon-clipping'
 
 /**
- * Generate a TikTok-style blob by constructing rounded rectangles for each line
- * and unioning them together.
- * This creates the correct "pill-merged" look.
+ * Generate a TikTok-style blob by constructing sharp rectangles for each line,
+ * unioning them, and then applying smoothing to all corners (both convex and concave).
+ * This creates the "gooey" look where lines merge smoothly.
  */
 export function generateTextHuggingBlob(options: TextHuggingBlobOptions): string {
-  const { lines, lineHeight, spread, roundness, align = 'left', containerWidth } = options
+  const { lines, lineHeight, fontSize, spread, roundness, align = 'left', containerWidth } = options
 
   if (lines.length === 0) return ''
 
   // Map roundness (0-1) to corner radius in pixels
-  // TikTok style is usually quite round, so we maximize the radius
-  // but cap it at half the line height (full pill shape)
   const maxRadius = (lineHeight + spread * 2) / 2
   const radius = roundness * maxRadius
 
-  // Determine the reference width for alignment
-  // If containerWidth is provided (best for true CSS alignment), use it
-  // Otherwise fallback to the widest line (mimics "fit-content")
   const maxLineWidth = Math.max(...lines.map(l => l.width))
   const referenceWidth = containerWidth ?? maxLineWidth
+  
+  // Calculate vertical offset to center blob on text content
+  // Standard CSS line-height places 'half-leading' above and below the text
+  // We want the blob to hug the text content (fontSize), not the full line box
+  const actualFontSize = fontSize || lineHeight
+  const verticalOffset = (lineHeight - actualFontSize) / 2
 
-  // 1. Generate polygon points for each line as a rounded rectangle
-  // We approximate the rounded corners with 8 points per corner for smoothness
+  // 1. Generate SHARP rectangular polygons for each line
   const linePolygons: Array<[number, number][]> = lines.map((line, i) => {
     let x = 0
 
-    // Calculate alignment offset based on the REFERENCE width (container or max line)
     if (align === 'center') {
-      // Center alignment: Line is centered within the reference width
       x = (referenceWidth - line.width) / 2
     } else if (align === 'right') {
-      // Right alignment: Line is pushed to the right edge of the reference width
       x = (referenceWidth - line.width)
     } else {
-      // Left alignment: Line starts at 0
       x = 0
     }
 
-    const y = i * lineHeight
-    
-    // Vertical offset adjustment to better center text within line height
-    // Standard fonts often sit slightly lower visually than the mathematical center
-    // A small offset helps the blob feel more "centered" on the glyphs
-    // const yOffset = lineHeight * 0.12
-    // const adjustedY = y + yOffset
-
+    // Calculate y and height to center strictly on the text content + spread
+    // This creates steps that align with the text baseline/cap-height rather than line boxes
+    const y = i * lineHeight + verticalOffset
+    const height = actualFontSize + spread * 2
     const width = line.width + spread * 2
-    const height = lineHeight + spread * 2
 
-    // Determine corner radii for this line to create straight edges on aligned sides
-    // Default to all rounded
-    const corners = {
-      tl: radius,
-      tr: radius,
-      br: radius,
-      bl: radius
-    }
-
-    // If left aligned, straighten the internal left corners
-    if (align === 'left') {
-      // If not the first line, straighten top-left
-      if (i > 0) corners.tl = 0
-      // If not the last line, straighten bottom-left
-      if (i < lines.length - 1) corners.bl = 0
-    }
-    
-    // If right aligned, straighten the internal right corners
-    if (align === 'right') {
-      // If not the first line, straighten top-right
-      if (i > 0) corners.tr = 0
-      // If not the last line, straighten bottom-right
-      if (i < lines.length - 1) corners.br = 0
-    }
-
-    return generateRoundedRectPoints(x, y, width, height, corners)
+    // Return sharp rectangle points (clockwise)
+    return [
+      [x, y],
+      [x + width, y],
+      [x + width, y + height],
+      [x, y + height]
+    ]
   })
 
   if (linePolygons.length === 0) return ''
 
   try {
-    // 2. Union all polygons together
-    // polygon-clipping takes [[[x,y], ...]] format
+    // 2. Union all sharp polygons together
     const inputPolygons = linePolygons.map(poly => [poly] as [number, number][][])
     
-    // Perform the union
+    // Perform the union to get a single stepped polygon
     const mergedPolygons = polygonClipping.union(inputPolygons as any)
 
     if (mergedPolygons.length === 0) return ''
 
-    // 3. Convert the result back to SVG path
-    // We usually get one main polygon, but could get multiples if lines are disconnected
+    // 3. Smooth the polygon
+    // We assume the first polygon is the main one (standard case)
+    // If there are disjoint islands, we map over all of them
     return mergedPolygons.map(multiPoly => {
       return multiPoly.map(ring => {
-        return ring.map((point, i) => {
-          const [x, y] = point as [number, number]
-          return `${i === 0 ? 'M' : 'L'} ${x} ${y}`
-        }).join(' ') + ' Z'
+        // ring is Array<[number, number]> (last point == first point usually)
+        // polygon-clipping returns closed rings
+        return smoothPolygon(ring, radius)
       }).join(' ')
     }).join(' ')
 
   } catch (e) {
-    console.error('Error merging blob polygons:', e)
-    // Fallback to simple bounding box if merge fails
+    console.error('Error generating blob:', e)
+    // Fallback
     const totalHeight = lines.length * lineHeight + spread * 2
     const maxWidth = referenceWidth + spread * 2
-    
-    // For fallback, we also need to respect the origin logic
-    // We use 0,0 as top-left of blob
     return `M 0 0 L ${maxWidth} 0 L ${maxWidth} ${totalHeight} L 0 ${totalHeight} Z`
   }
 }
 
 /**
- * Generate points for a rounded rectangle (approximated)
+ * Smoothes a polygon by replacing sharp corners with quadratic bezier curves.
+ * 
+ * @param points Array of [x, y] points forming a closed loop
+ * @param radius The desired corner radius
  */
-function generateRoundedRectPoints(
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  radius: number | { tl: number, tr: number, br: number, bl: number },
-  steps: number = 8
-): [number, number][] {
-  const points: [number, number][] = []
-  
-  // Normalize radius input
-  const radii = typeof radius === 'number' 
-    ? { tl: radius, tr: radius, br: radius, bl: radius }
-    : radius
-
-  // Top-right corner
-  {
-    const r = Math.min(radii.tr, width / 2, height / 2)
-    for (let i = 0; i <= steps; i++) {
-      const theta = (i / steps) * (Math.PI / 2)
-      const px = x + width - r + r * Math.sin(theta)
-      const py = y + r - r * Math.cos(theta)
-      points.push([px, py])
-    }
+function smoothPolygon(points: [number, number][], radius: number): string {
+  // Remove the last point if it's identical to the first (polygon-clipping returns closed loops)
+  const uniquePoints = [...points]
+  if (uniquePoints.length > 1 && 
+      uniquePoints[0][0] === uniquePoints[uniquePoints.length - 1][0] && 
+      uniquePoints[0][1] === uniquePoints[uniquePoints.length - 1][1]) {
+    uniquePoints.pop()
   }
 
-  // Bottom-right corner
-  {
-    const r = Math.min(radii.br, width / 2, height / 2)
-    for (let i = 0; i <= steps; i++) {
-      const theta = (Math.PI / 2) + (i / steps) * (Math.PI / 2)
-      const px = x + width - r + r * Math.sin(theta)
-      const py = y + height - r - r * Math.cos(theta)
-      points.push([px, py])
+  if (uniquePoints.length < 3) return ''
+
+  let path = ''
+  const len = uniquePoints.length
+
+  for (let i = 0; i < len; i++) {
+    const curr = uniquePoints[i]
+    const prev = uniquePoints[(i - 1 + len) % len]
+    const next = uniquePoints[(i + 1) % len]
+
+    // Vectors
+    const vPrev = { x: curr[0] - prev[0], y: curr[1] - prev[1] }
+    const vNext = { x: next[0] - curr[0], y: next[1] - curr[1] }
+
+    const lenPrev = Math.sqrt(vPrev.x * vPrev.x + vPrev.y * vPrev.y)
+    const lenNext = Math.sqrt(vNext.x * vNext.x + vNext.y * vNext.y)
+
+    // Limit radius to half the length of the shortest adjacent leg
+    // This prevents curve overlap
+    const r = Math.min(radius, lenPrev / 2, lenNext / 2)
+
+    // Calculate start and end points of the curve
+    // Start is on the segment coming FROM prev
+    const start = {
+      x: curr[0] - (vPrev.x / lenPrev) * r,
+      y: curr[1] - (vPrev.y / lenPrev) * r
     }
+
+    // End is on the segment going TO next
+    const end = {
+      x: curr[0] + (vNext.x / lenNext) * r,
+      y: curr[1] + (vNext.y / lenNext) * r
+    }
+
+    if (i === 0) {
+      path += `M ${start.x} ${start.y}`
+    } else {
+      path += ` L ${start.x} ${start.y}`
+    }
+
+    // Quadratic curve to 'end' using 'curr' as control point
+    path += ` Q ${curr[0]} ${curr[1]} ${end.x} ${end.y}`
   }
 
-  // Bottom-left corner
-  {
-    const r = Math.min(radii.bl, width / 2, height / 2)
-    for (let i = 0; i <= steps; i++) {
-      const theta = Math.PI + (i / steps) * (Math.PI / 2)
-      const px = x + r + r * Math.sin(theta)
-      const py = y + height - r - r * Math.cos(theta)
-      points.push([px, py])
-    }
-  }
-
-  // Top-left corner
-  {
-    const r = Math.min(radii.tl, width / 2, height / 2)
-    for (let i = 0; i <= steps; i++) {
-      const theta = (3 * Math.PI / 2) + (i / steps) * (Math.PI / 2)
-      const px = x + r + r * Math.sin(theta)
-      const py = y + r - r * Math.cos(theta)
-      points.push([px, py])
-    }
-  }
-
-  return points
+  path += ' Z'
+  return path
 }
+
 

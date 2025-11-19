@@ -20,6 +20,54 @@ export interface ServerTextMeasurementOptions {
 }
 
 /**
+ * Measure text lines using fontkit (server-side, synchronous)
+ */
+export function measureTextLinesSync(
+  options: ServerTextMeasurementOptions
+): LineMeasurement[] {
+  const { text, fontSize, fontPath, lineHeight = 1.2 } = options
+
+  try {
+    // Load font file
+    const fontBuffer = readFileSync(fontPath)
+    const font = fontkit.create(fontBuffer)
+
+    // Split by lines
+    const lines = text.split('\n')
+    const measurements: LineMeasurement[] = []
+
+    for (const line of lines) {
+      if (line.length === 0) {
+        measurements.push({ text: line, width: 0 })
+        continue
+      }
+
+      // Layout the text (handles ligatures, kerning, etc.)
+      const run = font.layout(line)
+
+      // Calculate width in pixels
+      // Font units to pixels: (glyphUnits / unitsPerEm) * fontSize
+      const widthInFontUnits = run.advanceWidth
+      const widthInPixels = (widthInFontUnits / font.unitsPerEm) * fontSize
+
+      measurements.push({
+        text: line,
+        width: widthInPixels,
+      })
+    }
+
+    return measurements
+  } catch (error) {
+    console.error('Error measuring text with fontkit:', error)
+    // Fallback to estimated width if font loading fails
+    return text.split('\n').map((line) => ({
+      text: line,
+      width: line.length * fontSize * 0.6, // Rough estimate
+    }))
+  }
+}
+
+/**
  * Measure text lines using fontkit (server-side)
  */
 export async function measureTextLinesServer(
@@ -69,40 +117,50 @@ export async function measureTextLinesServer(
 
 /**
  * Get common font paths for popular fonts
+ * Only supports Poppins for now, using numeric weight naming (Poppins-400.ttf, etc.)
  */
-export function getFontPath(fontFamily: string, weight: string | number = 'normal'): string {
-  // Map common font families to file paths
-  // You'll need to adjust these paths based on where fonts are stored
-  const fontDir = join(process.cwd(), 'public', 'fonts')
+export function getFontPath(fontFamily: string, weight: string | number = 400, style: string = 'normal'): string {
+  const fontDir = join(process.cwd(), 'public', 'fonts', 'poppins')
 
-  const fontMap: Record<string, Record<string, string>> = {
-    Poppins: {
-      normal: join(fontDir, 'Poppins-Regular.ttf'),
-      bold: join(fontDir, 'Poppins-Bold.ttf'),
-      '400': join(fontDir, 'Poppins-Regular.ttf'),
-      '500': join(fontDir, 'Poppins-Medium.ttf'),
-      '600': join(fontDir, 'Poppins-SemiBold.ttf'),
-      '700': join(fontDir, 'Poppins-Bold.ttf'),
-    },
-    Inter: {
-      normal: join(fontDir, 'Inter-Regular.ttf'),
-      bold: join(fontDir, 'Inter-Bold.ttf'),
-      '400': join(fontDir, 'Inter-Regular.ttf'),
-      '500': join(fontDir, 'Inter-Medium.ttf'),
-      '600': join(fontDir, 'Inter-SemiBold.ttf'),
-      '700': join(fontDir, 'Inter-Bold.ttf'),
-    },
+  // Only support Poppins for now
+  if (fontFamily !== 'Poppins') {
+    console.warn(`Font family "${fontFamily}" not supported, falling back to Poppins`)
   }
 
-  const weightKey = String(weight)
-  const family = fontMap[fontFamily]
-
-  if (!family) {
-    // Default fallback
-    return join(fontDir, 'Poppins-Regular.ttf')
+  // Convert weight string to number
+  let numericWeight = 400
+  if (typeof weight === 'number') {
+    numericWeight = weight
+  } else if (typeof weight === 'string') {
+    const weightMap: Record<string, number> = {
+      thin: 100,
+      extralight: 200,
+      light: 300,
+      normal: 400,
+      regular: 400,
+      medium: 500,
+      semibold: 600,
+      bold: 700,
+      extrabold: 800,
+      black: 900,
+    }
+    numericWeight = weightMap[weight.toLowerCase()] || parseInt(weight) || 400
   }
 
-  return family[weightKey] || family.normal
+  // Clamp to available weights (400, 600, 700, 800)
+  const availableWeights = [400, 600, 700, 800]
+  if (!availableWeights.includes(numericWeight)) {
+    // Find nearest available weight
+    numericWeight = availableWeights.reduce((prev, curr) => {
+      return Math.abs(curr - numericWeight) < Math.abs(prev - numericWeight) ? curr : prev
+    })
+  }
+
+  // Build font file name: Poppins-400.ttf or Poppins-400italic.ttf
+  const italic = style === 'italic' ? 'italic' : ''
+  const fileName = `Poppins-${numericWeight}${italic}.ttf`
+
+  return join(fontDir, fileName)
 }
 
 /**

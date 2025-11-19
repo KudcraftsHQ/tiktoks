@@ -4,6 +4,7 @@ import { useRef, useState, useCallback, CSSProperties, useEffect, useMemo } from
 import type { SlideData, TextBox, BackgroundLayer } from '@/lib/satori-renderer'
 import { generateTextHuggingBlob } from '@/lib/blob-generator'
 import { measureTextWithWrapping } from '@/lib/text-measurement'
+import { parseTextWithEmojis } from '@/lib/text-parser'
 
 interface SlidePreviewProps {
   slideData: SlideData
@@ -312,6 +313,7 @@ export function SlidePreview({
     }
   }, [onSelectTextBox, onSelectLayer])
 
+
   const canvasStyle: CSSProperties = {
     width: `${scaledWidth}px`,
     height: `${scaledHeight}px`,
@@ -323,7 +325,7 @@ export function SlidePreview({
   }
 
   return (
-    <div ref={containerRef} style={canvasStyle} onClick={handleCanvasClick}>
+    <div ref={containerRef} style={canvasStyle} onClick={handleCanvasClick} data-slide-canvas>
       {/* Background Layers */}
       {slideData.backgroundLayers.sort((a, b) => a.zIndex - b.zIndex).map((layer) => {
         const layerStyle: CSSProperties = {
@@ -434,30 +436,41 @@ export function SlidePreview({
 
         const textStyle: CSSProperties = {
           width: '100%',
-          height: '100%',
+          // height: '100%', // Removed to allow auto-height
           display: 'flex',
-          alignItems: 'center',
+          // alignItems: 'center', // Removed
+          flexWrap: 'wrap', // Enable wrapping
+          alignContent: 'flex-start', // Align lines to top
           justifyContent: textBox.textAlign === 'center' ? 'center' : textBox.textAlign === 'right' ? 'flex-end' : 'flex-start',
           fontFamily: textBox.fontFamily,
           fontSize: `${textBox.fontSize * scale}px`,
           fontWeight: textBox.fontWeight,
           fontStyle: textBox.fontStyle,
-          color: textBox.color,
           textAlign: textBox.textAlign,
-          padding: `${(textBox.paddingTop ?? 16) * scale}px ${(textBox.paddingRight ?? 20) * scale}px ${(textBox.paddingBottom ?? 16) * scale}px ${(textBox.paddingLeft ?? 20) * scale}px`,
+          textDecoration: textBox.textDecoration,
+          paddingTop: `${(textBox.paddingTop ?? 16) * scale}px`,
+          paddingRight: `${(textBox.paddingRight ?? 20) * scale}px`,
+          paddingBottom: `${(textBox.paddingBottom ?? 16) * scale}px`,
+          paddingLeft: `${(textBox.paddingLeft ?? 20) * scale}px`,
           lineHeight: textBox.lineHeight ?? 1.2,
           letterSpacing: textBox.letterSpacing ? `${textBox.letterSpacing * scale}px` : undefined,
-          boxShadow: textBox.enableShadow
-            ? `${(textBox.shadowOffsetX ?? 2) * scale}px ${(textBox.shadowOffsetY ?? 2) * scale}px ${(textBox.shadowBlur ?? 4) * scale}px ${textBox.shadowColor || 'rgba(0, 0, 0, 0.3)'}`
-            : undefined,
           position: 'relative',
           zIndex: 1,
           overflow: 'hidden',
-          wordWrap: 'break-word',
+          wordWrap: 'break-word', // Allow long words to break
           overflowWrap: 'break-word',
-          whiteSpace: 'pre-wrap',
+          whiteSpace: 'pre-wrap', // Preserve whitespace
           userSelect: 'none',
           pointerEvents: 'none',
+        }
+
+        // Apply shadow if enabled (and not using outline)
+        if (textBox.enableShadow && !textBox.outlineWidth) {
+           const shadowColor = textBox.shadowColor || 'rgba(0, 0, 0, 0.3)'
+           const shadowBlur = (textBox.shadowBlur ?? 4) * scale
+           const shadowOffsetX = (textBox.shadowOffsetX ?? 2) * scale
+           const shadowOffsetY = (textBox.shadowOffsetY ?? 2) * scale
+           textStyle.boxShadow = `${shadowOffsetX}px ${shadowOffsetY}px ${shadowBlur}px ${shadowColor}`
         }
 
         return (
@@ -494,24 +507,39 @@ export function SlidePreview({
                 const blobPath = generateTextHuggingBlob({
                   lines,
                   lineHeight,
+                  fontSize: textBox.fontSize * scale, // Pass explicit fontSize for vertical centering
                   spread: blobSpread,
                   roundness: textBox.blobRoundness ?? 0.5,
+                  align: textBox.textAlign, // Pass the alignment to the blob generator
+                  containerWidth: availableWidth // Pass the container width for true CSS alignment
                 })
 
                 // Calculate blob dimensions
+                // For left align: width is simply maxLineWidth
+                // For center/right align: width is also maxLineWidth because the container wraps the widest line
                 const maxLineWidth = Math.max(...lines.map((l) => l.width), 0)
                 const totalHeight = lines.length * lineHeight
-                const blobWidth = maxLineWidth + blobSpread * 2
+                
+                // We need to ensure the viewBox covers the full extent of the shifted blobs
+                // Left align: x goes from -spread to maxLineWidth + spread
+                // Right align: x goes from -spread to maxLineWidth + spread (because widest line is full width)
+                
+                // Use availableWidth for blobWidth calculation if we want the SVG to span the full container
+                // This ensures offsets (like right align) don't get clipped
+                const blobWidth = availableWidth + blobSpread * 2
                 const blobHeight = totalHeight + blobSpread * 2
-
+                
+                // blobTop ensures the blob starts relative to the text's actual position (padding top)
+                const blobTop = (textBox.paddingTop ?? 16) * scale 
+                
                 return (
                   <svg
-                    viewBox={`${-blobSpread} ${-blobSpread} ${blobWidth} ${blobHeight}`}
+                    viewBox={`0 0 ${blobWidth} ${blobHeight}`}
                     xmlns="http://www.w3.org/2000/svg"
                     style={{
                       position: 'absolute',
-                      left: 0,
-                      top: 0,
+                      left: (textBox.paddingLeft ?? 20) * scale - blobSpread, // Shift left by spread to align visual origin
+                      top: blobTop - blobSpread, // Shift up by spread
                       width: `${blobWidth}px`,
                       height: `${blobHeight}px`,
                       opacity: textBox.blobOpacity ?? 1,
@@ -524,11 +552,50 @@ export function SlidePreview({
                 )
               })()}
 
-              {/* Text */}
+              {/* Text with Emoji Isolation & Outline */}
               <div style={textStyle}>
-                {textBox.text}
+                {(() => {
+                  const segments = parseTextWithEmojis(textBox.text)
+                  const outlineWidth = (textBox.outlineWidth ?? 0) * scale
+                  const outlineColor = textBox.outlineColor || '#000000'
+
+                  // Standard text rendering if no outline
+                  if (!outlineWidth) {
+                    return (
+                      <span style={{ color: textBox.color }}>
+                        {textBox.text}
+                      </span>
+                    )
+                  }
+
+                  return segments.map((segment, i) => {
+                    if (segment.isEmoji) {
+                      // Emoji: No outline
+                      return (
+                        <span key={i} style={{ color: textBox.color }}>
+                          {segment.content}
+                        </span>
+                      )
+                    } else {
+                      // Text: Apply outline
+                      return (
+                        <span
+                          key={i}
+                          style={{
+                            color: textBox.color,
+                            WebkitTextStroke: `${outlineWidth}px ${outlineColor}`,
+                            paintOrder: 'stroke fill' // Ensure stroke doesn't eat into text
+                          }}
+                        >
+                          {segment.content}
+                        </span>
+                      )
+                    }
+                  })
+                })()}
               </div>
             </div>
+
 
             {/* Text Box Handlers */}
             {selectedTextBoxId === textBox.id && (
