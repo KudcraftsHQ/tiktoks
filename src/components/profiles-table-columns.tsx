@@ -254,36 +254,6 @@ export const createProfilesTableColumns = ({
   allSelected = false
 }: ProfilesTableColumnsProps): ColumnDef<TikTokProfile>[] => [
   {
-    id: 'select',
-    header: ({ table }) => (
-      <div className="flex items-center justify-center">
-        <Checkbox
-          checked={allSelected}
-          onCheckedChange={(checked) => {
-            onSelectAll?.(checked === true)
-          }}
-          aria-label="Select all"
-        />
-      </div>
-    ),
-    cell: ({ row }) => {
-      const profile = row.original
-      return (
-        <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-          <Checkbox
-            checked={selectedProfiles.has(profile.id)}
-            onCheckedChange={(checked) => {
-              onSelectProfile?.(profile.id, checked === true)
-            }}
-            aria-label={`Select ${profile.handle}`}
-          />
-        </div>
-      )
-    },
-    size: 50,
-    meta: { pinned: 'left' }
-  },
-  {
     accessorKey: 'handle',
     header: 'Handle',
     size: 250,

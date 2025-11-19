@@ -146,6 +146,21 @@ export function PostsTable({
     )
   }
 
+  // Handle row selection changes from DataTable
+  const handleRowSelectionChange = useCallback((rowSelectionState: Record<string, boolean>) => {
+    // Convert row selection state (index-based) to Set of post IDs
+    const selectedIds = new Set<string>()
+    Object.keys(rowSelectionState).forEach(rowIndex => {
+      if (rowSelectionState[rowIndex]) {
+        const post = postsWithProxiedUrls[parseInt(rowIndex)]
+        if (post) {
+          selectedIds.add(post.id)
+        }
+      }
+    })
+    setSelectedPosts(selectedIds)
+  }, [postsWithProxiedUrls, setSelectedPosts])
+
   // Memoize all handlers to prevent columns regeneration
   const handlePreviewPost = useCallback((post: TikTokPost) => {
     setSelectedPost(post)
@@ -356,6 +371,7 @@ export function PostsTable({
           enableSorting={true}
           enablePagination={true}
           enableSelection={true}
+          onRowSelectionChange={handleRowSelectionChange}
           pageSize={10}
           leftStickyColumnsCount={3}
           rightStickyColumnsCount={1}

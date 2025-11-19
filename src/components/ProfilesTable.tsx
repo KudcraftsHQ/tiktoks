@@ -48,6 +48,21 @@ export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps
     )
   }
 
+  // Handle row selection changes from DataTable
+  const handleRowSelectionChange = (rowSelectionState: Record<string, boolean>) => {
+    // Convert row selection state (index-based) to Set of profile IDs
+    const selectedIds = new Set<string>()
+    Object.keys(rowSelectionState).forEach(rowIndex => {
+      if (rowSelectionState[rowIndex]) {
+        const profile = profiles[parseInt(rowIndex)]
+        if (profile) {
+          selectedIds.add(profile.id)
+        }
+      }
+    })
+    setSelectedProfiles(selectedIds)
+  }
+
   const handlePreviewProfile = (profile: TikTokProfile) => {
     setSelectedProfile(profile)
   }
@@ -230,6 +245,8 @@ export function ProfilesTable({ profiles, onProfilesChange }: ProfilesTableProps
         data={profiles}
         enablePagination={false}
         enableSelection={true}
+        onRowSelectionChange={handleRowSelectionChange}
+        onRowClick={handleRowClick}
         leftStickyColumnsCount={1}
         rightStickyColumnsCount={1}
       />

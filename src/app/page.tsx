@@ -903,7 +903,7 @@ function PostsPageContent() {
                 viewMode={viewMode}
                 searchQuery={searchQuery}
                 rowClassName={(row) => {
-                  return 'bg-background hover:bg-muted'
+                  return 'bg-background'
                 }}
               />
             </>
@@ -931,7 +931,7 @@ function PostsPageContent() {
               viewMode={viewMode}
               searchQuery={searchQuery}
                 rowClassName={(row) => {
-                  return 'bg-background hover:bg-muted'
+                  return 'bg-background'
                 }}
             />
           )}
