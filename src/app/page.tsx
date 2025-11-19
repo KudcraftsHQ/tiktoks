@@ -15,6 +15,7 @@ import {
   LayoutGrid,
   MessageSquareIcon,
   FolderPlus,
+  ScanText,
 } from 'lucide-react'
 import { PostsTable } from '@/components/PostsTable'
 import { Card, CardContent } from '@/components/ui/card'
@@ -114,22 +115,26 @@ function PostsPageContent() {
   // Parse category from URL
   const initialCategory = searchParams.get('category') || 'all'
 
-  // Parse view mode from URL
-  const initialViewMode = (searchParams.get('view') as 'metrics' | 'content') || 'metrics'
+  // Parse view mode from URL - default to 'content'
+  const initialViewMode = (searchParams.get('view') as 'metrics' | 'content') || 'content'
 
   // Parse search from URL
   const initialSearch = searchParams.get('search') || ''
 
   // Parse advanced filters from URL
   const accountIdsParam = searchParams.get('accountIds')
+  const profileGroupIdsParam = searchParams.get('profileGroupIds')
   const initialAdvancedFilters: AdvancedFiltersValue = {
     accountIds: accountIdsParam ? accountIdsParam.split(',').filter(Boolean) : [],
+    profileGroupIds: profileGroupIdsParam ? profileGroupIdsParam.split(',').filter(Boolean) : [],
     viewCountGt: searchParams.get('viewCountGt') ? parseInt(searchParams.get('viewCountGt')!) : undefined,
-    viewCountLt: searchParams.get('viewCountLt') ? parseInt(searchParams.get('viewCountLt')!) : undefined
+    viewCountLt: searchParams.get('viewCountLt') ? parseInt(searchParams.get('viewCountLt')!) : undefined,
+    ocrStatus: (searchParams.get('ocrStatus') as 'all' | 'processed' | 'unprocessed') || 'all'
   }
 
   const [posts, setPosts] = useState<TikTokPost[]>([])
   const [viewMode, setViewMode] = useState<'metrics' | 'content'>(initialViewMode)
+  const [showMetrics, setShowMetrics] = useState(true)
   const [totalPosts, setTotalPosts] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [currentPage, setCurrentPage] = useState(initialPage)
@@ -200,7 +205,7 @@ function PostsPageContent() {
   }, [selectedPostsForMetrics, firstPostDate])
 
   // Update URL with current state
-  const updateURL = useCallback((page: number, sort: SortingState, dateFilter: DateRange, category: string, view: 'metrics' | 'content', search: string, filters: AdvancedFiltersValue) => {
+  const updateURL = useCallback((page: number, sort: SortingState, dateFilter: DateRange, category: string, search: string, filters: AdvancedFiltersValue) => {
     const params = new URLSearchParams()
 
     if (page > 1) {
@@ -228,11 +233,6 @@ function PostsPageContent() {
       params.set('category', category)
     }
 
-    // Add view mode (only if content mode)
-    if (view === 'content') {
-      params.set('view', 'content')
-    }
-
     // Add search query
     if (search && search.trim().length > 0) {
       params.set('search', search.trim())
@@ -242,11 +242,17 @@ function PostsPageContent() {
     if (filters.accountIds.length > 0) {
       params.set('accountIds', filters.accountIds.join(','))
     }
+    if (filters.profileGroupIds.length > 0) {
+      params.set('profileGroupIds', filters.profileGroupIds.join(','))
+    }
     if (filters.viewCountGt) {
       params.set('viewCountGt', filters.viewCountGt.toString())
     }
     if (filters.viewCountLt) {
       params.set('viewCountLt', filters.viewCountLt.toString())
+    }
+    if (filters.ocrStatus && filters.ocrStatus !== 'all') {
+      params.set('ocrStatus', filters.ocrStatus)
     }
 
     const queryString = params.toString()
@@ -300,11 +306,17 @@ function PostsPageContent() {
       if (filters.accountIds.length > 0) {
         params.append('accountIds', filters.accountIds.join(','))
       }
+      if (filters.profileGroupIds.length > 0) {
+        params.append('profileGroupIds', filters.profileGroupIds.join(','))
+      }
       if (filters.viewCountGt) {
         params.append('viewCountGt', filters.viewCountGt.toString())
       }
       if (filters.viewCountLt) {
         params.append('viewCountLt', filters.viewCountLt.toString())
+      }
+      if (filters.ocrStatus && filters.ocrStatus !== 'all') {
+        params.append('ocrStatus', filters.ocrStatus)
       }
 
       const response = await fetch(`/api/tiktok/posts?${params}`)
@@ -349,10 +361,10 @@ function PostsPageContent() {
 
     // Update URL and fetch in a separate effect to avoid render issues
     setTimeout(() => {
-      updateURL(currentPage, newSorting, dateRange, categoryFilter, viewMode, searchQuery, advancedFilters)
+      updateURL(currentPage, newSorting, dateRange, categoryFilter, searchQuery, advancedFilters)
       fetchPosts(currentPage, pageSize, newSorting, dateRange, categoryFilter, searchQuery, advancedFilters)
     }, 0)
-  }, [currentPage, pageSize, sorting, categoryFilter, dateRange, viewMode, searchQuery, advancedFilters, updateURL, fetchPosts])
+  }, [currentPage, pageSize, sorting, categoryFilter, dateRange, searchQuery, advancedFilters, updateURL, fetchPosts])
 
   // Handle page change with URL update
   const handlePageChange = useCallback((pageIndex: number, newPageSize: number) => {
@@ -361,11 +373,11 @@ function PostsPageContent() {
     setPageSize(newPageSize)
 
     setSorting(currentSorting => {
-      updateURL(newPage, currentSorting, dateRange, categoryFilter, viewMode, searchQuery, advancedFilters)
+      updateURL(newPage, currentSorting, dateRange, categoryFilter, searchQuery, advancedFilters)
       fetchPosts(newPage, newPageSize, currentSorting, dateRange, categoryFilter, searchQuery, advancedFilters)
       return currentSorting
     })
-  }, [categoryFilter, dateRange, viewMode, searchQuery, advancedFilters, updateURL, fetchPosts])
+  }, [categoryFilter, dateRange, searchQuery, advancedFilters, updateURL, fetchPosts])
 
   // Handle date range change with URL update
   const handleDateRangeChange = useCallback((newDateRange: DateRange) => {
@@ -374,10 +386,10 @@ function PostsPageContent() {
 
     // Update URL and fetch
     setTimeout(() => {
-      updateURL(1, sorting, newDateRange, categoryFilter, viewMode, searchQuery, advancedFilters)
+      updateURL(1, sorting, newDateRange, categoryFilter, searchQuery, advancedFilters)
       fetchPosts(1, pageSize, sorting, newDateRange, categoryFilter, searchQuery, advancedFilters)
     }, 0)
-  }, [pageSize, sorting, categoryFilter, viewMode, searchQuery, advancedFilters, updateURL, fetchPosts])
+  }, [pageSize, sorting, categoryFilter, searchQuery, advancedFilters, updateURL, fetchPosts])
 
   // Handle category change with URL update
   const handleCategoryChange = useCallback((newCategory: string) => {
@@ -386,10 +398,10 @@ function PostsPageContent() {
 
     // Update URL and fetch
     setTimeout(() => {
-      updateURL(1, sorting, dateRange, newCategory, viewMode, searchQuery, advancedFilters)
+      updateURL(1, sorting, dateRange, newCategory, searchQuery, advancedFilters)
       fetchPosts(1, pageSize, sorting, dateRange, newCategory, searchQuery, advancedFilters)
     }, 0)
-  }, [pageSize, sorting, dateRange, viewMode, searchQuery, advancedFilters, updateURL, fetchPosts])
+  }, [pageSize, sorting, dateRange, searchQuery, advancedFilters, updateURL, fetchPosts])
 
   // Handle search query change with URL update
   const handleSearchChange = useCallback((newSearch: string) => {
@@ -399,12 +411,12 @@ function PostsPageContent() {
 
     // Update URL and fetch
     setTimeout(() => {
-      updateURL(1, sorting, dateRange, categoryFilter, viewMode, newSearch, advancedFilters)
+      updateURL(1, sorting, dateRange, categoryFilter, newSearch, advancedFilters)
       fetchPosts(1, pageSize, sorting, dateRange, categoryFilter, newSearch, advancedFilters).finally(() => {
         setIsSearching(false) // End search loading
       })
     }, 0)
-  }, [pageSize, sorting, dateRange, categoryFilter, viewMode, advancedFilters, updateURL, fetchPosts])
+  }, [pageSize, sorting, dateRange, categoryFilter, advancedFilters, updateURL, fetchPosts])
 
   // Handle advanced filters change with URL update
   const handleAdvancedFiltersChange = useCallback((newFilters: AdvancedFiltersValue) => {
@@ -413,10 +425,10 @@ function PostsPageContent() {
 
     // Update URL and fetch
     setTimeout(() => {
-      updateURL(1, sorting, dateRange, categoryFilter, viewMode, searchQuery, newFilters)
+      updateURL(1, sorting, dateRange, categoryFilter, searchQuery, newFilters)
       fetchPosts(1, pageSize, sorting, dateRange, categoryFilter, searchQuery, newFilters)
     }, 0)
-  }, [pageSize, sorting, dateRange, categoryFilter, viewMode, searchQuery, updateURL, fetchPosts])
+  }, [pageSize, sorting, dateRange, categoryFilter, searchQuery, updateURL, fetchPosts])
 
   // Handle refetch (e.g., after updating slide classification)
   const handleRefetchPosts = useCallback(() => {
@@ -434,6 +446,7 @@ function PostsPageContent() {
     const categoryParam = searchParams.get('category') || 'all'
     const searchParam = searchParams.get('search') || ''
     const accountIdsParam = searchParams.get('accountIds')
+    const profileGroupIdsParam = searchParams.get('profileGroupIds')
     const viewCountGtParam = searchParams.get('viewCountGt')
     const viewCountLtParam = searchParams.get('viewCountLt')
 
@@ -453,10 +466,14 @@ function PostsPageContent() {
       to: dateToParam ? new Date(dateToParam) : undefined
     }
 
+    const ocrStatusParam = searchParams.get('ocrStatus')
+
     const urlAdvancedFilters: AdvancedFiltersValue = {
       accountIds: accountIdsParam ? accountIdsParam.split(',').filter(Boolean) : [],
+      profileGroupIds: profileGroupIdsParam ? profileGroupIdsParam.split(',').filter(Boolean) : [],
       viewCountGt: viewCountGtParam ? parseInt(viewCountGtParam) : undefined,
-      viewCountLt: viewCountLtParam ? parseInt(viewCountLtParam) : undefined
+      viewCountLt: viewCountLtParam ? parseInt(viewCountLtParam) : undefined,
+      ocrStatus: (ocrStatusParam as 'all' | 'processed' | 'unprocessed') || 'all'
     }
 
     // Check if URL state is different from current state
@@ -481,13 +498,80 @@ function PostsPageContent() {
     fetchPosts(initialPage, pageSize, initialSorting, initialDateRange, initialCategory, initialSearch, initialAdvancedFilters)
   }, [])
 
-  // Sync viewMode from URL
+  // SSE listener for real-time OCR updates
   useEffect(() => {
-    const urlViewMode = (searchParams.get('view') as 'metrics' | 'content') || 'metrics'
-    if (urlViewMode !== viewMode) {
-      setViewMode(urlViewMode)
+    const eventSource = new EventSource('/api/events/ocr')
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+
+        // Handle OCR completed events
+        if (data.type === 'ocr:completed' && data.postId) {
+          console.log(`📨 [SSE] Received OCR update for post: ${data.postId}`)
+
+          // Check if post exists in current posts array
+          setPosts(prev => {
+            const postIndex = prev.findIndex(p => p.id === data.postId)
+            if (postIndex === -1) {
+              console.log(`📭 [SSE] Post ${data.postId} not in current view, skipping update`)
+              return prev // Post not in current view
+            }
+
+            console.log(`✅ [SSE] Post ${data.postId} found, fetching updated data`)
+
+            // Fetch updated post data inline
+            fetch(`/api/tiktok/posts/${data.postId}`)
+              .then(res => {
+                if (!res.ok) throw new Error('Failed to fetch updated post')
+                return res.json()
+              })
+              .then(updatedPost => {
+                setPosts(current => {
+                  const idx = current.findIndex(p => p.id === data.postId)
+                  if (idx === -1) return current
+
+                  const newPosts = [...current]
+                  newPosts[idx] = {
+                    ...newPosts[idx],
+                    ...updatedPost,
+                    // Ensure we preserve the full structure
+                    ocrTexts: updatedPost.ocrTexts,
+                    imageDescriptions: updatedPost.imageDescriptions,
+                    slideClassifications: updatedPost.slideClassifications,
+                    postCategory: updatedPost.postCategory
+                  }
+
+                  console.log(`🔄 [SSE] Updated post ${data.postId} in state`)
+                  return newPosts
+                })
+              })
+              .catch(error => {
+                console.error(`❌ [SSE] Failed to fetch updated post ${data.postId}:`, error)
+              })
+
+            return prev
+          })
+        }
+      } catch (error) {
+        console.error('❌ [SSE] Failed to handle SSE event:', error)
+      }
     }
-  }, [searchParams, viewMode])
+
+    eventSource.onerror = (error) => {
+      console.error('❌ [SSE] EventSource error:', error)
+    }
+
+    eventSource.onopen = () => {
+      console.log('✅ [SSE] Connected to OCR events stream')
+    }
+
+    // Cleanup on unmount
+    return () => {
+      console.log('🔌 [SSE] Disconnecting from OCR events stream')
+      eventSource.close()
+    }
+  }, [])
 
 
   // Get selected posts data for sidebar
@@ -515,6 +599,42 @@ function PostsPageContent() {
   }
 
   const [isCopyingToClipboard, setIsCopyingToClipboard] = useState(false)
+  const [isBulkOCRProcessing, setIsBulkOCRProcessing] = useState(false)
+
+  const handleBulkOCR = useCallback(async () => {
+    if (selectedPosts.size === 0) return
+
+    setIsBulkOCRProcessing(true)
+    try {
+      const postIds = Array.from(selectedPosts)
+      const response = await fetch('/api/tiktok/posts/bulk-ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postIds })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to process bulk OCR')
+      }
+
+      toast.success(`OCR processing completed for ${data.summary.successful}/${data.summary.total} posts`, {
+        description: data.summary.failed > 0 ? `${data.summary.failed} posts failed` : 'All posts processed successfully'
+      })
+
+      // Refetch posts to show updated OCR data
+      handleRefetchPosts()
+
+      // Clear selection after successful OCR
+      setSelectedPosts(new Set())
+    } catch (error) {
+      console.error('Failed to process bulk OCR:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to process bulk OCR')
+    } finally {
+      setIsBulkOCRProcessing(false)
+    }
+  }, [selectedPosts, handleRefetchPosts])
 
   const handleCopyToClipboard = useCallback(async () => {
     if (selectedPosts.size === 0) return
@@ -656,7 +776,15 @@ function PostsPageContent() {
       <div className="flex-1 flex flex-col min-w-0">
         <PageLayout
           title={
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Button
+                variant={showMetrics ? "default" : "outline"}
+                onClick={() => setShowMetrics(!showMetrics)}
+                className="w-8 h-8 text-xs"
+                size="icon"
+              >
+                <LayoutGrid className="h-3 w-3" />
+              </Button>
               <SearchInput
                 value={searchQuery}
                 onChange={handleSearchChange}
@@ -671,105 +799,114 @@ function PostsPageContent() {
                   value={advancedFilters}
                   onChange={handleAdvancedFiltersChange}
                 />
-                {viewMode === 'content' && (
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <div className="relative">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <div className="relative">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 px-3 text-xs"
+                      >
+                        <ArrowUpDown className="h-3 w-3" />
+                      </Button>
+                      {sorting.length > 0 && (
+                        <Badge
+                          variant="secondary"
+                          className="absolute -right-1.5 -bottom-1.5 h-4 w-4 flex items-center justify-center rounded-full p-0 text-[10px] border border-background"
+                        >
+                          {sorting.length}
+                        </Badge>
+                      )}
+                    </div>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64" align="end">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm">Sort By</h4>
+                        <Select
+                          value={sorting[0]?.id || ''}
+                          onValueChange={(value) => {
+                            const newSorting: SortingState = value
+                              ? [{ id: value, desc: sorting[0]?.desc ?? true }]
+                              : []
+                            handleSortingChange(newSorting)
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Select field" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="viewCount">Views</SelectItem>
+                            <SelectItem value="likeCount">Likes</SelectItem>
+                            <SelectItem value="commentCount">Comments</SelectItem>
+                            <SelectItem value="shareCount">Shares</SelectItem>
+                            <SelectItem value="saveCount">Saves</SelectItem>
+                            <SelectItem value="publishedAt">Published Date</SelectItem>
+                            <SelectItem value="authorHandle">Author</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {sorting.length > 0 && (
+                        <div className="space-y-2">
+                          <h4 className="font-medium text-sm">Direction</h4>
+                          <ToggleGroup
+                            type="single"
+                            value={sorting[0]?.desc ? 'desc' : 'asc'}
+                            onValueChange={(value) => {
+                              if (value && sorting[0]) {
+                                const newSorting: SortingState = [
+                                  { id: sorting[0].id, desc: value === 'desc' }
+                                ]
+                                handleSortingChange(newSorting)
+                              }
+                            }}
+                            className="w-full"
+                          >
+                            <ToggleGroupItem value="desc" className="flex-1 gap-1.5 h-8 text-xs">
+                              <ArrowDown className="h-3 w-3" />
+                              Descending
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="asc" className="flex-1 gap-1.5 h-8 text-xs">
+                              <ArrowUp className="h-3 w-3" />
+                              Ascending
+                            </ToggleGroupItem>
+                          </ToggleGroup>
+                        </div>
+                      )}
+
+                      {sorting.length > 0 && (
                         <Button
                           variant="outline"
                           size="icon"
-                          className="h-8 px-3 text-xs gap-1.5"
+                          onClick={() => {
+                            handleSortingChange([])
+                          }}
+                          className="w-8 h-8 text-xs gap-1.5"
                         >
-                          <ArrowUpDown className="h-3 w-3" />
+                          <X className="h-3 w-3" />
+                          Reset Sorting
                         </Button>
-                        {sorting.length > 0 && (
-                          <Badge
-                            variant="secondary"
-                            className="absolute -right-1.5 -bottom-1.5 h-4 w-4 flex items-center justify-center rounded-full p-0 text-[10px] border border-background"
-                          >
-                            {sorting.length}
-                          </Badge>
-                        )}
-                      </div>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-64" align="end">
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <h4 className="font-medium text-sm">Sort By</h4>
-                          <Select
-                            value={sorting[0]?.id || ''}
-                            onValueChange={(value) => {
-                              const newSorting: SortingState = value
-                                ? [{ id: value, desc: sorting[0]?.desc ?? true }]
-                                : []
-                              handleSortingChange(newSorting)
-                            }}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Select field" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="viewCount">Views</SelectItem>
-                              <SelectItem value="likeCount">Likes</SelectItem>
-                              <SelectItem value="commentCount">Comments</SelectItem>
-                              <SelectItem value="shareCount">Shares</SelectItem>
-                              <SelectItem value="saveCount">Saves</SelectItem>
-                              <SelectItem value="publishedAt">Published Date</SelectItem>
-                              <SelectItem value="authorHandle">Author</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        {sorting.length > 0 && (
-                          <div className="space-y-2">
-                            <h4 className="font-medium text-sm">Direction</h4>
-                            <ToggleGroup
-                              type="single"
-                              value={sorting[0]?.desc ? 'desc' : 'asc'}
-                              onValueChange={(value) => {
-                                if (value && sorting[0]) {
-                                  const newSorting: SortingState = [
-                                    { id: sorting[0].id, desc: value === 'desc' }
-                                  ]
-                                  handleSortingChange(newSorting)
-                                }
-                              }}
-                              className="w-full"
-                            >
-                              <ToggleGroupItem value="desc" className="flex-1 gap-1.5 h-8 text-xs">
-                                <ArrowDown className="h-3 w-3" />
-                                Descending
-                              </ToggleGroupItem>
-                              <ToggleGroupItem value="asc" className="flex-1 gap-1.5 h-8 text-xs">
-                                <ArrowUp className="h-3 w-3" />
-                                Ascending
-                              </ToggleGroupItem>
-                            </ToggleGroup>
-                          </div>
-                        )}
-
-                        {sorting.length > 0 && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              handleSortingChange([])
-                            }}
-                            className="w-full h-8 text-xs gap-1.5"
-                          >
-                            <X className="h-3 w-3" />
-                            Reset Sorting
-                          </Button>
-                        )}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                )}
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <Button
+                  variant="outline"
+                  onClick={handleBulkOCR}
+                  disabled={selectedPosts.size === 0 || isBulkOCRProcessing}
+                  className="w-8 h-8 px-3 text-xs"
+                  size="icon"
+                  title="Process OCR for selected posts"
+                >
+                  <ScanText className="h-3 w-3" />
+                </Button>
                 <Button
                   variant="outline"
                   onClick={handleCopyToClipboard}
                   disabled={selectedPosts.size === 0 || isCopyingToClipboard}
-                  className="w-full sm:w-auto h-8 px-3 text-xs"
+                  className="w-8 h-8 px-3 text-xs"
+                  size="icon"
                 >
                   <Clipboard className="h-3 w-3" />
                 </Button>
@@ -777,10 +914,10 @@ function PostsPageContent() {
                   variant="outline"
                   onClick={() => setIsProjectSelectorOpen(true)}
                   disabled={selectedPosts.size === 0}
-                  className="w-full sm:w-auto h-8 px-3 text-xs"
+                  className="h-8 w-8 text-xs"
+                  size="icon"
                 >
                   <FolderPlus className="h-3 w-3" />
-                  Add to Project {selectedPosts.size > 0 && ` (${selectedPosts.size})`}
                 </Button>
                 <Button
                   variant={isAnalysisSidebarOpen ? "default" : "outline"}
@@ -793,10 +930,9 @@ function PostsPageContent() {
               </div>
           }
         >
-          {viewMode === 'metrics' ? (
-            <>
-              {/* Metrics and Charts Row */}
-              <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr_1fr] gap-4 px-4 pt-4">
+          {/* Metrics and Charts Row - conditionally shown */}
+          {showMetrics && (
+            <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr_1fr] gap-4 px-4 pt-4">
             {/* Metrics Grid - 2x3 */}
             {isLoading && !displayMetrics ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -882,63 +1018,34 @@ function PostsPageContent() {
               bestTimes={displayTimeAnalysis?.bestTimes || []}
               loading={isLoading && !displayTimeAnalysis}
             />
-              </div>
-
-              {/* Posts Table */}
-              <PostsTable
-                posts={posts}
-                totalPosts={totalPosts}
-                categoryFilter={{
-                  value: categoryFilter,
-                  onChange: handleCategoryChange
-                }}
-                dateRangeFilter={{
-                  value: dateRange,
-                  onChange: handleDateRangeChange
-                }}
-                onPageChange={handlePageChange}
-                onSortingChange={handleSortingChange}
-                onRefetchPosts={handleRefetchPosts}
-                sorting={sorting}
-                enableServerSideSorting={true}
-                isLoading={isLoading}
-                selectedPosts={selectedPosts}
-                onSelectionChange={setSelectedPosts}
-                viewMode={viewMode}
-                searchQuery={searchQuery}
-                rowClassName={(row) => {
-                  return 'bg-background'
-                }}
-              />
-            </>
-          ) : (
-            /* Content Mode: Full Height Posts Table */
-            <PostsTable
-              posts={posts}
-              totalPosts={totalPosts}
-              categoryFilter={{
-                value: categoryFilter,
-                onChange: handleCategoryChange
-              }}
-              dateRangeFilter={{
-                value: dateRange,
-                onChange: handleDateRangeChange
-              }}
-              onPageChange={handlePageChange}
-              onSortingChange={handleSortingChange}
-              onRefetchPosts={handleRefetchPosts}
-              sorting={sorting}
-              enableServerSideSorting={true}
-              isLoading={isLoading}
-              selectedPosts={selectedPosts}
-              onSelectionChange={setSelectedPosts}
-              viewMode={viewMode}
-              searchQuery={searchQuery}
-                rowClassName={(row) => {
-                  return 'bg-background'
-                }}
-            />
+            </div>
           )}
+
+          {/* Posts Table - always in content mode */}
+          <PostsTable
+            posts={posts}
+            totalPosts={totalPosts}
+            categoryFilter={{
+              value: categoryFilter,
+              onChange: handleCategoryChange
+            }}
+            dateRangeFilter={{
+              value: dateRange,
+              onChange: handleDateRangeChange
+            }}
+            onPageChange={handlePageChange}
+            onSortingChange={handleSortingChange}
+            onRefetchPosts={handleRefetchPosts}
+            sorting={sorting}
+            enableServerSideSorting={true}
+            isLoading={isLoading}
+            selectedPosts={selectedPosts}
+            onSelectionChange={setSelectedPosts}
+            searchQuery={searchQuery}
+            rowClassName={(row) => {
+              return 'bg-background'
+            }}
+          />
         </PageLayout>
       </div>
 

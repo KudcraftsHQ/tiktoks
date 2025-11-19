@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
-import { Copy, Check, X, Plus, MoveDown } from 'lucide-react'
+import { Copy, Check, Trash2, Plus, MoveDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { HighlightedText } from '@/components/HighlightedText'
@@ -127,9 +127,8 @@ export function InlineEditableText({
     const updated = textBoxes.filter((_, i) => i !== index)
     setTextBoxes(updated)
 
-    // Auto-save after removal
+    // Auto-save after removal (background save - no loading spinner)
     const joinedText = updated.join('\n')
-    setIsSaving(true)
     try {
       await onSave(joinedText)
       setLocalValue(joinedText)
@@ -139,8 +138,6 @@ export function InlineEditableText({
       toast.error('Failed to save changes')
       // Revert
       setTextBoxes(value.split('\n').filter(line => line.trim() !== ''))
-    } finally {
-      setIsSaving(false)
     }
   }
 
@@ -156,9 +153,8 @@ export function InlineEditableText({
     updated.splice(index + 1, 1)
     setTextBoxes(updated)
 
-    // Auto-save after merge
+    // Auto-save after merge (background save - no loading spinner)
     const joinedText = updated.join('\n')
-    setIsSaving(true)
     try {
       await onSave(joinedText)
       setLocalValue(joinedText)
@@ -168,33 +164,32 @@ export function InlineEditableText({
       toast.error('Failed to save changes')
       // Revert
       setTextBoxes(value.split('\n').filter(line => line.trim() !== ''))
-    } finally {
-      setIsSaving(false)
     }
   }
 
   // Text box mode rendering
   if (textBoxMode) {
+    const textBoxHeight = textBoxes.length === 2 ? 'h-1/2' : 'h-full'
+
     return (
-      <div className={cn('space-y-2', fixedHeight && heightClass, 'overflow-y-auto')}>
+      <div className={cn('flex flex-col', fixedHeight && heightClass, textBoxes.length === 2 ? 'gap-2' : '')}>
         {textBoxes.map((text, index) => (
-          <div key={index} className="relative group/textbox">
+          <div key={index} className={cn('relative group/textbox', textBoxHeight)}>
             <Textarea
               value={text}
               onChange={(e) => handleTextBoxChange(index, e.target.value)}
               onBlur={() => handleTextBoxBlur(index)}
               placeholder={`Text box ${index + 1}`}
               maxLength={maxLength}
-              rows={2}
-              disabled={disabled || isSaving}
+              disabled={disabled}
               className={cn(
-                'pr-16 resize-none text-[10px] leading-tight whitespace-pre-wrap break-words',
-                isSaving && 'opacity-50 pointer-events-none',
+                'h-full pr-16 resize-none text-[10px] leading-tight whitespace-pre-wrap break-words overflow-y-auto',
                 disabled && 'cursor-not-allowed bg-muted/50',
                 className
               )}
               style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
             />
+            {/* Top-right buttons: Merge (if not last) and Delete (if more than 1) */}
             <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover/textbox:opacity-100 transition-opacity">
               {index < textBoxes.length - 1 && (
                 <Button
@@ -203,45 +198,44 @@ export function InlineEditableText({
                   variant="ghost"
                   className="h-6 w-6"
                   onClick={() => handleMergeTextBox(index)}
-                  disabled={isSaving || disabled}
+                  disabled={disabled}
                   title="Merge with next text box"
                 >
                   <MoveDown className="h-3 w-3 text-blue-500" />
                 </Button>
               )}
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6"
-                onClick={() => handleRemoveTextBox(index)}
-                disabled={isSaving || disabled || textBoxes.length <= 1}
-                title="Remove text box"
-              >
-                <X className="h-3 w-3 text-destructive" />
-              </Button>
+              {textBoxes.length > 1 && (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6"
+                  onClick={() => handleRemoveTextBox(index)}
+                  disabled={disabled}
+                  title="Remove text box"
+                >
+                  <Trash2 className="h-3 w-3 text-destructive" />
+                </Button>
+              )}
             </div>
-            <div className="absolute bottom-1 right-1 text-[10px] text-muted-foreground">
-              Box {index + 1}
-            </div>
+            {/* Bottom-right button: Add (only show if less than 2 text boxes) */}
+            {textBoxes.length < 2 && (
+              <div className="absolute bottom-2 right-2 opacity-0 group-hover/textbox:opacity-100 transition-opacity">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6"
+                  onClick={handleAddTextBox}
+                  disabled={disabled}
+                  title="Add text box"
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
           </div>
         ))}
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="w-full h-8 text-xs"
-          onClick={handleAddTextBox}
-          disabled={isSaving || disabled}
-        >
-          <Plus className="h-3 w-3 mr-1" />
-          Add Text Box
-        </Button>
-        {isSaving && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/50 rounded-md">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-          </div>
-        )}
       </div>
     )
   }

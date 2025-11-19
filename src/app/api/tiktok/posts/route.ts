@@ -209,8 +209,10 @@ export async function GET(request: NextRequest) {
 
     // New advanced filters
     const accountIds = searchParams.get('accountIds')?.split(',').filter(Boolean) || []
+    const profileGroupIds = searchParams.get('profileGroupIds')?.split(',').filter(Boolean) || []
     const viewCountGt = searchParams.get('viewCountGt')
     const viewCountLt = searchParams.get('viewCountLt')
+    const ocrStatus = searchParams.get('ocrStatus') || 'all'
 
     // Parse sorting from URL - supports multi-column sorting
     // Format: ?sort=viewCount.desc,likeCount.asc,publishedAt.desc
@@ -237,6 +239,22 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit
 
+    // Fetch profile IDs from selected profile groups
+    let profileIdsFromGroups: string[] = []
+    if (profileGroupIds.length > 0) {
+      const profilesInGroups = await prisma.tiktokProfile.findMany({
+        where: {
+          profileGroupId: {
+            in: profileGroupIds
+          }
+        },
+        select: {
+          id: true
+        }
+      })
+      profileIdsFromGroups = profilesInGroups.map(p => p.id)
+    }
+
     // Build where clause
     const where: any = {}
 
@@ -252,10 +270,11 @@ export async function GET(request: NextRequest) {
       where.postCategoryId = categoryId
     }
 
-    // Filter by account IDs (profile IDs)
-    if (accountIds.length > 0) {
+    // Filter by account IDs (profile IDs) - combine accountIds and profileGroupIds
+    const combinedProfileIds = [...accountIds, ...profileIdsFromGroups]
+    if (combinedProfileIds.length > 0) {
       where.profileId = {
-        in: accountIds
+        in: combinedProfileIds
       }
     }
 
@@ -321,6 +340,15 @@ export async function GET(request: NextRequest) {
           ]
         }))
       }
+    }
+
+    // Filter by OCR status
+    if (ocrStatus === 'processed') {
+      where.ocrTexts = {
+        not: null
+      }
+    } else if (ocrStatus === 'unprocessed') {
+      where.ocrTexts = null
     }
 
     const [posts, total] = await Promise.all([

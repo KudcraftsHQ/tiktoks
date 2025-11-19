@@ -25,7 +25,7 @@ export interface ThumbnailDimensions {
 }
 
 export const THUMBNAIL_SIZES = {
-  sm: { width: 48, height: 85 },   // Thumbnail strip
+  sm: { width: 40, height: 71 },   // Thumbnail strip (matches w-10 aspect-[9/16])
   md: { width: 96, height: 170 },  // Content grid
   lg: { width: 150, height: 267 }  // Dialog preview
 } as const

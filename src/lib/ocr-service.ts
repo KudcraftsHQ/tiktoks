@@ -2,6 +2,7 @@ import { GoogleGenAI, Type } from '@google/genai'
 import { cacheAssetService } from './cache-asset-service'
 import { PrismaClient } from '@/generated/prisma'
 import * as Sentry from '@sentry/nextjs'
+import { sseEventEmitter } from './sse-event-emitter'
 
 const prisma = new PrismaClient()
 
@@ -238,9 +239,37 @@ Follow the schema definitions for all fields. Return the structured JSON respons
     }
 
     console.log(`✅ [OCR] Received structured response from Gemini`)
+    console.log(`📝 [OCR] Raw response text (first 500 chars):`, response.text.substring(0, 500))
 
-    // Parse the structured response
-    const ocrData = JSON.parse(response.text)
+    // Parse the structured response with error handling
+    let ocrData
+    try {
+      // Clean the response text - remove markdown code blocks if present
+      let cleanedText = response.text.trim()
+
+      // Remove markdown code blocks (```json ... ```)
+      if (cleanedText.startsWith('```')) {
+        cleanedText = cleanedText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
+      }
+
+      if (!cleanedText) {
+        throw new Error('Empty response text after cleaning')
+      }
+
+      ocrData = JSON.parse(cleanedText)
+      console.log(`✅ [OCR] Successfully parsed JSON response`)
+    } catch (parseError) {
+      const error = new Error(`Failed to parse Gemini response: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`)
+      Sentry.captureException(error, {
+        tags: { operation: 'ocr', postId },
+        extra: {
+          responseText: response.text,
+          parseError: parseError instanceof Error ? parseError.message : String(parseError)
+        }
+      })
+      throw error
+    }
+
     console.log(JSON.stringify(ocrData, null, 2));
 
     console.log(`📊 [OCR] Parsed response:`, {
@@ -338,6 +367,9 @@ Follow the schema definitions for all fields. Return the structured JSON respons
       allSlidesProcessed: ocrData.processingMetadata.allSlidesProcessed
     })
 
+    // Emit SSE event for real-time UI update
+    await sseEventEmitter.emitOCRCompleted(postId, true)
+
   } catch (error) {
     console.error(`❌ [OCR] Failed to process TikTokPost ${postId}:`, error)
 
@@ -355,6 +387,9 @@ Follow the schema definitions for all fields. Return the structured JSON respons
         updatedAt: new Date()
       }
     })
+
+    // Emit SSE event for failed OCR
+    await sseEventEmitter.emitOCRCompleted(postId, false)
 
     throw error instanceof Error ? error : new Error('OCR processing failed')
   }

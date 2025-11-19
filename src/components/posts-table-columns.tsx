@@ -3,15 +3,7 @@
 import React, { useState } from 'react'
 import { ColumnDef } from '@tanstack/react-table'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
 import { toast } from 'sonner'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import {
   Tooltip,
   TooltipContent,
@@ -19,20 +11,20 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
-  ExternalLink, Heart,
+  ExternalLink,
+  Heart,
   MessageCircle,
   Share,
   Bookmark,
-  Eye, Sparkles,
-  CheckCircle2,
-  XCircle,
+  Eye,
+  Sparkles,
   Loader2,
-  FileText,
-  MoreHorizontal,
-  Copy
+  Copy,
+  ScanLine,
+  Clock,
+  CheckIcon,
+  XIcon
 } from 'lucide-react'
-import { MiniSparkline } from '@/components/MiniSparkline'
-import { SlideClassificationBadge, SlideType } from '@/components/SlideClassificationBadge'
 import { SlideTypeDropdown } from '@/components/SlideTypeDropdown'
 import { InlineEditableText } from '@/components/InlineEditableText'
 import { HighlightedText } from '@/components/HighlightedText'
@@ -105,7 +97,6 @@ interface PostsTableColumnsProps {
   onSelectPost?: (postId: string, checked: boolean) => void
   onSelectAll?: (checked: boolean) => void
   allSelected?: boolean
-  viewMode?: 'metrics' | 'content'
   searchTerms?: string[]
 }
 
@@ -116,27 +107,6 @@ const formatNumber = (num: number): string => {
     return (num / 1000).toFixed(1) + 'K'
   }
   return num.toString()
-}
-
-const formatDuration = (seconds?: number): string => {
-  if (!seconds) return ''
-
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = Math.floor(seconds % 60)
-
-  if (minutes > 0) {
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
-  }
-  return `${remainingSeconds}s`
-}
-
-const formatDate = (dateString: string): string => {
-  const date = new Date(dateString)
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  }).format(date)
 }
 
 const formatDateTime = (dateString: string): { date: string; time: string } => {
@@ -158,44 +128,174 @@ const formatDateTime = (dateString: string): { date: string; time: string } => {
   return { date: dateStr, time: timeStr }
 }
 
-const parseImages = (images: any): Array<{ url: string; width: number; height: number }> => {
-  if (Array.isArray(images)) {
-    return images
-  }
-  if (typeof images === 'string') {
-    try {
-      const parsed = JSON.parse(images)
-      return Array.isArray(parsed) ? parsed : []
-    } catch {
-      return []
-    }
-  }
-  return []
+const formatRelativeTime = (dateString: string): string => {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffSec = Math.floor(diffMs / 1000)
+  const diffMin = Math.floor(diffSec / 60)
+  const diffHour = Math.floor(diffMin / 60)
+  const diffDay = Math.floor(diffHour / 24)
+  const diffWeek = Math.floor(diffDay / 7)
+  const diffMonth = Math.floor(diffDay / 30)
+  const diffYear = Math.floor(diffDay / 365)
+
+  if (diffSec < 60) return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  if (diffHour < 24) return `${diffHour}h ago`
+  if (diffDay < 7) return `${diffDay}d ago`
+  if (diffWeek < 4) return `${diffWeek}w ago`
+  if (diffMonth < 12) return `${diffMonth}mo ago`
+  return `${diffYear}y ago`
 }
-// Actions cell component to properly handle hooks
-const ActionsCell = ({
-  post,
-  viewMode,
-  onTriggerOCR,
-  onRemixPost
-}: {
+
+// OCR Status Button Component
+interface OCRStatusButtonProps {
   post: TikTokPost
-  viewMode?: 'metrics' | 'content'
   onTriggerOCR?: (postId: string) => Promise<void>
-  onRemixPost?: (post: TikTokPost) => void
-}) => {
-  const [isCopying, setIsCopying] = useState(false)
+  compact?: boolean
+}
 
-  const handleTriggerOCR = async (e: React.MouseEvent) => {
+function OCRStatusButton({ post, onTriggerOCR, compact = false }: OCRStatusButtonProps) {
+  const [isProcessing, setIsProcessing] = useState(false)
+
+  const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!onTriggerOCR) return
+    if (!onTriggerOCR || isProcessing) return
 
+    setIsProcessing(true)
     try {
       await onTriggerOCR(post.id)
     } catch (err) {
       // Error handling is done in parent component
+    } finally {
+      setIsProcessing(false)
     }
   }
+
+  const getStatusConfig = () => {
+    if (isProcessing || post.ocrStatus === 'processing') {
+      return {
+        icon: ScanLine,
+        statusIcon: Loader2,
+        label: 'Processing',
+        tooltip: 'OCR is being processed...',
+        iconClass: 'text-blue-600',
+        statusIconClass: 'text-blue-600 animate-spin',
+        bgClass: 'bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-950/50',
+        disabled: true
+      }
+    }
+
+    if (post.ocrStatus === 'completed') {
+      return {
+        icon: ScanLine,
+        statusIcon: CheckIcon,
+        label: 'Re-scan',
+        tooltip: 'OCR completed. Click to re-scan or reset',
+        iconClass: 'text-green-600',
+        statusIconClass: 'text-green-600',
+        bgClass: 'bg-green-50 dark:bg-green-950/30 hover:bg-green-100 dark:hover:bg-green-950/50',
+        disabled: false
+      }
+    }
+
+    if (post.ocrStatus === 'failed') {
+      return {
+        icon: ScanLine,
+        statusIcon: XIcon,
+        label: 'Retry',
+        tooltip: 'OCR failed. Click to retry',
+        iconClass: 'text-red-600',
+        statusIconClass: 'text-red-600',
+        bgClass: 'bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50',
+        disabled: false
+      }
+    }
+
+    // pending
+    return {
+      icon: ScanLine,
+      statusIcon: Clock,
+      label: 'Scan',
+      tooltip: 'Click to start OCR scanning',
+      iconClass: 'text-muted-foreground',
+      statusIconClass: 'text-muted-foreground',
+      bgClass: 'bg-muted hover:bg-muted/80',
+      disabled: false
+    }
+  }
+
+  const config = getStatusConfig()
+  const Icon = config.icon
+  const StatusIcon = config.statusIcon
+
+  if (compact) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClick}
+            disabled={config.disabled}
+            className="h-8 w-8 p-0"
+          >
+            <div className="relative inline-flex">
+              <Icon className={`h-4 w-4 ${config.iconClass}`} />
+              {StatusIcon && (
+                <span className="absolute -right-0.5 -bottom-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-background">
+                  <StatusIcon className={`h-1.5 w-1.5 ${config.statusIconClass}`} />
+                </span>
+              )}
+            </div>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="left">
+          <p>{config.tooltip}</p>
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleClick}
+          disabled={config.disabled}
+          className={`h-8 px-3 gap-2 ${config.bgClass} transition-colors`}
+        >
+          <div className="relative inline-flex">
+            <Icon className={`h-4 w-4 ${config.iconClass}`} />
+            {StatusIcon && (
+              <span className="absolute -right-0.5 -bottom-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-background">
+                <StatusIcon className={`h-1.5 w-1.5 ${config.statusIconClass}`} />
+              </span>
+            )}
+          </div>
+          {!compact && <span className="text-xs font-medium">{config.label}</span>}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>{config.tooltip}</p>
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+// Actions cell component to properly handle hooks
+const ActionsCell = ({
+  post,
+  onTriggerOCR,
+  onRemixPost
+}: {
+  post: TikTokPost
+  onTriggerOCR?: (postId: string) => Promise<void>
+  onRemixPost?: (post: TikTokPost) => void
+}) => {
+  const [isCopying, setIsCopying] = useState(false)
 
   const handleCopyToClipboard = async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -284,66 +384,62 @@ const ActionsCell = ({
     }
   }
 
-  // Content mode: Show vertical action buttons with icons only
-  if (viewMode === 'content') {
-    const ocrTooltipText = post.ocrStatus === 'completed'
-      ? 'OCR Complete'
-      : post.ocrStatus === 'processing'
-      ? 'Processing...'
-      : post.ocrStatus === 'failed'
-      ? 'Retry OCR'
-      : 'Run OCR'
+  return (
+    <TooltipProvider>
+      <div className="flex flex-col gap-2">
+        {/* Copy to Clipboard Button */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCopyToClipboard}
+              disabled={isCopying}
+              className="h-8 w-8 p-0"
+            >
+              {isCopying ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left">
+            <p>Copy to Clipboard</p>
+          </TooltipContent>
+        </Tooltip>
 
-    return (
-      <TooltipProvider>
-        <div className="flex flex-col gap-2">
-          {/* Copy to Clipboard Button */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCopyToClipboard}
-                disabled={isCopying}
-                className="h-8 w-8 p-0"
-              >
-                {isCopying ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="left">
-              <p>Copy to Clipboard</p>
-            </TooltipContent>
-          </Tooltip>
+        {/* OCR Button - only for photo posts */}
+        {post.contentType === 'photo' && onTriggerOCR && (
+          <OCRStatusButton
+            post={post}
+            onTriggerOCR={onTriggerOCR}
+            compact={true}
+          />
+        )}
 
-          {/* OCR Button - only for photo posts */}
-          {post.contentType === 'photo' && onTriggerOCR && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleTriggerOCR}
-                  disabled={post.ocrStatus === 'processing'}
-                  className="h-8 w-8 p-0"
-                >
-                  {post.ocrStatus === 'processing' ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <FileText className="h-4 w-4" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="left">
-                <p>{ocrTooltipText}</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
+        {/* Open on TikTok Button */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                window.open(post.tiktokUrl, '_blank')
+              }}
+              className="h-8 w-8 p-0"
+            >
+              <ExternalLink className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left">
+            <p>Open on TikTok</p>
+          </TooltipContent>
+        </Tooltip>
 
-          {/* Open on TikTok Button */}
+        {/* Create Remix Button - only for photo posts */}
+        {post.contentType === 'photo' && onRemixPost && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -351,98 +447,20 @@ const ActionsCell = ({
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation()
-                  window.open(post.tiktokUrl, '_blank')
+                  onRemixPost(post)
                 }}
                 className="h-8 w-8 p-0"
               >
-                <ExternalLink className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="left">
-              <p>Open on TikTok</p>
-            </TooltipContent>
-          </Tooltip>
-
-          {/* Create Remix Button - only for photo posts */}
-          {post.contentType === 'photo' && onRemixPost && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onRemixPost(post)
-                  }}
-                  className="h-8 w-8 p-0"
-                >
-                  <Sparkles className="h-4 w-4 text-purple-600" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="left">
-                <p>Create Remix</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-      </TooltipProvider>
-    )
-  }
-
-  // Metrics mode: Show dropdown menu
-  return (
-    <div className="flex items-center justify-center">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => e.stopPropagation()}
-            className="h-8 w-8 p-0"
-          >
-            <MoreHorizontal className="h-4 w-4" />
-            <span className="sr-only">Open menu</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-          {post.contentType === 'photo' && onTriggerOCR && (
-            <DropdownMenuItem
-              onClick={handleTriggerOCR}
-              disabled={post.ocrStatus === 'processing'}
-            >
-              {post.ocrStatus === 'processing' ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <FileText className="mr-2 h-4 w-4" />
-              )}
-              {post.ocrStatus === 'completed' ? 'OCR Complete' : post.ocrStatus === 'processing' ? 'Processing OCR...' : post.ocrStatus === 'failed' ? 'Retry OCR' : 'Run OCR'}
-            </DropdownMenuItem>
-          )}
-
-          <DropdownMenuItem
-            onClick={(e) => {
-              e.stopPropagation()
-              window.open(post.tiktokUrl, '_blank')
-            }}
-          >
-            <ExternalLink className="mr-2 h-4 w-4" />
-            Open on TikTok
-          </DropdownMenuItem>
-
-          {post.contentType === 'photo' && onRemixPost && (
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation()
-                onRemixPost(post)
-              }}
-            >
-              <Sparkles className="mr-2 h-4 w-4 text-purple-600" />
-              Create Remix
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+                <Sparkles className="h-4 w-4 text-purple-600" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left">
+            <p>Create Remix</p>
+          </TooltipContent>
+        </Tooltip>
+        )}
+      </div>
+    </TooltipProvider>
   )
 }
 
@@ -450,23 +468,17 @@ export const createPostsTableColumns = ({
   onPreviewPost,
   onOpenImageGallery,
   onRemixPost,
-  onRowClick,
   onTriggerOCR,
   onRefetchPosts,
-  selectedPosts,
-  onSelectPost,
-  onSelectAll,
-  allSelected,
-  viewMode = 'metrics',
   searchTerms = []
 }: PostsTableColumnsProps): ColumnDef<TikTokPost>[] => [
   {
     accessorKey: 'authorHandle',
     header: 'Author',
-    enableSorting: viewMode !== 'content',
-    size: viewMode === 'content' ? 250 : 180,
-    minSize: viewMode === 'content' ? 250 : 180,
-    maxSize: viewMode === 'content' ? 250 : 180,
+    enableSorting: false,
+    size: 250,
+    minSize: 250,
+    maxSize: 250,
     meta: {
       pinned: 'left'
     },
@@ -480,138 +492,92 @@ export const createPostsTableColumns = ({
         }
       }
 
-      const publishedAt = row.getValue('publishedAt') as string
-      const { date, time } = formatDateTime(publishedAt)
+      const { date, time } = formatDateTime(post.publishedAt)
+      const relativeUpdated = formatRelativeTime(post.updatedAt)
+      const images = post._proxiedImages || []
 
-      // Content mode: show author info + slides content
-      if (viewMode === 'content') {
-        const images = post._proxiedImages || []
-
-        // Parse slide classifications
-        let slideClassifications: Array<{ slideIndex: number; slideType: string; confidence: number }> = []
-        try {
-          if (post.slideClassifications) {
-            const parsed = typeof post.slideClassifications === 'string'
-              ? JSON.parse(post.slideClassifications)
-              : post.slideClassifications
-            slideClassifications = Array.isArray(parsed) ? parsed : []
-          }
-        } catch {
-          slideClassifications = []
-        }
-
-        return (
-          <div className="flex flex-col items-start gap-3 w-full ">
-            {/* Row 1: Author Info */}
-            <div
-              className="flex items-center space-x-2 cursor-pointer hover:bg-muted/50 -mx-2 px-2 py-1 rounded-md transition-colors"
-              onClick={handleClick}
-            >
-              {post._proxiedAuthorAvatar ? (
-                <img
-                  src={post._proxiedAuthorAvatar}
-                  alt={post.authorHandle}
-                  className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-                />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                  <span className="text-xs font-semibold">{post.authorHandle?.[0]?.toUpperCase()}</span>
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm truncate">
-                  <HighlightedText
-                    text={post.authorNickname || post.authorHandle || ''}
-                    searchTerms={searchTerms}
-                  />
-                </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  @<HighlightedText
-                    text={post.authorHandle || ''}
-                    searchTerms={searchTerms}
-                  />
-                </p>
+      return (
+        <div className="flex flex-col items-start gap-3 w-full ">
+          {/* Row 1: Author Info */}
+          <div
+            className="flex items-center space-x-2 cursor-pointer hover:bg-muted/50 -mx-2 px-2 py-1 rounded-md transition-colors"
+            onClick={handleClick}
+          >
+            {post._proxiedAuthorAvatar ? (
+              <img
+                src={post._proxiedAuthorAvatar}
+                alt={post.authorHandle}
+                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-semibold">{post.authorHandle?.[0]?.toUpperCase()}</span>
               </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm truncate">
+                <HighlightedText
+                  text={post.authorNickname || post.authorHandle || ''}
+                  searchTerms={searchTerms}
+                />
+              </p>
+              <p className="text-xs text-muted-foreground truncate">
+                @<HighlightedText
+                  text={post.authorHandle || ''}
+                  searchTerms={searchTerms}
+                />
+              </p>
             </div>
+          </div>
 
-            {/* Row 2: Slides Content (compact thumbnails like metrics mode) */}
-            {post.contentType === 'photo' && images.length > 0 && (
-              <div className="flex items-center space-x-2">
-                <div className="flex space-x-1">
-                  {images.slice(0, 5).map((image: any, index: number) => {
-                    const isLast = index === images.slice(0, 5).length - 1
-                    const remainingCount = images.length - 5
+          {/* Row 2: Slides Content (compact thumbnails) */}
+          {post.contentType === 'photo' && images.length > 0 && (
+            <div className="flex items-center space-x-2">
+              <div className="flex space-x-1">
+                {images.slice(0, 5).map((image: any, index: number) => {
+                  const isLast = index === images.slice(0, 5).length - 1
+                  const remainingCount = images.length - 5
 
-                    return (
-                      <div key={index} className="relative">
-                        <img
-                          src={image._proxiedUrl}
-                          alt={`Photo ${index + 1}`}
-                          className="w-10 aspect-[9/16] rounded object-cover cursor-pointer hover:opacity-80 border"
+                  return (
+                    <div key={index} className="relative">
+                      <img
+                        src={image._proxiedUrl}
+                        alt={`Photo ${index + 1}`}
+                        className="w-10 aspect-[9/16] rounded object-cover cursor-pointer hover:opacity-80 border"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onOpenImageGallery?.(images.map((img: any) => ({ url: img.url, width: img.width, height: img.height })), index)
+                        }}
+                      />
+                      {isLast && remainingCount > 0 && (
+                        <div
+                          className="absolute inset-0 bg-black/70 rounded flex items-center justify-center cursor-pointer hover:bg-black/80 transition-colors"
                           onClick={(e) => {
                             e.stopPropagation()
                             onOpenImageGallery?.(images.map((img: any) => ({ url: img.url, width: img.width, height: img.height })), index)
                           }}
-                        />
-                        {isLast && remainingCount > 0 && (
-                          <div
-                            className="absolute inset-0 bg-black/70 rounded flex items-center justify-center cursor-pointer hover:bg-black/80 transition-colors"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onOpenImageGallery?.(images.map((img: any) => ({ url: img.url, width: img.width, height: img.height })), index)
-                            }}
-                          >
-                            <span className="text-white text-xs font-bold">
-                              +{remainingCount}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+                        >
+                          <span className="text-white text-xs font-bold">
+                            +{remainingCount}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Posting date */}
-            <div className="text-xs">
+          {/* Row 3: Published and Updated date */}
+          <div className="text-xs flex flex-col gap-0.5">
+            <div>
               <span>{date}</span>
               <span className="ml-1 text-muted-foreground">{time}</span>
             </div>
-          </div>
-        )
-      }
-
-      // Metrics mode: original layout
-      return (
-        <div
-          className="flex items-center space-x-2 cursor-pointer hover:bg-muted/50 -mx-2 px-2 py-1 rounded-md transition-colors"
-          onClick={handleClick}
-        >
-          {post._proxiedAuthorAvatar ? (
-            <img
-              src={post._proxiedAuthorAvatar}
-              alt={post.authorHandle}
-              className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-            />
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-              <span className="text-xs font-semibold">{post.authorHandle?.[0]?.toUpperCase()}</span>
+            <div className="text-muted-foreground">
+              Updated {relativeUpdated}
             </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm truncate">
-              <HighlightedText
-                text={post.authorNickname || post.authorHandle || ''}
-                searchTerms={searchTerms}
-              />
-            </p>
-            <p className="text-xs text-muted-foreground truncate">
-              @<HighlightedText
-                text={post.authorHandle || ''}
-                searchTerms={searchTerms}
-              />
-            </p>
           </div>
         </div>
       )
@@ -621,9 +587,6 @@ export const createPostsTableColumns = ({
     id: 'metrics',
     header: 'Metrics',
     size: 100,
-    meta: {
-      hideInMetricsMode: true
-    },
     cell: ({ row }) => {
       const post = row.original
 
@@ -675,9 +638,6 @@ export const createPostsTableColumns = ({
   {
     accessorKey: 'description',
     header: 'Description',
-    meta: {
-      hideInMetricsMode: true
-    },
     enableSorting: false,
     size: 224,
     cell: ({ row }) => {
@@ -714,53 +674,49 @@ export const createPostsTableColumns = ({
     accessorKey: 'title',
     header: 'Content',
     enableSorting: false,
-    minSize: viewMode === 'content' ? 1720 : 248,
+    minSize: 1720,
     cell: ({ row }) => {
       const post = row.original as any
       const images = post._proxiedImages || []
-      const maxDisplay = viewMode === 'content' ? images.length : 5
-      const displayImages = images.slice(0, maxDisplay)
-      const remainingCount = images.length - maxDisplay
 
-      // Parse OCR texts for content mode
+      // Parse OCR texts
       let ocrTexts: Array<{ imageIndex: number; text: string; success: boolean; error?: string }> = []
-      if (viewMode === 'content') {
-        try {
-          if (post.ocrTexts) {
-            const parsed = typeof post.ocrTexts === 'string'
-              ? JSON.parse(post.ocrTexts)
-              : post.ocrTexts
-            ocrTexts = Array.isArray(parsed) ? parsed : []
-          }
-        } catch {
-          ocrTexts = []
+      try {
+        if (post.ocrTexts) {
+          const parsed = typeof post.ocrTexts === 'string'
+            ? JSON.parse(post.ocrTexts)
+            : post.ocrTexts
+          ocrTexts = Array.isArray(parsed) ? parsed : []
         }
+      } catch {
+        ocrTexts = []
       }
 
       // Parse slide classifications
       let slideClassifications: Array<{ slideIndex: number; slideType: string; confidence: number }> = []
-      if (viewMode === 'content') {
-        try {
-          if (post.slideClassifications) {
-            const parsed = typeof post.slideClassifications === 'string'
-              ? JSON.parse(post.slideClassifications)
-              : post.slideClassifications
-            slideClassifications = Array.isArray(parsed) ? parsed : []
-          }
-        } catch {
-          slideClassifications = []
+      try {
+        if (post.slideClassifications) {
+          const parsed = typeof post.slideClassifications === 'string'
+            ? JSON.parse(post.slideClassifications)
+            : post.slideClassifications
+          slideClassifications = Array.isArray(parsed) ? parsed : []
         }
+      } catch {
+        slideClassifications = []
       }
 
-      // Content mode: Show horizontal slides with OCR text only (no images)
-      if (viewMode === 'content' && post.contentType === 'photo' && images.length > 0) {
+      // Show horizontal slides with OCR text
+      if (post.contentType === 'photo' && images.length > 0) {
+        const isOCRCompleted = post.ocrStatus === 'completed'
+
         return (
           <div className="w-full">
             <div className="flex gap-3 overflow-x-auto pb-2">
-              {displayImages.map((image: any, index: number) => {
+              {images.map((image: any, index: number) => {
                 const ocrResult = ocrTexts.find(ocr => ocr.imageIndex === index)
-                const ocrText = ocrResult?.success ? ocrResult.text : 'No text'
+                const ocrText = ocrResult?.success ? ocrResult.text : ''
                 const classification = slideClassifications.find(c => c.slideIndex === index)
+                const hasOCRText = ocrResult?.success && ocrText.trim().length > 0
 
                 return (
                   <div key={index} className="flex-shrink-0 w-52 flex flex-col">
@@ -781,7 +737,7 @@ export const createPostsTableColumns = ({
                     {/* OCR text - fixed height with scroll */}
                     <div className="h-48 overflow-y-auto">
                       <InlineEditableText
-                        value={ocrText}
+                        value={hasOCRText ? ocrText : ''}
                         onSave={async (newValue) => {
                           try {
                             const response = await fetch(`/api/tiktok/posts/${post.id}/ocr`, {
@@ -809,10 +765,10 @@ export const createPostsTableColumns = ({
                             throw error
                           }
                         }}
-                        placeholder={ocrResult?.success ? 'No text' : 'No text'}
+                        placeholder={isOCRCompleted ? 'No text detected' : 'Run OCR to extract text'}
                         fixedHeight={true}
                         heightClass="h-48"
-                        disabled={false}
+                        disabled={!isOCRCompleted}
                         className="text-[12px]"
                         rows={8}
                         searchTerms={searchTerms}
@@ -826,365 +782,20 @@ export const createPostsTableColumns = ({
         )
       }
 
-      // Metrics mode: Show compact thumbnails
-      return (
-        <div className="space-y-2 min-w-[200px]">
-          <div className="flex items-center space-x-2">
-            {post.contentType === 'photo' && images.length > 0 ? (
-              <div className="flex space-x-1">
-                {displayImages.map((image: any, index: number) => {
-                  const isLast = index === displayImages.length - 1
-                  const showOverlay = isLast && remainingCount > 0
-
-                  return (
-                    <div key={index} className="relative">
-                      <img
-                        src={image._proxiedUrl}
-                        alt={`Photo ${index + 1}`}
-                        className="w-10 aspect-[9/16] rounded object-cover cursor-pointer hover:opacity-80 border"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onOpenImageGallery?.(images.map((img: any) => ({ url: img.url, width: img.width, height: img.height })), index)
-                        }}
-                      />
-                      {showOverlay && (
-                        <div
-                          className="absolute inset-0 bg-black/70 rounded flex items-center justify-center cursor-pointer hover:bg-black/80 transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onOpenImageGallery?.(images.map((img: any) => ({ url: img.url, width: img.width, height: img.height })), index)
-                          }}
-                        >
-                          <span className="text-white text-xs font-bold">
-                            +{remainingCount}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            ) : post._proxiedCoverUrl ? (
-              <img
-                src={post._proxiedCoverUrl}
-                alt="Cover"
-                className="w-10 h-10 rounded object-cover cursor-pointer hover:opacity-80"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onPreviewPost(post)
-                }}
-              />
-            ) : null}
-          </div>
-        </div>
-      )
+      // Fallback for video posts or posts without images
+      return null
     },
-  },
-  {
-    accessorKey: 'viewCount',
-    header: ({ column }) => {
-      const isSorted = column.getIsSorted()
-
-      return (
-        <div className="flex items-center justify-center w-full">
-          <Button
-            variant="ghost"
-            onClick={() => viewMode !== 'content' && column.toggleSorting(column.getIsSorted() === 'asc')}
-            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'} ${viewMode === 'content' ? 'cursor-default' : ''}`}
-          >
-            <Eye className="w-4 h-4" />
-          </Button>
-        </div>
-      )
-    },
-    enableSorting: viewMode !== 'content',
-    meta: {
-      hideInContentMode: true,
-      align: 'center'
-    },
-    cell: ({ row }) => {
-      const viewCount = row.getValue('viewCount') as number
-      const post = row.original
-
-      // Build timeline from posting date to now
-      let viewHistory: number[] = []
-
-      if (post.publishedAt) {
-        const startDate = new Date(post.publishedAt)
-        const now = new Date()
-        const dataMap = new Map<string, number>()
-
-        // Map existing metrics by date
-        if (post.metricsHistory && post.metricsHistory.length > 0) {
-          post.metricsHistory.forEach(h => {
-            const dateKey = new Date(h.recordedAt).toISOString().split('T')[0]
-            dataMap.set(dateKey, Number(h.viewCount || 0))
-          })
-        }
-
-        // Fill timeline
-        let currentDate = new Date(startDate)
-        let lastValue = 0
-
-        while (currentDate <= now) {
-          const dateKey = currentDate.toISOString().split('T')[0]
-          const value = dataMap.get(dateKey)
-          if (value !== undefined) {
-            lastValue = value
-          }
-          viewHistory.push(lastValue)
-          currentDate.setDate(currentDate.getDate() + 1)
-        }
-
-        // Ensure last value is current
-        if (viewHistory.length > 0) {
-          viewHistory[viewHistory.length - 1] = viewCount
-        }
-      } else {
-        // Fallback: simple line from 0 to current
-        viewHistory = [0, viewCount]
-      }
-
-      return (
-        <div className="flex items-center gap-2 justify-center">
-          <div className="font-mono text-sm">
-            {formatNumber(viewCount)}
-          </div>
-          <MiniSparkline
-            data={viewHistory}
-            width={60}
-            height={20}
-            color="rgb(37, 99, 235)"
-          />
-        </div>
-      )
-    }
-  },
-  {
-    accessorKey: 'likeCount',
-    header: ({ column }) => {
-      const isSorted = column.getIsSorted()
-
-      return (
-        <div className="flex items-center justify-center w-full">
-          <Button
-            variant="ghost"
-            onClick={() => viewMode !== 'content' && column.toggleSorting(column.getIsSorted() === 'asc')}
-            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'} ${viewMode === 'content' ? 'cursor-default' : ''}`}
-          >
-            <Heart className={`w-4 h-4 ${isSorted ? 'text-red-600' : 'text-red-400'}`} />
-          </Button>
-        </div>
-      )
-    },
-    enableSorting: viewMode !== 'content',
-    meta: {
-      hideInContentMode: true,
-      align: 'center'
-    },
-    cell: ({ row }) => {
-      const likeCount = row.getValue('likeCount') as number
-      return (
-        <div className="text-center font-mono text-sm">
-          {formatNumber(likeCount)}
-        </div>
-      )
-    }
-  },
-  {
-    accessorKey: 'commentCount',
-    header: ({ column }) => {
-      const isSorted = column.getIsSorted()
-
-      return (
-        <div className="flex items-center justify-center w-full">
-          <Button
-            variant="ghost"
-            onClick={() => viewMode !== 'content' && column.toggleSorting(column.getIsSorted() === 'asc')}
-            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'} ${viewMode === 'content' ? 'cursor-default' : ''}`}
-          >
-            <MessageCircle className={`w-4 h-4 ${isSorted ? 'text-blue-600' : 'text-blue-400'}`} />
-          </Button>
-        </div>
-      )
-    },
-    enableSorting: viewMode !== 'content',
-    meta: {
-      hideInContentMode: true,
-      align: 'center'
-    },
-    cell: ({ row }) => {
-      const commentCount = row.getValue('commentCount') as number
-      return (
-        <div className="text-center font-mono text-sm">
-          {formatNumber(commentCount)}
-        </div>
-      )
-    }
-  },
-  {
-    accessorKey: 'shareCount',
-    header: ({ column }) => {
-      const isSorted = column.getIsSorted()
-
-      return (
-        <div className="flex items-center justify-center w-full">
-          <Button
-            variant="ghost"
-            onClick={() => viewMode !== 'content' && column.toggleSorting(column.getIsSorted() === 'asc')}
-            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'} ${viewMode === 'content' ? 'cursor-default' : ''}`}
-          >
-            <Share className={`w-4 h-4 ${isSorted ? 'text-green-600' : 'text-green-400'}`} />
-          </Button>
-        </div>
-      )
-    },
-    enableSorting: viewMode !== 'content',
-    meta: {
-      hideInContentMode: true,
-      align: 'center'
-    },
-    cell: ({ row }) => {
-      const shareCount = row.getValue('shareCount') as number
-      return (
-        <div className="text-center font-mono text-sm">
-          {formatNumber(shareCount)}
-        </div>
-      )
-    }
-  },
-  {
-    accessorKey: 'saveCount',
-    header: ({ column }) => {
-      const isSorted = column.getIsSorted()
-
-      return (
-        <div className="flex items-center justify-center w-full">
-          <Button
-            variant="ghost"
-            onClick={() => viewMode !== 'content' && column.toggleSorting(column.getIsSorted() === 'asc')}
-            className={`h-auto p-1 hover:bg-transparent group ${isSorted ? 'text-foreground font-bold' : 'text-muted-foreground'} ${viewMode === 'content' ? 'cursor-default' : ''}`}
-          >
-            <Bookmark className={`w-4 h-4 ${isSorted ? 'text-yellow-600' : 'text-yellow-400'}`} />
-          </Button>
-        </div>
-      )
-    },
-    enableSorting: viewMode !== 'content',
-    meta: {
-      hideInContentMode: true,
-      align: 'center'
-    },
-    cell: ({ row }) => {
-      const saveCount = row.getValue('saveCount') as number
-      return (
-        <div className="text-center font-mono text-sm">
-          {formatNumber(saveCount)}
-        </div>
-      )
-    }
-  },
-  {
-    accessorKey: 'publishedAt',
-    header: 'Published',
-    meta: {
-      hideInContentMode: true
-    },
-    cell: ({ row }) => {
-      const publishedAt = row.getValue('publishedAt') as string
-      const { date, time } = formatDateTime(publishedAt)
-      return (
-        <div className="text-sm whitespace-nowrap">
-          <div>{date}</div>
-          <div className="text-muted-foreground text-xs">{time}</div>
-        </div>
-      )
-    }
-  },
-  {
-    accessorKey: 'updatedAt',
-    header: 'Last Updated',
-    meta: {
-      hideInContentMode: true
-    },
-    cell: ({ row }) => {
-      const updatedAt = row.getValue('updatedAt') as string
-      const { date, time } = formatDateTime(updatedAt)
-      return (
-        <div className="text-sm whitespace-nowrap">
-          <div>{date}</div>
-          <div className="text-muted-foreground text-xs">{time}</div>
-        </div>
-      )
-    }
-  },
-  {
-    accessorKey: 'ocrStatus',
-    header: 'OCR Status',
-    meta: {
-      hideInContentMode: true
-    },
-    cell: ({ row }) => {
-      const post = row.original
-      
-      // Only show OCR status for photo posts
-      if (post.contentType !== 'photo') {
-        return <div className="text-center text-muted-foreground text-xs">N/A</div>
-      }
-
-      const statusConfig = {
-        pending: {
-          icon: FileText,
-          label: 'Pending',
-          className: 'text-muted-foreground',
-          bgClassName: 'bg-muted'
-        },
-        processing: {
-          icon: Loader2,
-          label: 'Processing',
-          className: 'text-blue-600',
-          bgClassName: 'bg-blue-50 dark:bg-blue-950'
-        },
-        completed: {
-          icon: CheckCircle2,
-          label: 'Completed',
-          className: 'text-green-600',
-          bgClassName: 'bg-green-50 dark:bg-green-950'
-        },
-        failed: {
-          icon: XCircle,
-          label: 'Failed',
-          className: 'text-red-600',
-          bgClassName: 'bg-red-50 dark:bg-red-950'
-        }
-      }
-
-      const config = statusConfig[post.ocrStatus] || statusConfig.pending
-      const Icon = config.icon
-
-      return (
-        <div className="flex items-center justify-center">
-          <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md ${config.bgClassName}`}>
-            <Icon className={`w-3.5 h-3.5 ${config.className} ${post.ocrStatus === 'processing' ? 'animate-spin' : ''}`} />
-            <span className={`text-xs font-medium ${config.className}`}>
-              {config.label}
-            </span>
-          </div>
-        </div>
-      )
-    }
   },
   {
     id: 'actions',
     header: '',
-    size: viewMode === 'content' ? 50 : 36,
+    size: 50,
     meta: {
       pinned: 'right'
     },
     cell: ({ row }) => (
       <ActionsCell
         post={row.original}
-        viewMode={viewMode}
         onTriggerOCR={onTriggerOCR}
         onRemixPost={onRemixPost}
       />

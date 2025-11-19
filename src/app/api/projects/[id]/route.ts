@@ -64,8 +64,24 @@ export async function GET(
           where: {
             isDraft: true
           },
-          include: {
-            productContext: true
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            generationType: true,
+            bookmarked: true,
+            approved: true,
+            createdAt: true,
+            updatedAt: true,
+            slides: true,
+            slideClassifications: true, // JSON field, not a relation
+            productContext: {
+              select: {
+                id: true,
+                title: true,
+                description: true
+              }
+            }
           },
           orderBy: {
             createdAt: 'desc'

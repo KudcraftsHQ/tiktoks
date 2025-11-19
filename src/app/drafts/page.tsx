@@ -1,330 +1,500 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { InlineEditableText } from '@/components/InlineEditableText'
-import { SlideClassificationBadge } from '@/components/SlideClassificationBadge'
 import {
-  ArrowLeft,
-  Edit,
-  Download,
-  Trash2,
-  Search,
-  Loader2,
+  Clipboard,
+  FolderPlus,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  X,
   FileText
 } from 'lucide-react'
-import { toast } from 'sonner'
+import { ProjectPostsTable, ProjectTableRow } from '@/components/ProjectPostsTable'
 import { PageLayout } from '@/components/PageLayout'
-import type { RemixPost } from '@/types/remix'
+import { toast } from 'sonner'
+import { SortingState, RowSelectionState } from '@tanstack/react-table'
+import { ProjectSelectorModal } from '@/components/ProjectSelectorModal'
+import { SearchInput } from '@/components/SearchInput'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { RemixPost } from '@/types/remix'
 
-export default function DraftsPage() {
+interface DraftsResponse {
+  drafts: (RemixPost & { _rowType: 'draft' })[]
+  pagination: {
+    page: number
+    limit: number
+    totalCount: number
+    totalPages: number
+    hasMore: boolean
+  }
+  error?: string
+}
+
+function DraftsPageContent() {
   const router = useRouter()
-  const [drafts, setDrafts] = useState<RemixPost[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [generationTypeFilter, setGenerationTypeFilter] = useState<string>('all')
+  const searchParams = useSearchParams()
 
-  useEffect(() => {
-    fetchDrafts()
-  }, [generationTypeFilter])
+  // Initialize state from URL params
+  const initialPage = parseInt(searchParams.get('page') || '1', 10)
 
-  const fetchDrafts = async () => {
+  // Parse sorting from URL
+  const sortParam = searchParams.get('sort')
+  let initialSorting: SortingState = []
+
+  if (sortParam) {
+    initialSorting = sortParam.split(',').map(sort => {
+      const [id, direction] = sort.trim().split('.')
+      return { id, desc: direction === 'desc' }
+    })
+  }
+
+  // Parse search from URL
+  const initialSearch = searchParams.get('search') || ''
+
+  const [drafts, setDrafts] = useState<ProjectTableRow[]>([])
+  const [totalDrafts, setTotalDrafts] = useState(0)
+  const [isLoading, setIsLoading] = useState(false)
+  const [currentPage, setCurrentPage] = useState(initialPage)
+  const [pageSize, setPageSize] = useState(25)
+  const [sorting, setSorting] = useState<SortingState>(initialSorting)
+  const [searchQuery, setSearchQuery] = useState<string>(initialSearch)
+  const [isSearching, setIsSearching] = useState(false)
+
+  // Selection state
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+  const [isProjectSelectorOpen, setIsProjectSelectorOpen] = useState(false)
+
+  // Get selected draft IDs from row selection
+  const selectedDraftIds = useMemo(() => {
+    return Object.keys(rowSelection)
+      .filter(key => rowSelection[key])
+      .map(indexStr => {
+        const index = parseInt(indexStr)
+        return drafts[index]?.id
+      })
+      .filter(Boolean) as string[]
+  }, [rowSelection, drafts])
+
+  // Update URL with current state
+  const updateURL = useCallback((page: number, sort: SortingState, search: string) => {
+    const params = new URLSearchParams()
+
+    if (page > 1) {
+      params.set('page', page.toString())
+    }
+
+    if (sort.length > 0) {
+      const sortParam = sort
+        .map(s => `${s.id}.${s.desc ? 'desc' : 'asc'}`)
+        .join(',')
+      params.set('sort', sortParam)
+    }
+
+    if (search && search.trim().length > 0) {
+      params.set('search', search.trim())
+    }
+
+    const queryString = params.toString()
+    const newUrl = queryString ? `/drafts?${queryString}` : '/drafts'
+
+    router.push(newUrl, { scroll: false })
+  }, [router])
+
+  const fetchDrafts = useCallback(async (page: number, limit: number, sort: SortingState, search: string): Promise<void> => {
     setIsLoading(true)
     try {
       const params = new URLSearchParams({
-        limit: '100'
+        page: page.toString(),
+        limit: limit.toString()
       })
 
-      if (generationTypeFilter !== 'all') {
-        params.append('generationType', generationTypeFilter)
+      // Add sorting parameters
+      if (sort.length > 0) {
+        const sortParam = sort
+          .map(s => `${s.id}.${s.desc ? 'desc' : 'asc'}`)
+          .join(',')
+        params.append('sort', sortParam)
       }
 
-      if (searchQuery) {
-        params.append('search', searchQuery)
+      // Add search query
+      if (search && search.trim().length > 0) {
+        params.append('search', search.trim())
       }
 
-      const response = await fetch(`/api/remixes/drafts?${params}`)
-      if (!response.ok) throw new Error('Failed to fetch drafts')
+      const response = await fetch(`/api/remixes/all?${params}`)
+      const data: DraftsResponse = await response.json()
 
-      const data = await response.json()
-      setDrafts(data.remixes || [])
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch drafts')
+      }
+
+      setDrafts(data.drafts || [])
+      setTotalDrafts(data.pagination.totalCount || 0)
     } catch (error) {
       console.error('Failed to fetch drafts:', error)
-      toast.error('Failed to load drafts')
+      toast.error(error instanceof Error ? error.message : 'Failed to fetch drafts')
+      setDrafts([])
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
 
-  const updateSlideText = async (
-    remixId: string,
-    slideIndex: number,
-    newValue: string
-  ) => {
+  // Handle sorting change with URL update
+  const handleSortingChange = useCallback((updaterOrValue: SortingState | ((old: SortingState) => SortingState)) => {
+    const newSorting = typeof updaterOrValue === 'function'
+      ? updaterOrValue(sorting)
+      : updaterOrValue
+
+    setSorting(newSorting)
+
+    setTimeout(() => {
+      updateURL(currentPage, newSorting, searchQuery)
+      fetchDrafts(currentPage, pageSize, newSorting, searchQuery)
+    }, 0)
+  }, [currentPage, pageSize, sorting, searchQuery, updateURL, fetchDrafts])
+
+  // Handle page change with URL update
+  const handlePageChange = useCallback((pageIndex: number, newPageSize: number) => {
+    const newPage = pageIndex + 1
+    setCurrentPage(newPage)
+    setPageSize(newPageSize)
+
+    setSorting(currentSorting => {
+      updateURL(newPage, currentSorting, searchQuery)
+      fetchDrafts(newPage, newPageSize, currentSorting, searchQuery)
+      return currentSorting
+    })
+  }, [searchQuery, updateURL, fetchDrafts])
+
+  // Handle search query change with URL update
+  const handleSearchChange = useCallback((newSearch: string) => {
+    setSearchQuery(newSearch)
+    setCurrentPage(1)
+    setIsSearching(true)
+
+    setTimeout(() => {
+      updateURL(1, sorting, newSearch)
+      fetchDrafts(1, pageSize, sorting, newSearch).finally(() => {
+        setIsSearching(false)
+      })
+    }, 0)
+  }, [pageSize, sorting, updateURL, fetchDrafts])
+
+  // Handle refetch
+  const handleRefetchData = useCallback(() => {
+    fetchDrafts(currentPage, pageSize, sorting, searchQuery)
+  }, [currentPage, pageSize, sorting, searchQuery, fetchDrafts])
+
+  // Handle draft removed
+  const handleDraftRemoved = useCallback((draftId: string) => {
+    // Refetch to update the list
+    handleRefetchData()
+  }, [handleRefetchData])
+
+  // Sync state from URL params (for browser back/forward)
+  useEffect(() => {
+    const sortParam = searchParams.get('sort')
+    const searchParam = searchParams.get('search') || ''
+
+    let urlSorting: SortingState = []
+
+    if (sortParam) {
+      urlSorting = sortParam.split(',').map(sort => {
+        const [id, direction] = sort.trim().split('.')
+        return { id, desc: direction === 'desc' }
+      })
+    }
+
+    const sortingDifferent = JSON.stringify(urlSorting) !== JSON.stringify(sorting)
+    const searchDifferent = searchParam !== searchQuery
+
+    if (sortingDifferent || searchDifferent) {
+      if (sortingDifferent) setSorting(urlSorting)
+      if (searchDifferent) setSearchQuery(searchParam)
+      fetchDrafts(currentPage, pageSize, urlSorting, searchParam)
+    }
+  }, [searchParams])
+
+  // Initial fetch
+  useEffect(() => {
+    fetchDrafts(initialPage, pageSize, initialSorting, initialSearch)
+  }, [])
+
+  const [isCopyingToClipboard, setIsCopyingToClipboard] = useState(false)
+
+  const handleCopyToClipboard = useCallback(async () => {
+    if (selectedDraftIds.length === 0) return
+
+    setIsCopyingToClipboard(true)
     try {
-      const remix = drafts.find(r => r.id === remixId)
-      if (!remix) throw new Error('Remix not found')
+      const selectedDrafts = drafts.filter(d => selectedDraftIds.includes(d.id)) as (RemixPost & { _rowType: 'draft' })[]
 
-      const updatedSlides = remix.slides.map((slide, index) =>
-        index === slideIndex
-          ? { ...slide, paraphrasedText: newValue }
-          : slide
-      )
+      const markdownContent = selectedDrafts.map((draft, index) => {
+        const sections: string[] = []
 
-      const response = await fetch(`/api/remixes/${remixId}`, {
-        method: 'PUT',
+        // Draft name as H1
+        sections.push(`# ${draft.name}`)
+        sections.push('')
+
+        // Description
+        if (draft.description) {
+          sections.push('## Description')
+          sections.push('')
+          sections.push(draft.description)
+          sections.push('')
+        }
+
+        // Slides
+        if (draft.slides && draft.slides.length > 0) {
+          sections.push('## Content')
+          sections.push('')
+
+          draft.slides.forEach((slide, slideIndex) => {
+            const classification = draft.slideClassifications?.find(c => c.slideIndex === slideIndex)
+            const slideType = classification?.type || 'unknown'
+
+            sections.push(`### Slide ${slideIndex + 1} - ${slideType}`)
+            sections.push('')
+            sections.push(slide.paraphrasedText || '')
+            sections.push('')
+          })
+        }
+
+        return sections.join('\n')
+      }).join('\n---\n\n')
+
+      await navigator.clipboard.writeText(markdownContent)
+
+      toast.success(`Copied ${selectedDraftIds.length} draft${selectedDraftIds.length !== 1 ? 's' : ''} to clipboard`, {
+        description: 'Content is ready to paste'
+      })
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error)
+      toast.error('Failed to copy to clipboard', {
+        description: 'Please try again'
+      })
+    } finally {
+      setIsCopyingToClipboard(false)
+    }
+  }, [selectedDraftIds, drafts])
+
+  const handleAddToProject = async (projectId: string) => {
+    try {
+      const response = await fetch(`/api/projects/${projectId}/drafts`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slides: updatedSlides })
+        body: JSON.stringify({ draftIds: selectedDraftIds })
       })
 
-      if (!response.ok) throw new Error('Failed to update')
+      const data = await response.json()
 
-      setDrafts(prev =>
-        prev.map(r =>
-          r.id === remixId ? { ...r, slides: updatedSlides } : r
-        )
-      )
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to add drafts to project')
+      }
 
-      toast.success('Saved')
-    } catch (error) {
-      console.error('Update failed:', error)
-      throw error
-    }
-  }
-
-  const deleteDraft = async (draftId: string) => {
-    if (!confirm('Delete this draft?')) return
-
-    try {
-      const response = await fetch(`/api/remixes/${draftId}`, {
-        method: 'DELETE'
+      toast.success(data.message || `Added ${selectedDraftIds.length} draft${selectedDraftIds.length !== 1 ? 's' : ''} to project`, {
+        description: 'View project to see them',
+        action: {
+          label: 'View Project',
+          onClick: () => router.push(`/projects/${projectId}`)
+        }
       })
 
-      if (!response.ok) throw new Error('Failed to delete')
-
-      setDrafts(prev => prev.filter(r => r.id !== draftId))
-      toast.success('Draft deleted')
+      // Clear selection after successful add
+      setRowSelection({})
     } catch (error) {
-      console.error('Delete failed:', error)
-      toast.error('Failed to delete draft')
+      console.error('Failed to add drafts to project:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to add drafts to project')
     }
-  }
-
-  const maxSlidesCount = Math.max(
-    ...drafts.map(r => r.slides.length),
-    1
-  )
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    )
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 w-full">
-        <div className="w-full px-4 py-4">
-          <div className="flex items-center gap-4">
-            <Button
-              onClick={() => router.push('/')}
-              variant="ghost"
-              size="sm"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Posts
-            </Button>
-            <div className="flex-1">
-              <h1 className="text-xl font-semibold">Draft Posts</h1>
-              <p className="text-sm text-muted-foreground">
-                {drafts.length} draft{drafts.length !== 1 ? 's' : ''}
-              </p>
-            </div>
+    <div className="flex h-screen w-full min-w-0">
+      {/* Main content area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <PageLayout
+          title={
             <div className="flex items-center gap-2">
-              <Input
-                placeholder="Search drafts..."
+              <FileText className="h-5 w-5" />
+              <span>All Drafts</span>
+              <SearchInput
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-64"
+                onChange={handleSearchChange}
+                placeholder="Search drafts..."
+                isLoading={isSearching}
               />
-              <Button onClick={fetchDrafts} size="sm">
-                <Search className="h-4 w-4" />
+            </div>
+          }
+          headerActions={
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto items-center">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <div className="relative">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 px-3 text-xs"
+                    >
+                      <ArrowUpDown className="h-3 w-3" />
+                    </Button>
+                    {sorting.length > 0 && (
+                      <Badge
+                        variant="secondary"
+                        className="absolute -right-1.5 -bottom-1.5 h-4 w-4 flex items-center justify-center rounded-full p-0 text-[10px] border border-background"
+                      >
+                        {sorting.length}
+                      </Badge>
+                    )}
+                  </div>
+                </PopoverTrigger>
+                <PopoverContent className="w-64" align="end">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-sm">Sort By</h4>
+                      <Select
+                        value={sorting[0]?.id || ''}
+                        onValueChange={(value) => {
+                          const newSorting: SortingState = value
+                            ? [{ id: value, desc: sorting[0]?.desc ?? true }]
+                            : []
+                          handleSortingChange(newSorting)
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Select field" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="updatedAt">Updated Date</SelectItem>
+                          <SelectItem value="createdAt">Created Date</SelectItem>
+                          <SelectItem value="name">Name</SelectItem>
+                          <SelectItem value="bookmarked">Bookmarked</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {sorting.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm">Direction</h4>
+                        <ToggleGroup
+                          type="single"
+                          value={sorting[0]?.desc ? 'desc' : 'asc'}
+                          onValueChange={(value) => {
+                            if (value && sorting[0]) {
+                              const newSorting: SortingState = [
+                                { id: sorting[0].id, desc: value === 'desc' }
+                              ]
+                              handleSortingChange(newSorting)
+                            }
+                          }}
+                          className="w-full"
+                        >
+                          <ToggleGroupItem value="desc" className="flex-1 gap-1.5 h-8 text-xs">
+                            <ArrowDown className="h-3 w-3" />
+                            Descending
+                          </ToggleGroupItem>
+                          <ToggleGroupItem value="asc" className="flex-1 gap-1.5 h-8 text-xs">
+                            <ArrowUp className="h-3 w-3" />
+                            Ascending
+                          </ToggleGroupItem>
+                        </ToggleGroup>
+                      </div>
+                    )}
+
+                    {sorting.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          handleSortingChange([])
+                        }}
+                        className="w-full h-8 text-xs gap-1.5"
+                      >
+                        <X className="h-3 w-3" />
+                        Reset Sorting
+                      </Button>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <Button
+                variant="outline"
+                onClick={handleCopyToClipboard}
+                disabled={selectedDraftIds.length === 0 || isCopyingToClipboard}
+                className="w-8 h-8 px-3 text-xs"
+                size="icon"
+              >
+                <Clipboard className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setIsProjectSelectorOpen(true)}
+                disabled={selectedDraftIds.length === 0}
+                className="h-8 w-8 text-xs"
+                size="icon"
+              >
+                <FolderPlus className="h-3 w-3" />
               </Button>
             </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Container */}
-      <div className="flex flex-col h-[calc(100vh-80px)]">
-        <div className="flex-1 overflow-auto">
-          <div style={{ width: `max(calc(100vw - 16rem), ${80 + (maxSlidesCount * 72) + 48}px)` }}>
-
-            {/* Header Row */}
-            <div className="flex border-b bg-background sticky top-0 z-20">
-              <div className="w-64 border-r bg-foreground-primary p-4 flex-shrink-0 sticky left-0 bg-background z-10">
-                <h3 className="font-semibold text-sm">Session</h3>
-              </div>
-              <div className="w-80 border-r bg-foreground-primary p-4 flex-shrink-0 bg-background z-10">
-                <h3 className="font-semibold text-sm">Draft Information</h3>
-              </div>
-              <div className="flex">
-                {Array.from({ length: maxSlidesCount }).map((_, index) => (
-                  <div key={index} className="w-72 border-r p-4 text-center">
-                    <p className="text-sm font-medium">Slide {index + 1}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="w-48 p-4 flex-shrink-0 sticky right-0 bg-background z-10 border-l">
-                <h3 className="font-semibold text-sm">Actions</h3>
-              </div>
-            </div>
-
-            {/* Draft Rows */}
-            {drafts.map((draft) => (
-              <div key={draft.id} className="flex border-b">
-                {/* Session Column */}
-                <div className="w-64 border-r p-4 bg-background flex-shrink-0 sticky left-0 z-10">
-                  {draft.session ? (
-                    <Button
-                      variant="link"
-                      onClick={() => router.push(`/drafts/${draft.session?.id}`)}
-                      className="p-0 h-auto font-normal text-sm hover:underline"
-                    >
-                      {draft.session.name}
-                    </Button>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">No session</span>
-                  )}
-                </div>
-
-                {/* Draft Info Column */}
-                <div className="w-80 border-r p-4 bg-background flex-shrink-0 z-10">
-                  <h3 className="font-semibold text-sm mb-2">{draft.name}</h3>
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <p>{draft.slides.length} slides</p>
-                    <p>{new Date(draft.createdAt).toLocaleDateString()}</p>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      <Badge variant="outline" className="text-xs">
-                        {draft.generationType}
-                      </Badge>
-                      {draft.productContext && (
-                        <Badge variant="secondary" className="text-xs">
-                          {draft.productContext.title}
-                        </Badge>
-                      )}
-                      {draft.sourcePostIds.length > 0 && (
-                        <Badge variant="outline" className="text-xs">
-                          {draft.sourcePostIds.length} sources
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Slide Columns */}
-                <div className="flex">
-                  {Array.from({ length: maxSlidesCount }).map((_, slideIndex) => {
-                    const slide = draft.slides[slideIndex]
-                    const classification = draft.slideClassifications?.[slideIndex]
-
-                    return (
-                      <div key={slideIndex} className="w-72 border-r p-4">
-                        {slide ? (
-                          <div className="space-y-2">
-                            {classification && (
-                              <SlideClassificationBadge
-                                type={classification.type as any}
-                                categoryName={classification.categoryName}
-                              />
-                            )}
-                            <InlineEditableText
-                              value={slide.paraphrasedText}
-                              onSave={(newValue) =>
-                                updateSlideText(draft.id, slideIndex, newValue)
-                              }
-                              placeholder="Enter text content..."
-                              rows={4}
-                            />
-                          </div>
-                        ) : (
-                          <div className="h-full flex items-center justify-center text-muted-foreground text-xs">
-                            No slide
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-
-                {/* Actions Column */}
-                <div className="w-48 p-4 flex-shrink-0 sticky right-0 bg-background z-10 border-l">
-                  <div className="space-y-2">
-                    <Button
-                      onClick={() => router.push(`/remix/${draft.id}/edit`)}
-                      size="sm"
-                      variant="outline"
-                      className="w-full"
-                    >
-                      <Edit className="h-3 w-3 mr-1" />
-                      Edit
-                    </Button>
-                    <div className="flex gap-1">
-                      <Button
-                        onClick={() => {/* TODO: Download */}}
-                        size="sm"
-                        variant="outline"
-                        className="flex-1"
-                        title="Download"
-                      >
-                        <Download className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        onClick={() => deleteDraft(draft.id)}
-                        size="sm"
-                        variant="outline"
-                        className="flex-1"
-                        title="Delete"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            {/* Empty State */}
-            {drafts.length === 0 && (
-              <div className="flex items-center justify-center h-64 text-center">
-                <div>
-                  <div className="rounded-full bg-muted/50 w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                    <FileText className="h-8 w-8 opacity-50" />
-                  </div>
-                  <h3 className="font-medium mb-2">No drafts yet</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Generate content from posts to create drafts
-                  </p>
-                  <Button
-                    onClick={() => router.push('/')}
-                    variant="outline"
-                    className="mt-4"
-                  >
-                    Go to Posts
-                  </Button>
-                </div>
-              </div>
-            )}
-
-          </div>
-        </div>
+          }
+        >
+          {/* Drafts Table */}
+          <ProjectPostsTable
+            rows={drafts}
+            totalRows={totalDrafts}
+            onPageChange={handlePageChange}
+            onSortingChange={handleSortingChange}
+            onRefetchData={handleRefetchData}
+            sorting={sorting}
+            enableServerSideSorting={true}
+            isLoading={isLoading}
+            rowSelection={rowSelection}
+            onRowSelectionChange={setRowSelection}
+            viewMode="content"
+            searchQuery={searchQuery}
+            onDraftRemoved={handleDraftRemoved}
+            rowClassName={(row) => {
+              return 'bg-background'
+            }}
+          />
+        </PageLayout>
       </div>
+
+      {/* Project Selector Modal */}
+      <ProjectSelectorModal
+        isOpen={isProjectSelectorOpen}
+        onClose={() => setIsProjectSelectorOpen(false)}
+        onSelect={handleAddToProject}
+      />
     </div>
+  )
+}
+
+export default function DraftsPage() {
+  return (
+    <Suspense fallback={
+      <PageLayout title="All Drafts" description="Loading...">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </PageLayout>
+    }>
+      <DraftsPageContent />
+    </Suspense>
   )
 }

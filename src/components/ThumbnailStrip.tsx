@@ -78,11 +78,9 @@ export function ThumbnailStrip({
                 size={size}
                 onClick={() => handleThumbnailClick(index)}
               />
-              {/* Show indicator when no background image and asset picker is available */}
+              {/* Show dashed border when no background image and asset picker is available */}
               {!hasImage && draftId && (
-                <div className="absolute inset-0 bg-primary/10 border-2 border-dashed border-primary/30 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                  <span className="text-[8px] font-medium text-primary">Add Image</span>
-                </div>
+                <div className="absolute inset-0 bg-background/60 border-2 border-dashed border-border rounded pointer-events-none" />
               )}
             </div>
           )

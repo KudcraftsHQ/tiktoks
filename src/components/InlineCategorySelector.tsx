@@ -134,19 +134,10 @@ export function InlineCategorySelector({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-auto p-0 hover:bg-transparent"
-        >
-          <Badge
-            variant="secondary"
-            className="text-xs cursor-pointer hover:bg-secondary/80 transition-colors"
-          >
-            {currentCategory?.name || 'No category'}
-            <ChevronDown className="ml-1 h-3 w-3 opacity-50" />
-          </Badge>
-        </Button>
+        <div className="bg-primary/10 text-primary text-xs font-medium px-2 py-0.5 rounded cursor-pointer hover:bg-primary/20 transition-colors inline-flex items-center">
+          {currentCategory?.name || 'No category'}
+          <ChevronDown className="ml-1 h-3 w-3 opacity-50" />
+        </div>
       </PopoverTrigger>
       <PopoverContent
         className="w-[250px] p-0"

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Home, FileText, Users, UserCheck, Sparkles, Star, Search, CloudUpload, BookmarkCheck, Edit, Library, Tag, ImageIcon, ScanText, CogIcon, BookText, FolderPlus, Folder, Check, X, Trash2 } from 'lucide-react'
+import { FileText, Users, BookmarkCheck, Edit, Library, Tag, ImageIcon, CogIcon, FolderPlus, Folder, Check, X, Trash2, GalleryHorizontalEnd, LibraryIcon, SquareLibrary } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -33,7 +33,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { ThemeToggle } from '@/components/theme-toggle'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -65,28 +64,23 @@ export function AppSidebar() {
     {
       title: 'Posts',
       url: '/',
-      icon: Home,
-    },
-    {
-      title: 'Contents',
-      url: '/?view=content',
-      icon: BookText,
+      icon: GalleryHorizontalEnd,
     },
     {
       title: 'Drafts',
       url: '/drafts',
-      icon: Edit,
-    },
-    {
-      title: 'Bookmarks',
-      url: '/bookmarks',
-      icon: BookmarkCheck,
+      icon: LibraryIcon,
     },
     {
       title: 'Assets',
       url: '/assets',
       icon: ImageIcon
-    }
+    },
+    {
+      title: 'Contexts',
+      url: '/product-contexts',
+      icon: SquareLibrary,
+    },
     // Hidden for now
     // {
     //   title: 'Upload',
@@ -100,32 +94,11 @@ export function AppSidebar() {
     // },
   ]
 
-  const contentNavigationItems = [
-    {
-      title: 'Content Library',
-      url: '/content-ideas/library',
-      icon: Library,
-    },
-  ]
-
   const profileNavigationItems = [
     {
       title: 'Profiles',
       url: '/profiles',
       icon: Users,
-    },
-  ]
-
-  const otherNavigationItems = [
-    {
-      title: 'Post Categories',
-      url: '/post-categories',
-      icon: Tag,
-    },
-    {
-      title: 'Product Contexts',
-      url: '/product-contexts',
-      icon: FileText,
     },
   ]
 
@@ -294,68 +267,27 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Content</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {contentNavigationItems.map((item) => {
-                const isActive = pathname === item.url
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.url}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Other</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {otherNavigationItems.map((item) => {
-                const isActive = pathname === item.url
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.url}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <div className="flex items-center justify-between">
-            <SidebarGroupLabel>Projects</SidebarGroupLabel>
+          <SidebarGroupLabel className="flex items-center justify-between">
+            <span>Projects</span>
             <Button
               variant="ghost"
               size="icon"
-              className="h-5 w-5"
+              className="h-5 w-5 shrink-0"
               onClick={handleStartCreatingProject}
             >
-              <FolderPlus className="h-4 w-4" />
+              <FolderPlus className="h-3.5 w-3.5" />
             </Button>
-          </div>
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {isCreatingNew && (
                 <SidebarMenuItem>
-                  <div className="flex items-center gap-1 px-2 py-1">
+                  <div className="flex items-center gap-1.5 px-2 py-1">
+                    <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <Input
                       value={newProjectName}
                       onChange={(e) => setNewProjectName(e.target.value)}
-                      className="h-7 text-xs"
+                      className="h-7 text-sm flex-1"
                       placeholder="Project name"
                       autoFocus
                       onKeyDown={(e) => {
@@ -369,7 +301,7 @@ export function AppSidebar() {
                       className="h-6 w-6 shrink-0"
                       onClick={handleCreateProject}
                     >
-                      <Check className="h-3 w-3" />
+                      <Check className="h-3.5 w-3.5" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -377,18 +309,18 @@ export function AppSidebar() {
                       className="h-6 w-6 shrink-0"
                       onClick={handleCancelCreatingProject}
                     >
-                      <X className="h-3 w-3" />
+                      <X className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 </SidebarMenuItem>
               )}
               {isLoadingProjects ? (
                 <SidebarMenuItem>
-                  <div className="text-xs text-muted-foreground px-2 py-1">Loading...</div>
+                  <div className="text-sm text-muted-foreground px-2 py-1.5">Loading...</div>
                 </SidebarMenuItem>
               ) : projects.length === 0 && !isCreatingNew ? (
                 <SidebarMenuItem>
-                  <div className="text-xs text-muted-foreground px-2 py-1">No projects yet</div>
+                  <div className="text-sm text-muted-foreground px-2 py-1.5">No projects yet</div>
                 </SidebarMenuItem>
               ) : (
                 projects.map((project) => {
@@ -398,11 +330,12 @@ export function AppSidebar() {
                   return (
                     <SidebarMenuItem key={project.id}>
                       {isEditing ? (
-                        <div className="flex items-center gap-1 px-2 py-1">
+                        <div className="flex items-center gap-1.5 px-2 py-1">
+                          <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
                           <Input
                             value={editingProjectName}
                             onChange={(e) => setEditingProjectName(e.target.value)}
-                            className="h-7 text-xs"
+                            className="h-7 text-sm flex-1"
                             autoFocus
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') handleSaveProjectName(project.id)
@@ -415,7 +348,7 @@ export function AppSidebar() {
                             className="h-6 w-6 shrink-0"
                             onClick={() => handleSaveProjectName(project.id)}
                           >
-                            <Check className="h-3 w-3" />
+                            <Check className="h-3.5 w-3.5" />
                           </Button>
                           <Button
                             variant="ghost"
@@ -423,7 +356,7 @@ export function AppSidebar() {
                             className="h-6 w-6 shrink-0"
                             onClick={handleCancelEditing}
                           >
-                            <X className="h-3 w-3" />
+                            <X className="h-3.5 w-3.5" />
                           </Button>
                         </div>
                       ) : (
@@ -433,7 +366,7 @@ export function AppSidebar() {
                               <Link href={`/projects/${project.id}`}>
                                 <Folder className="h-4 w-4" />
                                 <span className="truncate flex-1">{project.name}</span>
-                                <Badge variant="secondary" className="h-5 text-[10px] px-1">
+                                <Badge variant="secondary" className="h-5 text-[10px] px-1.5 shrink-0">
                                   {(project._count?.posts || 0) + (project._count?.remixes || 0)}
                                 </Badge>
                               </Link>

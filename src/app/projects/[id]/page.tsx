@@ -125,6 +125,88 @@ export default function ProjectDetailPage() {
     fetchProject()
   }, [fetchProject])
 
+  // SSE listener for OCR updates
+  useEffect(() => {
+    const eventSource = new EventSource('/api/events/ocr')
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+
+        if (data.type === 'ocr:completed' && data.postId) {
+          console.log(`📨 [SSE] Received OCR update for post: ${data.postId}`)
+
+          // Check if the post exists in the current project
+          setProject(prev => {
+            if (!prev) return prev
+
+            const postIndex = prev.posts.findIndex(p => p.post.id === data.postId)
+            if (postIndex === -1) {
+              console.log(`📭 [SSE] Post ${data.postId} not in current project, skipping update`)
+              return prev
+            }
+
+            console.log(`✅ [SSE] Post ${data.postId} found in project, fetching updated data`)
+
+            // Fetch updated post data
+            fetch(`/api/tiktok/posts/${data.postId}`)
+              .then(res => {
+                if (!res.ok) throw new Error('Failed to fetch updated post')
+                return res.json()
+              })
+              .then(updatedPost => {
+                setProject(current => {
+                  if (!current) return current
+
+                  const idx = current.posts.findIndex(p => p.post.id === data.postId)
+                  if (idx === -1) return current
+
+                  const newPosts = [...current.posts]
+                  newPosts[idx] = {
+                    ...newPosts[idx],
+                    post: {
+                      ...newPosts[idx].post,
+                      ...updatedPost,
+                      ocrTexts: updatedPost.ocrTexts,
+                      imageDescriptions: updatedPost.imageDescriptions,
+                      slideClassifications: updatedPost.slideClassifications,
+                      postCategory: updatedPost.postCategory
+                    }
+                  }
+
+                  console.log(`🔄 [SSE] Updated post ${data.postId} in project state`)
+                  return {
+                    ...current,
+                    posts: newPosts
+                  }
+                })
+              })
+              .catch(error => {
+                console.error(`❌ [SSE] Failed to fetch updated post ${data.postId}:`, error)
+              })
+
+            return prev
+          })
+        }
+      } catch (error) {
+        console.error('❌ [SSE] Failed to handle SSE event:', error)
+      }
+    }
+
+    eventSource.onerror = (error) => {
+      console.error('❌ [SSE] EventSource error:', error)
+    }
+
+    eventSource.onopen = () => {
+      console.log('✅ [SSE] Connected to OCR events stream')
+    }
+
+    return () => {
+      console.log('🔌 [SSE] Disconnecting from OCR events stream')
+      eventSource.close()
+    }
+  }, [])
+
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
       titleInputRef.current.focus()
@@ -525,6 +607,32 @@ export default function ProjectDetailPage() {
     }))
   }, [project])
 
+  // Calculate default min and max slides from reference posts
+  const { defaultMinSlides, defaultMaxSlides } = useMemo(() => {
+    if (!project || project.posts.length === 0) {
+      return { defaultMinSlides: undefined, defaultMaxSlides: undefined }
+    }
+
+    const slideCounts = project.posts
+      .map(({ post }) => {
+        // Get slide count from images array length
+        if (post.images && Array.isArray(post.images)) {
+          return post.images.length
+        }
+        return 0
+      })
+      .filter(count => count > 0)
+
+    if (slideCounts.length === 0) {
+      return { defaultMinSlides: undefined, defaultMaxSlides: undefined }
+    }
+
+    const minSlides = Math.min(...slideCounts)
+    const maxSlides = Math.max(...slideCounts)
+
+    return { defaultMinSlides: minSlides, defaultMaxSlides: maxSlides }
+  }, [project])
+
   // Combine reference posts and drafts into a single table
   const combinedTableData: ProjectTableRow[] = useMemo(() => {
     if (!project) return []
@@ -545,11 +653,24 @@ export default function ProjectDetailPage() {
         ...post,
         _rowType: 'post' as const
       })),
-      // Drafts after references (sorted oldest first)
-      ...sortedDrafts.map((draft): ProjectTableRow => ({
-        ...draft,
-        _rowType: 'draft' as const
-      }))
+      // Drafts after references (sorted oldest first) - parse slideClassifications if needed
+      ...sortedDrafts.map((draft): ProjectTableRow => {
+        // Parse slideClassifications if it's a string
+        let slideClassifications = draft.slideClassifications
+        if (typeof slideClassifications === 'string') {
+          try {
+            slideClassifications = JSON.parse(slideClassifications)
+          } catch {
+            slideClassifications = []
+          }
+        }
+
+        return {
+          ...draft,
+          slideClassifications,
+          _rowType: 'draft' as const
+        }
+      })
     ]
   }, [project])
 
@@ -581,8 +702,9 @@ export default function ProjectDetailPage() {
           title={
             isEditingTitle ? (
               <div className="flex items-center gap-2">
-                <Input
+                <input
                   ref={titleInputRef}
+                  type="text"
                   value={editedTitle}
                   onChange={(e) => setEditedTitle(e.target.value)}
                   onBlur={handleSaveTitle}
@@ -595,7 +717,7 @@ export default function ProjectDetailPage() {
                     }
                   }}
                   disabled={isSavingTitle}
-                  className="text-2xl font-bold h-auto py-0 px-2 border-none shadow-none focus-visible:ring-1"
+                  className="text-lg font-semibold p-0 m-0 border-none shadow-none outline-none bg-transparent w-auto min-w-0"
                   maxLength={100}
                 />
               </div>
@@ -604,7 +726,7 @@ export default function ProjectDetailPage() {
                 className="flex items-center gap-2 cursor-pointer group"
                 onClick={() => setIsEditingTitle(true)}
               >
-                <span>{project.name}</span>
+                <span className="text-lg font-semibold">{project.name}</span>
                 <Pencil className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
             )
@@ -688,9 +810,9 @@ export default function ProjectDetailPage() {
               onRowSelectionChange={setRowSelection}
               rowClassName={(row) => {
                 if (row._rowType === 'post') {
-                  return 'bg-slate-50 hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800'
+                  return 'bg-slate-50 dark:bg-slate-900'
                 }
-                return 'bg-background hover:bg-muted'
+                return 'bg-background'
               }}
             />
           )}
@@ -705,6 +827,9 @@ export default function ProjectDetailPage() {
         selectedPosts={selectedPostPreviews}
         onContentGenerated={handleContentGenerated}
         projectId={projectId}
+        defaultVariationCount={1}
+        defaultMinSlides={defaultMinSlides}
+        defaultMaxSlides={defaultMaxSlides}
       />
 
       {/* Remove Confirmation Dialog */}

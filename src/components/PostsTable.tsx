@@ -42,7 +42,6 @@ interface PostsTableProps {
   // Selection state (controlled from parent)
   selectedPosts?: Set<string>
   onSelectionChange?: (selectedPosts: Set<string>) => void
-  viewMode?: 'metrics' | 'content'
   searchQuery?: string
   rowClassName?: (row: any) => string
 }
@@ -61,7 +60,6 @@ export function PostsTable({
   enableServerSideSorting = false,
   selectedPosts: externalSelectedPosts,
   onSelectionChange,
-  viewMode = 'metrics',
   rowClassName,
   searchQuery = ''
 }: PostsTableProps) {
@@ -294,25 +292,18 @@ export function PostsTable({
   }
 
   // Create columns - memoized with all necessary dependencies
-  // Selection state IS included but handlers are memoized to minimize re-creation
   const columns = useMemo(() => {
     return createPostsTableColumns({
       onPreviewPost: handlePreviewPost,
       onOpenImageGallery: handleOpenImageGallery,
       onRemixPost: handleRemixPost,
-      onRowClick: handleRowClick,
       onTriggerOCR: handleTriggerOCR,
       onRefetchPosts,
-      selectedPosts,
-      onSelectPost: handleSelectPost,
-      onSelectAll: handleSelectAll,
-      allSelected: allPostsSelected,
-      viewMode,
       searchTerms
     })
-  }, [handlePreviewPost, handleOpenImageGallery, handleRemixPost, handleRowClick, handleTriggerOCR, onRefetchPosts, selectedPosts, handleSelectPost, handleSelectAll, allPostsSelected, viewMode, searchTerms])
+  }, [handlePreviewPost, handleOpenImageGallery, handleRemixPost, handleTriggerOCR, onRefetchPosts, searchTerms])
 
-  // Update column visibility whenever columns, hiddenColumns, or viewMode changes
+  // Update column visibility whenever hiddenColumns changes
   useEffect(() => {
     const visibility: Record<string, boolean> = {}
 
@@ -323,20 +314,8 @@ export function PostsTable({
       })
     }
 
-    // Apply view mode visibility rules
-    columns.forEach((col: any) => {
-      const columnId = col.id || col.accessorKey
-      if (!columnId) return
-
-      if (viewMode === 'metrics' && col.meta?.hideInMetricsMode) {
-        visibility[columnId] = false
-      } else if (viewMode === 'content' && col.meta?.hideInContentMode) {
-        visibility[columnId] = false
-      }
-    })
-
     setColumnVisibility(visibility)
-  }, [hiddenColumns, columns, viewMode])
+  }, [hiddenColumns, columns])
 
   // Global filter function to search across author and OCR text
   const globalFilterFn = (post: TikTokPost, filterValue: string) => {

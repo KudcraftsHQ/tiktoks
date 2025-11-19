@@ -95,6 +95,20 @@ export async function GET(
       mentions = []
     }
 
+    // Get post category if available
+    let postCategory = null
+    if (post.postCategoryId) {
+      const category = await prisma.postCategory.findUnique({
+        where: { id: post.postCategoryId }
+      })
+      if (category) {
+        postCategory = {
+          id: category.id,
+          name: category.name
+        }
+      }
+    }
+
     // Format the response
     const response = {
       id: post.id,
@@ -122,6 +136,10 @@ export async function GET(
       ocrTexts: post.ocrTexts,
       ocrStatus: post.ocrStatus,
       ocrProcessedAt: post.ocrProcessedAt,
+      imageDescriptions: post.imageDescriptions,
+      slideClassifications: post.slideClassifications,
+      postCategory,
+      categoryConfidence: post.categoryConfidence,
 
       // Hashtags and mentions
       hashtags: hashtags,

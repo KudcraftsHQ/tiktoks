@@ -14,6 +14,11 @@ interface SlideThumbnailProps {
   className?: string
 }
 
+// Helper to check if slide has a background image
+const hasBackgroundImage = (slide: RemixSlideType): boolean => {
+  return slide.backgroundLayers?.some(layer => layer.type === 'image' && layer.cacheAssetId) || false
+}
+
 // Global thumbnail cache to avoid re-rendering
 const thumbnailCache = new Map<string, string>()
 
@@ -74,6 +79,7 @@ export function SlideThumbnail({
   }, [cacheKey, slide, dimensions])
 
   const isLoading = loading || isGenerating
+  const hasImage = hasBackgroundImage(slide)
 
   return (
     <button
@@ -117,10 +123,14 @@ export function SlideThumbnail({
         </div>
       )}
 
-      {/* Slide number badge */}
-      <div className="absolute top-0.5 right-0.5 bg-background/90 text-[9px] font-medium px-1 rounded-bl text-foreground">
-        {slideIndex + 1}
-      </div>
+      {/* Slide number badge - show in center when no background image, hide when image exists */}
+      {!hasImage && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="bg-background/95 backdrop-blur-sm text-sm font-bold px-2 py-1 rounded shadow-lg text-foreground border border-border">
+            {slideIndex + 1}
+          </div>
+        </div>
+      )}
     </button>
   )
 }

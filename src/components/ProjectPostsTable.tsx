@@ -20,7 +20,7 @@ import { invalidateSlideThumbnail } from '@/components/SlideThumbnail'
 import { DraftSettingsDialog } from '@/components/DraftSettingsDialog'
 import type { RemixSlideType } from '@/lib/validations/remix-schema'
 import { SortingState, RowSelectionState } from '@tanstack/react-table'
-import { FileText, Loader2, Sparkles, Edit, ExternalLink, Trash2, Copy, Plus, X, GripVertical, Settings, Download } from 'lucide-react'
+import { FileText, Loader2, Sparkles, Edit, ExternalLink, Trash2, Copy, Plus, GripVertical, Settings, Download, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import { DateRange } from '@/components/DateRangeFilter'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
@@ -59,6 +59,74 @@ export type ProjectTableRow = (TikTokPost & {
   _rowType: 'draft'
 })
 
+// Draft Name Editor Component - isolated to prevent re-renders
+interface DraftNameEditorProps {
+  draftId: string
+  draftName: string
+  onSave: (draftId: string, newName: string) => Promise<void>
+}
+
+function DraftNameEditor({ draftId, draftName, onSave }: DraftNameEditorProps) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [editedName, setEditedName] = useState(draftName)
+
+  useEffect(() => {
+    setEditedName(draftName)
+  }, [draftName])
+
+  const handleStartEdit = () => {
+    setIsEditing(true)
+    setEditedName(draftName)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!isEditing || editedName.trim() === draftName) {
+      setIsEditing(false)
+      return
+    }
+
+    try {
+      await onSave(draftId, editedName.trim())
+      setIsEditing(false)
+    } catch (error) {
+      setEditedName(draftName)
+      setIsEditing(false)
+    }
+  }
+
+  if (isEditing) {
+    return (
+      <input
+        type="text"
+        value={editedName}
+        onChange={(e) => setEditedName(e.target.value)}
+        onBlur={handleSaveEdit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            handleSaveEdit()
+          } else if (e.key === 'Escape') {
+            setEditedName(draftName)
+            setIsEditing(false)
+          }
+        }}
+        autoFocus
+        className="text-sm font-semibold p-0 m-0 border-none shadow-none outline-none bg-transparent w-auto min-w-0"
+        maxLength={100}
+      />
+    )
+  }
+
+  return (
+    <div
+      className="flex items-center gap-2 cursor-pointer group/draftname"
+      onClick={handleStartEdit}
+    >
+      <span className="text-sm font-semibold">{draftName}</span>
+      <Pencil className="h-3 w-3 opacity-0 group-hover/draftname:opacity-100 transition-opacity" />
+    </div>
+  )
+}
+
 // Sortable Slide Component for drag-and-drop
 interface SortableSlideProps {
   id: string
@@ -85,6 +153,8 @@ function SortableSlide({
   onRefetchData,
   totalSlides
 }: SortableSlideProps) {
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+
   const {
     attributes,
     listeners,
@@ -100,75 +170,103 @@ function SortableSlide({
     opacity: isDragging ? 0.5 : 1,
   }
 
+  const handleDeleteConfirm = async () => {
+    setShowDeleteDialog(false)
+    await onRemoveSlide(draftId, slideIndex)
+  }
+
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      data-slide-id={id}
-      className={cn(
-        'flex-shrink-0 w-52 flex flex-col',
-        isDragging && 'z-50'
-      )}
-    >
-      {/* Slide header with drag handle, number badge, type, and remove button */}
-      <div className="flex items-center gap-1.5 mb-2">
-        <div
-          {...attributes}
-          {...listeners}
-          className="cursor-grab active:cursor-grabbing p-1 hover:bg-muted rounded"
-        >
-          <GripVertical className="h-3 w-3 text-muted-foreground" />
+    <>
+      <div
+        ref={setNodeRef}
+        style={style}
+        data-slide-id={id}
+        className={cn(
+          'flex-shrink-0 w-52 flex flex-col',
+          isDragging && 'z-50'
+        )}
+      >
+        {/* Slide header with drag handle, number badge, type, and remove button */}
+        <div className="flex items-center gap-1.5 mb-2">
+          <div
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing p-1 hover:bg-muted rounded"
+          >
+            <GripVertical className="h-3 w-3 text-muted-foreground" />
+          </div>
+          <div className="bg-primary/10 text-primary text-xs font-medium px-2 py-0.5 rounded">
+            Slide {slideIndex + 1}
+          </div>
+          <div onClick={(e) => e.stopPropagation()}>
+            <RemixSlideTypeDropdown
+              remixId={draftId}
+              slideIndex={slideIndex}
+              currentType={classification?.type as 'hook' | 'content' | 'cta' | null}
+              onUpdate={onRefetchData}
+            />
+          </div>
+          {totalSlides > 1 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowDeleteDialog(true)
+                  }}
+                  className="h-6 w-6 p-0 ml-auto text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Delete Slide</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
-        <div className="bg-primary/10 text-primary text-xs font-medium px-2 py-0.5 rounded">
-          Slide {slideIndex + 1}
-        </div>
-        <div onClick={(e) => e.stopPropagation()}>
-          <RemixSlideTypeDropdown
-            remixId={draftId}
-            slideIndex={slideIndex}
-            currentType={classification?.type as 'hook' | 'content' | 'cta' | null}
-            onUpdate={onRefetchData}
+        {/* Slide text - fixed height with scroll */}
+        <div className="h-48 overflow-y-auto">
+          <InlineEditableText
+            value={slide.paraphrasedText || ''}
+            onSave={async (newValue) => {
+              await onSaveText(draftId, slideIndex, newValue)
+            }}
+            placeholder="No text"
+            fixedHeight={true}
+            heightClass="h-48"
+            disabled={false}
+            className="text-[12px]"
+            rows={8}
+            searchTerms={searchTerms}
+            textBoxMode={true}
           />
         </div>
-        {totalSlides > 1 && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onRemoveSlide(draftId, slideIndex)
-                }}
-                className="h-6 w-6 p-0 ml-auto text-destructive hover:text-destructive"
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Remove Slide</p>
-            </TooltipContent>
-          </Tooltip>
-        )}
       </div>
-      {/* Slide text - fixed height with scroll */}
-      <div className="h-48 overflow-y-auto">
-        <InlineEditableText
-          value={slide.paraphrasedText || ''}
-          onSave={async (newValue) => {
-            await onSaveText(draftId, slideIndex, newValue)
-          }}
-          placeholder="No text"
-          fixedHeight={true}
-          heightClass="h-48"
-          disabled={false}
-          className="text-[12px]"
-          rows={8}
-          searchTerms={searchTerms}
-          textBoxMode={true}
-        />
-      </div>
-    </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Slide?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete Slide {slideIndex + 1}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
 
@@ -519,6 +617,21 @@ export function ProjectPostsTable({
 
   // Handler to update draft name/title
   const handleSaveDraftName = useCallback(async (draftId: string, newName: string) => {
+    // Find the draft in current rows
+    const draftIndex = displayRows.findIndex(r => r.id === draftId && r._rowType === 'draft')
+    if (draftIndex === -1) return
+
+    const draft = displayRows[draftIndex] as RemixPost & { _rowType: 'draft' }
+
+    // Optimistically update UI
+    const updatedDraft = {
+      ...draft,
+      name: newName
+    }
+    const updatedRows = [...displayRows]
+    updatedRows[draftIndex] = updatedDraft
+    setOptimisticRows(updatedRows)
+
     try {
       const response = await fetch(`/api/remixes/${draftId}`, {
         method: 'PUT',
@@ -538,9 +651,11 @@ export function ProjectPostsTable({
     } catch (error) {
       console.error('Failed to update draft name:', error)
       toast.error('Failed to update draft name')
+      // Revert optimistic update
+      setOptimisticRows(rows)
       throw error
     }
-  }, [])
+  }, [displayRows, rows])
 
   // Helper to safely get slides array from draft row
   const getSlidesArray = useCallback((slides: any): any[] => {
@@ -642,11 +757,8 @@ export function ProjectPostsTable({
         throw new Error('Failed to update slide text')
       }
 
-      // Trigger data refetch to update thumbnails
-      if (onRefetchData) {
-        onRefetchData()
-      }
-
+      // Don't refetch - optimistic update already applied
+      // Note: Thumbnails will update on next natural refetch
       toast.success('Slide text updated')
     } catch (error) {
       console.error('Failed to update slide text:', error)
@@ -959,11 +1071,8 @@ export function ProjectPostsTable({
         throw new Error('Failed to update slide background')
       }
 
-      // Trigger data refetch to update thumbnails
-      if (onRefetchData) {
-        onRefetchData()
-      }
-
+      // Don't refetch - optimistic update already applied
+      // Note: Thumbnails will update on next natural refetch
       toast.success('Background image updated')
     } catch (error) {
       console.error('Failed to update slide background:', error)
@@ -1057,6 +1166,370 @@ export function ProjectPostsTable({
   // Memoize row data with stable proxied URLs to prevent re-renders
   const memoizedRowsWithProxiedUrls = useMemo(() => rowsWithProxiedUrls, [rowsWithProxiedUrls])
 
+  // Helper function for formatting dates
+  const formatDateTime = useCallback((dateString: string): { date: string; time: string } => {
+    const date = new Date(dateString)
+
+    const dateStr = new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    }).format(date)
+
+    const timeStr = new Intl.DateTimeFormat(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    }).format(date)
+
+    return { date: dateStr, time: timeStr }
+  }, [])
+
+  // Format relative time (e.g., "2h ago", "3d ago")
+  const formatRelativeTime = useCallback((dateString: string): string => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffSec = Math.floor(diffMs / 1000)
+    const diffMin = Math.floor(diffSec / 60)
+    const diffHour = Math.floor(diffMin / 60)
+    const diffDay = Math.floor(diffHour / 24)
+    const diffWeek = Math.floor(diffDay / 7)
+    const diffMonth = Math.floor(diffDay / 30)
+    const diffYear = Math.floor(diffDay / 365)
+
+    if (diffSec < 60) return 'just now'
+    if (diffMin < 60) return `${diffMin}m ago`
+    if (diffHour < 24) return `${diffHour}h ago`
+    if (diffDay < 7) return `${diffDay}d ago`
+    if (diffWeek < 4) return `${diffWeek}w ago`
+    if (diffMonth < 12) return `${diffMonth}mo ago`
+    return `${diffYear}y ago`
+  }, [])
+
+  // Draft column renderers - extracted for clarity
+  const renderDraftAuthorColumn = useCallback((draft: RemixPost) => {
+    const slides = getSlidesArray(draft.slides)
+    const { date, time } = formatDateTime(draft.createdAt)
+
+    // Content mode: Match post row structure exactly
+    if (viewMode === 'content') {
+      return (
+        <div className="flex flex-col items-start gap-2.5 w-full py-1">
+          {/* Row 1: Draft Name */}
+          <div className="flex flex-col gap-0.5 w-full" onClick={(e) => e.stopPropagation()}>
+            <DraftNameEditor
+              draftId={draft.id}
+              draftName={draft.name}
+              onSave={handleSaveDraftName}
+            />
+          </div>
+
+          {/* Row 2: Thumbnail Strip */}
+          <div className="flex items-center">
+            <ThumbnailStrip
+              slides={slides}
+              size="sm"
+              draftId={draft.id}
+              onBackgroundImageSelect={async (slideIndex, asset) => {
+                await handleSetSlideBackground(draft.id, slideIndex, asset.cacheAssetId)
+              }}
+            />
+          </div>
+
+          {/* Row 3: Created and Updated date */}
+          <div className="text-xs flex flex-col gap-0.5">
+            <div>
+              <span>{date}</span>
+              <span className="ml-1 text-muted-foreground">{time}</span>
+            </div>
+            <div className="text-muted-foreground">
+              Updated {formatRelativeTime(draft.updatedAt)}
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // Metrics mode: Match post row structure
+    return (
+      <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
+        <DraftNameEditor
+          draftId={draft.id}
+          draftName={draft.name}
+          onSave={handleSaveDraftName}
+        />
+      </div>
+    )
+  }, [viewMode, getSlidesArray, handleSaveDraftName, handleSetSlideBackground, formatDateTime, formatRelativeTime])
+
+  const renderDraftContentColumn = useCallback((draft: RemixPost) => {
+    const slides = getSlidesArray(draft.slides)
+
+    // Content mode: show slides with drag-and-drop
+    if (viewMode === 'content' && slides.length > 0) {
+      const sortableItems = slides.map((slide, index) => ({
+        id: `${draft.id}-slide-${index}`,
+        slide,
+        index
+      }))
+
+      const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+          coordinateGetter: sortableKeyboardCoordinates,
+        })
+      )
+
+      const handleDragEnd = async (event: DragEndEvent) => {
+        const { active, over } = event
+
+        if (over && active.id !== over.id) {
+          const oldIndex = sortableItems.findIndex(item => item.id === active.id)
+          const newIndex = sortableItems.findIndex(item => item.id === over.id)
+
+          if (oldIndex !== -1 && newIndex !== -1) {
+            const newOrder = arrayMove(
+              Array.from({ length: slides.length }, (_, i) => i),
+              oldIndex,
+              newIndex
+            )
+            await handleReorderSlides(draft.id, newOrder)
+          }
+        }
+      }
+
+      return (
+        <TooltipProvider>
+          <div className="w-full">
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <div className="flex gap-3 overflow-x-auto pb-2">
+                <SortableContext
+                  items={sortableItems.map(item => item.id)}
+                  strategy={horizontalListSortingStrategy}
+                >
+                  {sortableItems.map(({ id, slide, index }) => {
+                    const classification = draft.slideClassifications?.[index]
+
+                    return (
+                      <SortableSlide
+                        key={id}
+                        id={id}
+                        slide={slide}
+                        slideIndex={index}
+                        draftId={draft.id}
+                        classification={classification}
+                        searchTerms={searchTerms}
+                        onSaveText={handleSaveDraftSlideText}
+                        onRemoveSlide={handleRemoveSlide}
+                        onRefetchData={onRefetchData}
+                        totalSlides={slides.length}
+                      />
+                    )
+                  })}
+                </SortableContext>
+
+                {/* Add New Slide Button */}
+                <div className="flex-shrink-0 w-52 flex flex-col">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <div className="h-6"></div>
+                  </div>
+                  <div className="h-48 overflow-y-auto">
+                    <div
+                      className="h-full flex items-center justify-center border-2 border-dashed border-muted-foreground/25 rounded-lg hover:border-muted-foreground/50 hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleAddSlide(draft.id)
+                      }}
+                    >
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <Plus className="h-6 w-6" />
+                        <span className="text-xs font-medium">Add Slide</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </DndContext>
+          </div>
+        </TooltipProvider>
+      )
+    }
+
+    // Metrics mode or no slides: show slide count
+    return (
+      <div className="text-sm text-muted-foreground">
+        {slides.length} slides
+      </div>
+    )
+  }, [viewMode, getSlidesArray, searchTerms, handleSaveDraftSlideText, handleRemoveSlide, handleAddSlide, handleReorderSlides, onRefetchData])
+
+  const renderDraftDescriptionColumn = useCallback((draft: RemixPost) => {
+    return (
+      <div className="flex-shrink-0 w-52 flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1.5 mb-2">
+          <div className="bg-primary/10 text-primary text-xs font-medium px-2 py-0.5 rounded">
+            Draft
+          </div>
+        </div>
+        <div className="overflow-y-auto h-48">
+          <InlineEditableText
+            value={draft.description || ''}
+            onSave={async (newValue) => {
+              await handleSaveDraftDescription(draft.id, newValue)
+            }}
+            placeholder="No description"
+            fixedHeight={true}
+            heightClass="h-full"
+            disabled={false}
+            className="text-[12px]"
+            rows={8}
+            searchTerms={searchTerms}
+          />
+        </div>
+      </div>
+    )
+  }, [searchTerms, handleSaveDraftDescription])
+
+  const renderDraftActionsColumn = useCallback((draft: RemixPost) => {
+    if (viewMode !== 'content') return null
+
+    const isBookmarked = draft.bookmarked || false
+
+    return (
+      <TooltipProvider>
+        <div className="flex flex-col gap-2">
+          {/* Bookmark Toggle */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleToggleBookmark(draft.id, isBookmarked)
+                }}
+                className={cn(
+                  "h-8 w-8 p-0",
+                  isBookmarked && "text-yellow-500 hover:text-yellow-600"
+                )}
+              >
+                <Star className={cn("h-4 w-4", isBookmarked && "fill-current")} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              <p>{isBookmarked ? 'Remove Bookmark' : 'Add Bookmark'}</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Copy to Clipboard */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleCopyDraftToClipboard(draft)
+                }}
+                className="h-8 w-8 p-0"
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              <p>Copy to Clipboard</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Edit Draft */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  window.open(`/remix/${draft.id}/edit`, '_blank')
+                }}
+                className="h-8 w-8 p-0"
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              <p>Edit Draft</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Settings */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleSettingsClick(draft)
+                }}
+                className="h-8 w-8 p-0"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              <p>Draft Settings</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Download ZIP */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleDownloadDraft(draft)
+                }}
+                className="h-8 w-8 p-0"
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              <p>Download ZIP</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Delete Draft */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleDeleteClick(draft.id, 'draft', draft.name)
+                }}
+                className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              <p>Delete Draft</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </TooltipProvider>
+    )
+  }, [viewMode, handleToggleBookmark, handleCopyDraftToClipboard, handleSettingsClick, handleDownloadDraft, handleDeleteClick])
+
   // Create columns - memoized with all necessary dependencies
   const columns = useMemo(() => {
     const postColumns = createPostsTableColumns({
@@ -1066,7 +1539,6 @@ export function ProjectPostsTable({
       onRowClick: handleRowClick,
       onTriggerOCR: handleTriggerOCR,
       onRefetchPosts: onRefetchData,
-      viewMode,
       searchTerms
     })
 
@@ -1075,375 +1547,37 @@ export function ProjectPostsTable({
       ...col,
       cell: (info: any) => {
         const row = info.row.original
-
         const columnId = col.id || col.accessorKey
 
-        // For draft rows, render custom content
+        // Draft row rendering
         if (row._rowType === 'draft') {
-          // Handle specific columns for drafts
-          if (columnId === 'authorHandle') {
-            // Show thumbnail strip + metadata for drafts
-            const slides = getSlidesArray(row.slides)
-            const createdDate = new Date(row.createdAt)
-            const formattedDateTime = createdDate.toLocaleString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-              hour: 'numeric',
-              minute: '2-digit',
-              hour12: true
-            })
+          const draft = row as RemixPost
 
-            return (
-              <div className="flex flex-col gap-2 min-w-[260px]" onClick={(e) => e.stopPropagation()}>
-                {/* Thumbnail Strip */}
-                <ThumbnailStrip
-                  slides={slides}
-                  size="sm"
-                  draftId={row.id}
-                  onBackgroundImageSelect={async (slideIndex, asset) => {
-                    await handleSetSlideBackground(row.id, slideIndex, asset.cacheAssetId)
-                  }}
-                />
-
-                {/* Metadata */}
-                <div className="text-sm space-y-0.5">
-                  <div className="font-medium text-foreground">
-                    <InlineEditableText
-                      value={row.name}
-                      onSave={async (newValue) => {
-                        await handleSaveDraftName(row.id, newValue)
-                      }}
-                      placeholder="Untitled Draft"
-                      disabled={false}
-                      className="text-sm font-medium"
-                    />
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {formattedDateTime} • {slides.length} slides
-                  </div>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    <Badge variant="outline" className="text-xs">
-                      {row.generationType}
-                    </Badge>
-                    {row.productContext && (
-                      <Badge variant="secondary" className="text-xs">
-                        {row.productContext.title}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )
-          } else if (columnId === 'title') {
-            // Show slides for drafts (this is the Content column) - matching post column structure
-            if (viewMode === 'content' && row.slides) {
-              // Parse slides if they're a JSON string
-              let slides: any[] = []
-              try {
-                slides = typeof row.slides === 'string'
-                  ? JSON.parse(row.slides)
-                  : (Array.isArray(row.slides) ? row.slides : [])
-              } catch {
-                slides = []
-              }
-
-              if (slides.length > 0) {
-                // Create sortable items with unique IDs
-                const sortableItems = slides.map((slide, index) => ({
-                  id: `${row.id}-slide-${index}`,
-                  slide,
-                  index
-                }))
-
-                const sensors = useSensors(
-                  useSensor(PointerSensor),
-                  useSensor(KeyboardSensor, {
-                    coordinateGetter: sortableKeyboardCoordinates,
-                  })
-                )
-
-                const handleDragEnd = async (event: DragEndEvent) => {
-                  const { active, over } = event
-
-                  if (over && active.id !== over.id) {
-                    const oldIndex = sortableItems.findIndex(item => item.id === active.id)
-                    const newIndex = sortableItems.findIndex(item => item.id === over.id)
-
-                    if (oldIndex !== -1 && newIndex !== -1) {
-                      // Create new order array
-                      const newOrder = arrayMove(
-                        Array.from({ length: slides.length }, (_, i) => i),
-                        oldIndex,
-                        newIndex
-                      )
-
-                      // Call API to update order
-                      await handleReorderSlides(row.id, newOrder)
-                    }
-                  }
-                }
-
-                return (
-                  <TooltipProvider>
-                    <div className="w-full">
-                      <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={handleDragEnd}
-                      >
-                        <div className="flex gap-3 overflow-x-auto pb-2">
-                          <SortableContext
-                            items={sortableItems.map(item => item.id)}
-                            strategy={horizontalListSortingStrategy}
-                          >
-                            {sortableItems.map(({ id, slide, index }) => {
-                              const classification = row.slideClassifications?.[index]
-
-                              return (
-                                <SortableSlide
-                                  key={id}
-                                  id={id}
-                                  slide={slide}
-                                  slideIndex={index}
-                                  draftId={row.id}
-                                  classification={classification}
-                                  searchTerms={searchTerms}
-                                  onSaveText={handleSaveDraftSlideText}
-                                  onRemoveSlide={handleRemoveSlide}
-                                  onRefetchData={onRefetchData}
-                                  totalSlides={slides.length}
-                                />
-                              )
-                            })}
-                          </SortableContext>
-                          {/* Add New Slide Button */}
-                          <div className="flex-shrink-0 w-52 flex flex-col">
-                            {/* Empty space for alignment with slide header and description badge */}
-                            <div className="flex items-center gap-1.5 mb-2">
-                              <div className="h-6"></div>
-                            </div>
-                            {/* Add slide button - fixed height matching slide text area */}
-                            <div className="h-48 overflow-y-auto">
-                              <div className="h-full flex items-center justify-center border-2 border-dashed border-muted-foreground/25 rounded-lg hover:border-muted-foreground/50 hover:bg-muted/50 transition-colors cursor-pointer"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleAddSlide(row.id)
-                                }}
-                              >
-                                <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                                  <Plus className="h-6 w-6" />
-                                  <span className="text-xs font-medium">Add Slide</span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </DndContext>
-                    </div>
-                  </TooltipProvider>
-                )
-              }
-            }
-
-            // Fallback for non-content mode
-            return (
-              <div className="text-sm text-muted-foreground">
-                {getSlidesArray(row.slides).length} slides
-              </div>
-            )
-          } else if (columnId === 'metrics') {
-            // Show slide count for drafts
-            return (
-              <div className="text-sm text-muted-foreground">
-                {getSlidesArray(row.slides).length} slides
-              </div>
-            )
-          } else if (columnId === 'description') {
-            // Show draft description - matching post column structure
-            return (
-              <div className="flex-shrink-0 w-52 flex flex-col" onClick={(e) => e.stopPropagation()}>
-                <div className="mb-2">
-                  <Badge variant="outline" className="text-xs">
-                    Draft
-                  </Badge>
-                </div>
-                <div className="overflow-y-auto h-48">
-                  <InlineEditableText
-                    value={row.description || ''}
-                    onSave={async (newValue) => {
-                      await handleSaveDraftDescription(row.id, newValue)
-                    }}
-                    placeholder="No description"
-                    fixedHeight={true}
-                    heightClass="h-full"
-                    disabled={false}
-                    className="text-[12px]"
-                    rows={8}
-                    searchTerms={searchTerms}
-                  />
-                </div>
-              </div>
-            )
-          } else if (columnId === 'publishedAt') {
-            // Show created date for drafts
-            return (
-              <div className="text-sm text-muted-foreground">
-                {formatDate(row.createdAt)}
-              </div>
-            )
-          } else if (columnId === 'actions') {
-            // Action buttons for drafts - matching post column structure (vertical icon-only buttons)
-            if (viewMode === 'content') {
-              const draft = row as RemixPost
-              const isBookmarked = draft.bookmarked || false
-
-              return (
-                <TooltipProvider>
-                  <div className="flex flex-col gap-2">
-                    {/* Bookmark Toggle Button */}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleToggleBookmark(row.id, isBookmarked)
-                          }}
-                          className={cn(
-                            "h-8 w-8 p-0",
-                            isBookmarked && "text-yellow-500 hover:text-yellow-600"
-                          )}
-                        >
-                          <Star className={cn("h-4 w-4", isBookmarked && "fill-current")} />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="left">
-                        <p>{isBookmarked ? 'Remove Bookmark' : 'Add Bookmark'}</p>
-                      </TooltipContent>
-                    </Tooltip>
-
-                    {/* Copy Draft Button */}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleCopyDraftToClipboard(row as RemixPost)
-                          }}
-                          className="h-8 w-8 p-0"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="left">
-                        <p>Copy to Clipboard</p>
-                      </TooltipContent>
-                    </Tooltip>
-
-                    {/* Edit Draft Button */}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            window.open(`/remix/${row.id}/edit`, '_blank')
-                          }}
-                          className="h-8 w-8 p-0"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="left">
-                        <p>Edit Draft</p>
-                      </TooltipContent>
-                    </Tooltip>
-
-                    {/* Settings Button */}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleSettingsClick(draft)
-                          }}
-                          className="h-8 w-8 p-0"
-                        >
-                          <Settings className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="left">
-                        <p>Draft Settings</p>
-                      </TooltipContent>
-                    </Tooltip>
-
-                    {/* Download Button */}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDownloadDraft(draft)
-                          }}
-                          className="h-8 w-8 p-0"
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="left">
-                        <p>Download ZIP</p>
-                      </TooltipContent>
-                    </Tooltip>
-
-                    {/* Delete Draft Button */}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteClick(row.id, 'draft', row.name)
-                          }}
-                          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="left">
-                        <p>Delete Draft</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                </TooltipProvider>
-              )
-            }
-
-            // Fallback for non-content mode
-            return null
+          switch (columnId) {
+            case 'authorHandle':
+              return renderDraftAuthorColumn(draft)
+            case 'title':
+              return renderDraftContentColumn(draft)
+            case 'description':
+              return renderDraftDescriptionColumn(draft)
+            case 'metrics':
+              return <div className="text-sm text-muted-foreground">{getSlidesArray(draft.slides).length} slides</div>
+            case 'publishedAt':
+              return <div className="text-sm text-muted-foreground">{formatDate(draft.createdAt)}</div>
+            case 'actions':
+              return renderDraftActionsColumn(draft)
+            default:
+              return <div className="text-xs text-muted-foreground">—</div>
           }
-
-          // For other columns, return empty/null for drafts
-          return <div className="text-xs text-muted-foreground">—</div>
         }
 
-        // For post rows, add custom handlers for description and content saving
-        if (columnId === 'description' && viewMode === 'content') {
-          const post = row as TikTokPost
-          const description = post.description || ''
+        // Post row rendering with custom handlers
+        const post = row as TikTokPost
 
+        if (columnId === 'description' && viewMode === 'content') {
           return (
             <div className="flex-shrink-0 w-52 flex flex-col" onClick={(e) => e.stopPropagation()}>
-              <div className="mb-2">
+              <div className="flex items-center gap-1.5 mb-2">
                 <InlineCategorySelector
                   postId={post.id}
                   currentCategory={post.postCategory}
@@ -1452,7 +1586,7 @@ export function ProjectPostsTable({
               </div>
               <div className="overflow-y-auto h-48">
                 <InlineEditableText
-                  value={description || ''}
+                  value={post.description || ''}
                   onSave={async (newValue) => {
                     await handleSavePostDescription(post.id, newValue)
                   }}
@@ -1469,19 +1603,13 @@ export function ProjectPostsTable({
           )
         }
 
-        // For post rows, use original cell renderer with added delete button
         if (columnId === 'actions' && viewMode === 'content') {
           const originalCell = col.cell(info)
-          const post = row as TikTokPost
 
-          // Wrap the original actions with our delete button
           return (
             <TooltipProvider>
               <div className="flex flex-col gap-2">
-                {/* Original post action buttons */}
                 {originalCell}
-
-                {/* Delete Post Button */}
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -1508,10 +1636,13 @@ export function ProjectPostsTable({
         return col.cell(info)
       }
     }))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handlePreviewPost, handleOpenImageGallery, handleRemixPost, handleRowClick, handleTriggerOCR, onRefetchData, viewMode, searchTerms, formatDate, handleDeleteClick, handleCopyDraftToClipboard, handleSavePostDescription, handleSaveDraftDescription, handleSaveDraftName, handleSaveDraftSlideText, getSlidesArray, handleAddSlide, handleRemoveSlide, handleReorderSlides, handleToggleBookmark, handleSetSlideBackground])
-  // Note: Intentionally excluding selectedRows, handleSelectRow, handleSelectAll, allPostsSelected
-  // The checkbox cells read current selection state when they render, but columns don't need to recreate
+  }, [
+    handlePreviewPost, handleOpenImageGallery, handleRemixPost, handleRowClick,
+    handleTriggerOCR, onRefetchData, viewMode, searchTerms, formatDate,
+    handleDeleteClick, handleSavePostDescription, getSlidesArray,
+    renderDraftAuthorColumn, renderDraftContentColumn, renderDraftDescriptionColumn,
+    renderDraftActionsColumn, formatDateTime
+  ])
 
   // Update column visibility whenever columns, hiddenColumns, or viewMode changes
   useEffect(() => {

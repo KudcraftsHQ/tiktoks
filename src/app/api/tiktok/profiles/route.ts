@@ -13,7 +13,6 @@ export async function GET(request: NextRequest) {
     const verified = searchParams.get('verified')
     const minFollowers = searchParams.get('minFollowers')
     const maxFollowers = searchParams.get('maxFollowers')
-    const isOwnProfile = searchParams.get('isOwnProfile')
     const groupId = searchParams.get('groupId')
     const dateFrom = searchParams.get('dateFrom')
     const dateTo = searchParams.get('dateTo')
@@ -30,13 +29,6 @@ export async function GET(request: NextRequest) {
       } else {
         where.profileGroupId = groupId
       }
-    }
-
-    // Filter by own profile flag
-    if (isOwnProfile === 'true') {
-      where.isOwnProfile = true
-    } else if (isOwnProfile === 'false') {
-      where.isOwnProfile = false
     }
 
     if (search) {

@@ -46,8 +46,7 @@ export async function GET(request: NextRequest) {
               select: {
                 id: true,
                 handle: true,
-                nickname: true,
-                isOwnProfile: true
+                nickname: true
               }
             }
           }
@@ -91,8 +90,7 @@ export async function GET(request: NextRequest) {
                 select: {
                   id: true,
                   handle: true,
-                  nickname: true,
-                  isOwnProfile: true
+                  nickname: true
                 }
               },
               metricsHistory: {
@@ -110,8 +108,8 @@ export async function GET(request: NextRequest) {
             }
           })
 
-          // Only include stats if it's an own profile post
-          if (linkedPost && linkedPost.profile.isOwnProfile) {
+          // Include stats if linked post is found
+          if (linkedPost) {
             linkedPostStats = {
               id: linkedPost.id,
               tiktokUrl: linkedPost.tiktokUrl,

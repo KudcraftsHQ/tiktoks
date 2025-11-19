@@ -17,15 +17,13 @@ async function createOrUpdateProfile(profileData: ProfileData, isOwnProfile: boo
       nickname: profileData.nickname || null,
       avatarId: avatarCacheAssetId,
       bio: profileData.bio || null,
-      verified: profileData.verified || false,
-      isOwnProfile
+      verified: profileData.verified || false
     },
     update: {
       nickname: profileData.nickname || undefined,
       avatarId: avatarCacheAssetId || undefined,
       bio: profileData.bio || undefined,
-      verified: profileData.verified || undefined,
-      isOwnProfile: isOwnProfile || undefined // Only update if true
+      verified: profileData.verified || undefined
     }
   })
 }
@@ -174,8 +172,7 @@ export async function POST(request: NextRequest) {
       success: true,
       profile: {
         id: profile.id,
-        handle: profile.handle,
-        isOwnProfile: profile.isOwnProfile
+        handle: profile.handle
       },
       stats: postStats,
       processing: result.hasMore // Indicate if more posts need processing

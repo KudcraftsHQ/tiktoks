@@ -37,6 +37,9 @@ interface GenerateContentDrawerProps {
   selectedPosts?: PostPreview[] // Optional: if provided, skips fetching
   onContentGenerated?: (drafts?: any[]) => void
   projectId?: string // Optional: associates generated remixes with a project
+  defaultVariationCount?: number // Optional: default number of variations
+  defaultMinSlides?: number // Optional: default min slides
+  defaultMaxSlides?: number // Optional: default max slides
 }
 
 export function GenerateContentDrawer({
@@ -45,7 +48,10 @@ export function GenerateContentDrawer({
   selectedPostIds,
   selectedPosts,
   onContentGenerated,
-  projectId
+  projectId,
+  defaultVariationCount,
+  defaultMinSlides,
+  defaultMaxSlides
 }: GenerateContentDrawerProps) {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isLoadingPosts, setIsLoadingPosts] = useState(false)
@@ -94,11 +100,11 @@ export function GenerateContentDrawer({
       setGenerationStrategy('remix')
       setLanguageStyle('follow the reference content language style')
       setContentIdeas('')
-      setVariationCount('')
-      setMinSlides('')
-      setMaxSlides('')
+      setVariationCount(defaultVariationCount ?? '')
+      setMinSlides(defaultMinSlides ?? '')
+      setMaxSlides(defaultMaxSlides ?? '')
     }
-  }, [isOpen])
+  }, [isOpen, defaultVariationCount, defaultMinSlides, defaultMaxSlides])
 
   const fetchPostPreviews = async () => {
     setIsLoadingPosts(true)
@@ -150,8 +156,8 @@ export function GenerateContentDrawer({
 
     // Ensure defaults are applied
     const finalVariationCount = variationCount === '' ? 5 : variationCount
-    const finalMinSlides = minSlides === '' ? 5 : minSlides
-    const finalMaxSlides = maxSlides === '' ? 8 : maxSlides
+    const finalMinSlides = minSlides === '' ? 6 : minSlides
+    const finalMaxSlides = maxSlides === '' ? 6 : maxSlides
 
     setIsGenerating(true)
     try {
@@ -425,12 +431,12 @@ export function GenerateContentDrawer({
                       }
                     }}
                     onBlur={() => {
-                      // Set to default (5) if empty on blur
+                      // Set to default (6) if empty on blur
                       if (minSlides === '') {
-                        setMinSlides(5)
-                        // Also update maxSlides if it's empty or less than 5
-                        if (maxSlides === '' || maxSlides < 5) {
-                          setMaxSlides(8)
+                        setMinSlides(6)
+                        // Also update maxSlides if it's empty or less than 6
+                        if (maxSlides === '' || maxSlides < 6) {
+                          setMaxSlides(6)
                         }
                       } else {
                         // Enforce min/max constraints
@@ -441,7 +447,7 @@ export function GenerateContentDrawer({
                         if (maxSlides !== '' && validMin > maxSlides) {
                           setMaxSlides(validMin)
                         } else if (maxSlides === '') {
-                          setMaxSlides(Math.max(validMin, 8))
+                          setMaxSlides(Math.max(validMin, 6))
                         }
                       }
                     }}
@@ -469,17 +475,17 @@ export function GenerateContentDrawer({
                       }
                     }}
                     onBlur={() => {
-                      // Set to default (8) if empty on blur
+                      // Set to default (6) if empty on blur
                       if (maxSlides === '') {
-                        setMaxSlides(8)
-                        // Also update minSlides if it's empty or greater than 8
-                        if (minSlides === '' || minSlides > 8) {
-                          setMinSlides(5)
+                        setMaxSlides(6)
+                        // Also update minSlides if it's empty or greater than 6
+                        if (minSlides === '' || minSlides > 6) {
+                          setMinSlides(6)
                         }
                       } else {
                         // Enforce min/max constraints
                         const num = typeof maxSlides === 'number' ? maxSlides : parseInt(String(maxSlides))
-                        const effectiveMin = minSlides === '' ? 5 : minSlides
+                        const effectiveMin = minSlides === '' ? 6 : minSlides
                         const validMax = Math.min(Math.max(num, effectiveMin), 20)
                         setMaxSlides(validMax)
                       }

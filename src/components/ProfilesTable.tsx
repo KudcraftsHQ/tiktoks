@@ -82,30 +82,6 @@ export function ProfilesTable({
     router.push(`/profiles/${handle}`)
   }
 
-  const handleToggleOwnProfile = async (profileId: string, isOwn: boolean) => {
-    try {
-      const response = await fetch(`/api/tiktok/profiles/${profileId}/own`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ isOwnProfile: isOwn })
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to update profile')
-      }
-
-      // Trigger parent refresh
-      if (onProfilesChange) {
-        onProfilesChange()
-      }
-    } catch (err) {
-      console.error('Failed to toggle own profile:', err)
-      throw err
-    }
-  }
-
   const handleToggleMonitoring = async (profileId: string, enabled: boolean) => {
     try {
       const response = await fetch(`/api/tiktok/profiles/${profileId}/monitoring`, {
@@ -240,7 +216,6 @@ export function ProfilesTable({
   // Create columns with handlers
   const columns = useMemo(() => createProfilesTableColumns({
     onPreviewProfile: handlePreviewProfile,
-    onToggleOwnProfile: handleToggleOwnProfile,
     onToggleMonitoring: handleToggleMonitoring,
     onTriggerUpdate: handleTriggerUpdate,
     onProfileUpdate: onProfilesChange,

@@ -318,6 +318,92 @@ export function DataTable<TData, TValue>({
     }),
   });
 
+  // Helper to render skeleton based on column ID
+  const renderSkeletonCell = (columnId: string) => {
+    switch (columnId) {
+      case 'select':
+        return (
+          <div className="pl-[10px]">
+            <div className="h-4 w-4 bg-muted animate-pulse rounded" />
+          </div>
+        )
+      case 'authorHandle':
+        return (
+          <div className="flex flex-col items-start gap-3 w-full py-2">
+            {/* Row 1: Author Info */}
+            <div className="flex items-center space-x-2 w-full">
+              <div className="w-8 h-8 rounded-full bg-muted animate-pulse flex-shrink-0" />
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="h-3.5 bg-muted animate-pulse rounded w-3/4" />
+                <div className="h-3 bg-muted animate-pulse rounded w-1/2" />
+              </div>
+            </div>
+
+            {/* Row 2: Slides Content (5 thumbnails) */}
+            <div className="flex items-center space-x-1">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="w-10 aspect-[9/16] bg-muted animate-pulse rounded" />
+              ))}
+            </div>
+
+            {/* Row 3: Published and Updated date */}
+            <div className="flex flex-col gap-1 w-full">
+              <div className="h-3 bg-muted animate-pulse rounded w-2/3" />
+              <div className="h-3 bg-muted animate-pulse rounded w-1/2" />
+            </div>
+          </div>
+        )
+      case 'metrics':
+        return (
+          <div className="flex flex-col gap-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-md bg-muted animate-pulse flex-shrink-0" />
+                <div className="h-3.5 bg-muted animate-pulse rounded w-12" />
+              </div>
+            ))}
+          </div>
+        )
+      case 'description':
+        return (
+          <div className="flex-shrink-0 w-52 flex flex-col">
+            <div className="mb-2">
+              <div className="h-6 bg-muted animate-pulse rounded w-32" />
+            </div>
+            <div className="h-48 bg-muted animate-pulse rounded" />
+          </div>
+        )
+      case 'title':
+        return (
+          <div className="w-full">
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex-shrink-0 w-52 flex flex-col">
+                  {/* Slide number badge */}
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <div className="h-5 bg-muted animate-pulse rounded w-16" />
+                    <div className="h-5 bg-muted animate-pulse rounded w-20" />
+                  </div>
+                  {/* OCR text area */}
+                  <div className="h-48 bg-muted animate-pulse rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      case 'actions':
+        return (
+          <div className="flex flex-col gap-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-8 w-8 bg-muted animate-pulse rounded" />
+            ))}
+          </div>
+        )
+      default:
+        return <div className="h-4 bg-muted animate-pulse rounded" />
+    }
+  }
+
   // Memoize the table body content
   const tableBody = useMemo(() => (
     <TableBody>
@@ -333,7 +419,7 @@ export function DataTable<TData, TValue>({
                 )}
                 style={getCommonPinningStyles(column)}
               >
-                <div className="h-4 bg-muted animate-pulse rounded" />
+                {renderSkeletonCell(column.id)}
               </TableCell>
             ))}
           </TableRow>

@@ -24,7 +24,6 @@ import {
   MessageCircle,
   Share2,
   Bookmark,
-  Star,
   Bell,
   BellOff,
   PlayCircle,
@@ -67,9 +66,6 @@ export interface TikTokProfile {
   lastMonitoringRun?: string | null
   nextMonitoringRun?: string | null
 
-  // Own profile flag
-  isOwnProfile?: boolean
-
   createdAt: string
   updatedAt: string
   _count?: {
@@ -79,7 +75,6 @@ export interface TikTokProfile {
 
 interface ProfilesTableColumnsProps {
   onPreviewProfile: (profile: TikTokProfile) => void
-  onToggleOwnProfile?: (profileId: string, isOwn: boolean) => Promise<void>
   onToggleMonitoring?: (profileId: string, enabled: boolean) => Promise<void>
   onTriggerUpdate?: (profileId: string) => Promise<void>
   onProfileUpdate?: () => void
@@ -214,44 +209,8 @@ function ProfileActionsCell({ profile, onToggleMonitoring, onTriggerUpdate }: Pr
   )
 }
 
-interface OwnProfileToggleProps {
-  profile: TikTokProfile
-  onToggle?: (profileId: string, isOwn: boolean) => Promise<void>
-}
-
-function OwnProfileToggle({ profile, onToggle }: OwnProfileToggleProps) {
-  const [isToggling, setIsToggling] = React.useState(false)
-
-  const handleToggle = async () => {
-    if (!onToggle) return
-
-    setIsToggling(true)
-    try {
-      await onToggle(profile.id, !profile.isOwnProfile)
-    } finally {
-      setIsToggling(false)
-    }
-  }
-
-  return (
-    <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-      <Button
-        variant={profile.isOwnProfile ? "default" : "outline"}
-        size="sm"
-        onClick={handleToggle}
-        disabled={isToggling || !onToggle}
-        className="gap-1"
-      >
-        <Star className={`w-3 h-3 ${profile.isOwnProfile ? 'fill-current' : ''}`} />
-        {profile.isOwnProfile ? 'Mine' : 'Mark'}
-      </Button>
-    </div>
-  )
-}
-
 export const createProfilesTableColumns = ({
   onPreviewProfile,
-  onToggleOwnProfile,
   onToggleMonitoring,
   onTriggerUpdate,
   onProfileUpdate,
@@ -447,24 +406,13 @@ export const createProfilesTableColumns = ({
     }
   },
   {
-    accessorKey: 'isOwnProfile',
-    header: 'Own Profile',
-    cell: ({ row }) => {
-      const profile = row.original
-
-      return (
-        <OwnProfileToggle profile={profile} onToggle={onToggleOwnProfile} />
-      )
-    }
-  },
-  {
     id: 'actions',
     header: 'Actions',
     cell: ({ row }) => {
       const profile = row.original
 
-      return <ProfileActionsCell 
-        profile={profile} 
+      return <ProfileActionsCell
+        profile={profile}
         onToggleMonitoring={onToggleMonitoring}
         onTriggerUpdate={onTriggerUpdate}
       />

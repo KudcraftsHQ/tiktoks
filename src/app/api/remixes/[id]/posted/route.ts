@@ -103,8 +103,7 @@ export async function PATCH(
             select: {
               id: true,
               handle: true,
-              nickname: true,
-              isOwnProfile: true
+              nickname: true
             }
           }
         }
