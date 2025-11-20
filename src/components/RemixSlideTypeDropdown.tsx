@@ -57,10 +57,8 @@ export function RemixSlideTypeDropdown({
 
       toast.success(`Slide ${slideIndex + 1} classified as ${newType}`)
 
-      // Trigger refetch if provided
-      if (onUpdate) {
-        onUpdate()
-      }
+      // Don't trigger refetch - optimistic update is sufficient
+      // The parent component will naturally refresh on next data fetch
     } catch (error) {
       console.error('Failed to update classification:', error)
       toast.error('Could not update slide classification')

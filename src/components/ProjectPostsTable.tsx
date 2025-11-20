@@ -203,7 +203,6 @@ function SortableSlide({
               remixId={draftId}
               slideIndex={slideIndex}
               currentType={classification?.type as 'hook' | 'content' | 'cta' | null}
-              onUpdate={onRefetchData}
             />
           </div>
           {totalSlides > 1 && (
@@ -805,7 +804,7 @@ export function ProjectPostsTable({
       setOptimisticRows(rows)
       throw error
     }
-  }, [displayRows, getSlidesArray, onRefetchData, rows])
+  }, [displayRows, getSlidesArray, rows])
 
   // Handler to add a new slide to a draft
   const handleAddSlide = useCallback(async (draftId: string) => {
@@ -1119,7 +1118,7 @@ export function ProjectPostsTable({
       setOptimisticRows(rows)
       throw error
     }
-  }, [displayRows, getSlidesArray, onRefetchData, rows])
+  }, [displayRows, getSlidesArray, rows])
 
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return
