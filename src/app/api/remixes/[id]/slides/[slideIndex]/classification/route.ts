@@ -89,7 +89,7 @@ export async function PATCH(
     const updatedRemix = await prisma.remixPost.update({
       where: { id: remixId },
       data: {
-        slideClassifications: JSON.stringify(slideClassifications),
+        slideClassifications: slideClassifications,
         updatedAt: new Date()
       }
     })

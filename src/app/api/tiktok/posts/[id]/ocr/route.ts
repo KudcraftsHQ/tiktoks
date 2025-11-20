@@ -117,7 +117,7 @@ export async function PATCH(
     await prisma.tiktokPost.update({
       where: { id: postId },
       data: {
-        ocrTexts: JSON.stringify(ocrTexts),
+        ocrTexts: ocrTexts,
         updatedAt: new Date()
       }
     })

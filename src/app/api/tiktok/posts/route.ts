@@ -138,8 +138,8 @@ export async function POST(request: NextRequest) {
         authorNickname: validatedData.authorNickname,
         authorHandle: validatedData.authorHandle,
         authorAvatarId: cachedMedia.cachedAuthorAvatar,
-        hashtags: JSON.stringify(validatedData.hashtags),
-        mentions: JSON.stringify(validatedData.mentions),
+        hashtags: validatedData.hashtags,
+        mentions: validatedData.mentions,
         viewCount: BigInt(validatedData.viewCount),
         likeCount: validatedData.likeCount,
         shareCount: validatedData.shareCount,
@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
         musicId: cachedMedia.cachedMusic,
         musicTitle: validatedData.musicTitle,
         musicAuthor: validatedData.musicAuthor,
-        images: JSON.stringify(cachedMedia.cachedImages.length > 0 ? cachedMedia.cachedImages : validatedData.images),
+        images: cachedMedia.cachedImages.length > 0 ? cachedMedia.cachedImages : validatedData.images,
         publishedAt: validatedData.publishedAt ? new Date(validatedData.publishedAt) : null
       }
     })

@@ -89,7 +89,7 @@ export async function PATCH(
     const updatedPost = await prisma.tiktokPost.update({
       where: { id: postId },
       data: {
-        slideClassifications: JSON.stringify(slideClassifications),
+        slideClassifications: slideClassifications,
         classificationStatus: 'completed',
         classificationProcessedAt: new Date(),
         updatedAt: new Date()
