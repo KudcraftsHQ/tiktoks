@@ -103,8 +103,31 @@ export async function GET(
       )
     }
 
+    // Parse JSON fields in posts
+    const processedProject = {
+      ...project,
+      posts: project.posts.map(({ post, ...projectPost }) => ({
+        ...projectPost,
+        post: {
+          ...post,
+          // Parse images JSON if it's a string
+          images: typeof post.images === 'string' ? JSON.parse(post.images) : post.images,
+          // Parse hashtags JSON if it's a string
+          hashtags: typeof post.hashtags === 'string' ? JSON.parse(post.hashtags) : post.hashtags,
+          // Parse mentions JSON if it's a string
+          mentions: typeof post.mentions === 'string' ? JSON.parse(post.mentions) : post.mentions,
+          // Parse ocrTexts JSON if it's a string
+          ocrTexts: typeof post.ocrTexts === 'string' ? JSON.parse(post.ocrTexts) : post.ocrTexts,
+          // Parse imageDescriptions JSON if it's a string
+          imageDescriptions: typeof post.imageDescriptions === 'string' ? JSON.parse(post.imageDescriptions) : post.imageDescriptions,
+          // Parse slideClassifications JSON if it's a string
+          slideClassifications: typeof post.slideClassifications === 'string' ? JSON.parse(post.slideClassifications) : post.slideClassifications,
+        }
+      }))
+    }
+
     // Serialize BigInt values before returning
-    const serializedProject = serializeBigInt(project)
+    const serializedProject = serializeBigInt(processedProject)
     return NextResponse.json(serializedProject)
   } catch (error) {
     console.error('Failed to fetch project:', error)
