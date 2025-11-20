@@ -189,27 +189,36 @@ ${contentIdeas}\n`
 **HOOK SLIDE FORMULA (CRITICAL - Study These Patterns):**
 
 Reference examples from successful viral content:
-   - "My harvard marketing professor did a lecture about the tiktok algorithm, heres what ive learned..."
-   - "The wildest things I've learned about the algorithm during my internship at tiktok..."
-   - "I've been posting consistently for 5 months, heres what ive learned..."
-   - "I've been watching my bf grow his account to 800k, and heres what ive learned..."
+   - "i got invited to visit tiktoks headquarters, heres everything they revealed about the algorithm..."
+   - "ive been posting consistently for 5 months, here's what ive discovered..."
+   - "i literally copied the strategy of a creator with 1M followers for 30 days, heres what ive learned..."
+   - "my toxic ex interned at tiktok for 5 months and now im exposing everything he told me..."
+   - "ive been a tiktok intern for 5 months, heres what shocked me about the algorithm..."
+   - "i just got fired from tiktok after 4 years, so now im spilling all the tea..."
 
-Pattern breakdown:
-   1. [Authority/Credibility Source] → establishes trust (Harvard prof, TikTok internship, 800k account)
-   2. [Tease the topic] → creates curiosity (don't reveal the actual insight)
-   3. "heres what ive learned..." → promises value WITHOUT revealing it
+Pattern breakdown - Authority Types:
+   1. **Insider Access**: "visited TikTok HQ", "interned at TikTok" → behind-the-scenes credibility
+   2. **Duration Proof**: "posting for 5 months", "4 years at TikTok" → earned wisdom through experience
+   3. **Social Proof**: "copied creator with 1M followers" → reverse-engineering success
+   4. **Betrayal/Drama**: "my toxic ex", "im exposing", "im spilling the tea" → forbidden knowledge angle
+   5. **Whistleblower**: "i just got fired", "now im revealing" → nothing-to-lose transparency
+
+Hook Structure Formula:
+   [Authority/Credibility Source] + [Drama/Intrigue Element] + "heres what [learned/discovered/shocked me]..."
 
 CRITICAL HOOK RULES:
    ❌ DO NOT reveal the actual insight in the hook (save it for slide 2+)
    ❌ DO NOT use dramatic language ("truth bomb", "mind blown", "changed EVERYTHING", "totally")
-   ❌ DO NOT be overly polished - use casual, lowercase, imperfect grammar ("heres" not "here's", "ive" not "I've")
+   ❌ DO NOT be overly polished - use casual, lowercase, imperfect grammar ("heres" not "here's", "ive" not "I've", "im" not "I'm")
    ❌ DO NOT add unnecessary hype words or all caps for emphasis
+   ❌ DO NOT use emojis in the hook (keep it raw and authentic)
    ✅ DO create an information gap that can ONLY be closed by swiping to the next slide
-   ✅ DO establish credibility/authority naturally (professor, internship, successful friend, personal experience)
+   ✅ DO establish credibility/authority naturally using one of the 5 authority types above
    ✅ DO keep it conversational - like texting a friend, not writing marketing copy
-   ✅ DO end with the "heres what ive learned" pattern or similar casual promise
+   ✅ DO end with the "heres what ive learned/discovered/shocked me" pattern or similar casual promise
+   ✅ DO use lowercase "i" consistently (never "I")
 
-The hook should feel like a friend about to share a secret, not a marketer making a pitch.
+The hook should feel like a friend about to share a forbidden secret, not a marketer making a pitch.
 `
 
   // CTA examples for the model to learn from
@@ -217,38 +226,167 @@ The hook should feel like a friend about to share a secret, not a marketer makin
     ? `
 **CTA SLIDE EXAMPLES (Study These Patterns):**
 
-Example 1 (55-60 words):
-"one of the biggest changes? i stopped guessing and started actually analyzing.
+Example 1 (67 words):
+"you can test your videos BEFORE posting
+there's this app called ${productContext.title} that literally mimics how tiktok ranks your video internally. it shows you your predicted retention, hook strength, and even what's dragging your views down. i test every video there before posting now... it's unreal how accurate it is"
 
-i use this app called ${productContext.title}. it not only predicts my vids performance, it tells me exactly what to fix: pacing, hook, captions... it's like getting coached by the algorithm itself"
-
-Example 2 (50-55 words):
-"some apps can really do the heavy lifting for you.
-
-used to be like 'why did this flop?' now i check my videos in ${productContext.title} before i post. it's like a lil algorithm bff that gives notes while i do my skincare 🫶"
-
-Example 3 (45-50 words):
+Example 2 (57 words):
 "easy to overthink your own content endlessly.
 
 started using ${productContext.title} recently to analyze my videos before posting. gives you an outside perspective on what needs work. pretty helpful honestly"
 
-Example 4 (50-55 words):
+Example 3 (54 words):
 "they pay close attention to what works.
 
 tools like ${productContext.title} help with that. they show what's holding people, what's not, and how to improve without the guesswork"
 
-**CRITICAL CTA PATTERNS:**
-1. LENGTH: 45-60 words minimum (current examples are too short!)
-2. TWO-PART STRUCTURE:
-   - Part 1: Relatable problem/realization (1-2 sentences)
-   - Part 2: Casual tool discovery woven into daily life (2-3 sentences)
-3. AUTHENTIC MARKERS: "honestly", "lol", "ngl", "pretty helpful", "i swear"
-4. LIFESTYLE INTEGRATION: Reference daily activities ("while i do my skincare", "before i post", "sipping iced coffee")
-5. SPECIFIC BENEFITS: Mention 2-3 concrete features without sounding like a sales pitch
-6. CONVERSATIONAL TONE: Use lowercase, natural pauses, incomplete thoughts
-7. PERSONAL EXPERIENCE: "i use", "i found", "started using", NOT "you should try"
+Example 4 (58 words):
+"some apps can really do the heavy lifting for you.
+
+used to be like 'why did this flop?' now i check my videos in ${productContext.title} before i post. it's like a lil algorithm bff that gives notes while i do my skincare 🫶"
+
+Example 5 (62 words):
+"you can literally predict your post performance now
+there's this app called ${productContext.title} that mimics the internal testing system we used. it tells you your predicted retention, hook quality, even what's killing your reach. it's spooky accurate. literally tells you what to improve as well 🥺💗"
+
+Example 6 (51 words):
+"the hidden tool no one talks about
+there's this app called ${productContext.title} that predicts how your videos will perform before you even post. it breaks down stuff like your retention curve, hook quality, and even gives you fixes. it's literally like having the algorithm whisper in your ear 🥺💖"
+
+**CRITICAL CTA FORMULA (Second-to-Last Slide):**
+
+**4-Part Rhythm Structure:**
+1. **Transition/Hook** (3-8 words): Relatable problem or discovery moment
+   Examples: "you can test your videos BEFORE posting", "easy to overthink your own content endlessly", "the hidden tool no one talks about", "they pay close attention to what works"
+
+2. **Discovery Moment** (15-25 words): How you found the tool (casual, personal)
+   Patterns: "there's this app called...", "started using... recently", "tools like... help with that", "i found this app..."
+
+3. **Specific Benefits** (20-35 words): 2-3 concrete features WITHOUT marketing language
+   Must mention: What it shows/predicts, how it helps, what you can fix
+   Examples: "shows you your predicted retention, hook strength, and even what's dragging your views down"
+
+4. **Authentic Marker** (5-12 words): Personal reaction that builds trust
+   Examples: "pretty helpful honestly", "it's unreal how accurate it is", "it's spooky accurate", "ngl feels like cheating", "i swear it changed everything"
+
+**LENGTH REQUIREMENT: 50-70 words total**
+
+**AUTHENTICITY MARKERS - Must include 1-2:**
+   - "honestly" → builds casual trust
+   - "literally" → emphasizes truth
+   - "ngl" (not gonna lie) → confessional tone
+   - "i swear" → personal testimony
+   - "pretty helpful" → understated recommendation (more believable)
+   - "it's unreal/spooky/wild" → genuine amazement
+   - "feels like cheating/algorithm whisper/bff" → playful metaphors
+
+**LIFESTYLE INTEGRATION (Optional but powerful):**
+   - "while i do my skincare" → weaves into daily routine
+   - "before i post" → shows it's part of workflow
+   - "sipping my coffee" → casual moment reference
+   Makes the tool feel integrated into life, not an extra chore
+
+**TONE RULES:**
+   ✅ Use lowercase "i" consistently
+   ✅ Drop apostrophes casually: "theres", "youre", "whats"
+   ✅ Use ellipsis for pauses: "i test every video there before posting now..."
+   ✅ Optional soft emojis at end ONLY: 🫶💗🥺💖 (if tone feels right)
+   ❌ NO hard-sell language: "you should try", "must have", "game changer"
+   ❌ NO marketing speak: "revolutionary", "amazing", "incredible"
+   ❌ Frame as YOUR discovery, not a recommendation to them
 `
     : ''
+
+  // Content slide patterns and rules
+  const contentSlideSection = `
+**CONTENT SLIDE FORMULA (Micro-Dopamine Engineering):**
+
+**Proven Slide Openers (Use These Patterns):**
+   - "the #1 mistake that kills growth" → creates urgency
+   - "the [concept] is REAL" → validates viewer's suspicion
+   - "you don't need [X], you need [Y]" → reframes belief
+   - "wild fact:" / "this one shocked me" → promises surprise
+   - "easy to overthink..." → shows empathy
+   - "your [thing] affects your [result] too" → reveals hidden connection
+   - "dry spells are intentional" → reframes frustration
+   - "the algorithm watches how YOU behave too" → personalizes system
+   - "why your [metric] tanks randomly" → answers burning question
+   - "old videos aren't dead. they're 'sleeping'" → metaphor hook
+
+**3-Part Slide Structure (CRITICAL):**
+Every content slide must follow this exact pattern:
+
+1. **Bold Statement** (5-12 words): The insight/claim
+   Example: "videos left in your drafts lose power"
+
+2. **Why It Matters** (15-30 words): Explanation with specifics
+   Example: "the system timestamps your draft when you create it, not when you post. the longer it sits, the more it's seen as outdated"
+
+3. **Personal Reaction/Proof** (3-8 words): Authentic marker that builds trust
+   Example: "this one shocked me", "girl when i found this out i screamed", "i swear this one's the most gatekept"
+
+**INSIDER LANGUAGE - Make It Feel Like Leaked Info:**
+Use these patterns to sound like you're sharing internal knowledge:
+   - "we tracked this" → implies you worked at TikTok
+   - "we called it [term]" → reveals internal jargon (e.g., "clustering", "identity score", "resets")
+   - "behind the scenes" → suggests privileged access
+   - "internal docs literally showed us..." → concrete proof claim
+   - "this is my least favorite part" → insider opinion
+   - "the system uses them to 'map'..." → explains algorithm as if you built it
+   - "they call it [term]" → references TikTok employees
+
+**ALGORITHM ANTHROPOMORPHIZATION - Make It Feel Human:**
+CRITICAL: The algorithm should feel like a sentient entity, not code
+   - "the system gets 'confused'" → gives it mental states
+   - "tiktok takes notes" → makes it observant
+   - "the algorithm notices" → gives it awareness
+   - "it flags you as indecisive" → gives it judgment
+   - "the system stopped 'trusting' you" → emotional relationship
+   - "tiktok pairs your content" → intelligent matchmaking
+   - "it's like the app says 'oh, they're part of the same circle'" → internal dialogue
+   - "the algorithm sees you as less invested" → perception
+   - "it labels your account 'unstable'" → categorization with personality
+   - "the algorithm whispers" → secret communication
+
+**AUTHENTICITY MARKERS - Sprinkle Throughout Content:**
+Must include 1-2 per slide to maintain conversational trust:
+   - "this one shocked me" → personal surprise
+   - "girl when i found this out i screamed" → relatable reaction
+   - "i swear" → testimony emphasis
+   - "this is my least favorite part" → honest opinion
+   - "literally" → emphasizes truth (use frequently)
+   - "seriously" → draws attention
+   - "honestly" → builds trust
+   - "ngl" (not gonna lie) → confessional
+   - Use emojis ONLY at end of slides, never mid-sentence: ✨💖🎀🌸🥺💗🫶
+
+**CASUAL GRAMMAR RULES (MANDATORY):**
+Must follow these patterns for authenticity:
+   ✅ Always lowercase "i" (never "I")
+   ✅ Drop apostrophes: "heres" not "here's", "ive" not "I've", "dont" not "don't", "youre" not "you're", "thats" not "that's", "cant" not "can't", "whats" not "what's"
+   ✅ Use ellipsis for dramatic pauses: "don't. do. it." or "i test every video there before posting now..."
+   ✅ Incomplete sentences are good: "girl be loyal"
+   ✅ Run-on thoughts: "messy drafts = messy data"
+   ✅ Casual intensifiers: "literally", "seriously", "way more", "so much"
+   ❌ NO perfect grammar - it kills authenticity
+   ❌ NO capitalization except for emphasis (rare)
+   ❌ NO formal punctuation (keep it flowing)
+
+**EMOTIONAL SPIKE SEQUENCING:**
+Content slides should create an emotional journey:
+   - Slide 2: **Shock/Surprise** ("this one shocked me", reveal counterintuitive truth)
+   - Slide 3: **Validation/Relief** ("you're not shadowbanned", reframe their fear)
+   - Slide 4: **Empowerment** ("you don't need a niche", permission to be themselves)
+   - Slide 5 (if needed): **Hope/Possibility** (show what's possible, set up CTA)
+
+This oscillation keeps viewers engaged and emotionally invested.
+
+**ONE IDEA PER SLIDE RULE:**
+   ✅ Each slide = ONE single, clear insight
+   ✅ Don't clutter with multiple concepts
+   ✅ Let each slide breathe - it should feel like a revelation
+   ❌ Don't combine multiple tips into one slide
+`
 
   const prompt = `You are a TikTok carousel content creator. Analyze the reference posts below and generate ${variationCount} variations of carousel content.
 
@@ -261,15 +399,17 @@ ${contentIdeasSection}
 **Generation Strategy:**
 ${strategyDescription}
 ${hookExamplesSection}
+${contentSlideSection}
 ${ctaExamplesSection}
 
 **CRITICAL REQUIREMENTS:**
 
 1. EXACT Slide Structure (no exceptions):
    - Exactly ONE HOOK slide (must be the first slide)
-   - Exactly ONE CTA slide (MUST be second-to-last slide)${productContext ? '. This slide should feel like a natural recommendation from a friend, NOT a sales pitch. Lead with the transformation/benefit, then mention the product almost casually as your personal discovery. Use phrases like "I found...", "honestly...", "I swear...", or "ngl" to maintain authenticity' : ''}
-   - All other slides must be CONTENT slides (not hooks or CTAs)
-   - The last slide MUST be a satisfying conclusion that wraps up after the CTA
+   - 3-4 CONTENT slides (use emotional spike sequencing from CONTENT SLIDE FORMULA)
+   - Exactly ONE CTA slide (MUST be second-to-last slide)${productContext ? ' - use the 4-Part Rhythm Structure from CTA examples above' : ''}
+   - Exactly ONE FINAL CONCLUSION slide (last slide - wraps up the journey)
+   - **OPTIMAL TOTAL: 6 slides** (hook + 3 content + cta + conclusion) - this is the proven viral formula
 
 2. Open Loop Psychology - CRITICAL FOR VIRALITY:
    - Each slide MUST create an open loop (information gap) that hooks the viewer to swipe to the next slide
@@ -278,46 +418,64 @@ ${ctaExamplesSection}
    - Use techniques like: incomplete thoughts, teasing next information, raising questions, building curiosity
    - This open loop pattern repeats throughout the entire carousel to maximize retention
 
-3. Viral Slideshow Formats (categorise this one on the response):
-   - **Listicles**: Numbered items that build anticipation (e.g., "3 mistakes...", "5 secrets...")
-   - **Day in the Life**: Personal journey narrative that reveals insights progressively
-   - **This vs That**: Comparative analysis that contrasts two approaches/options
-   - **Problem-Solution Storyline**: Present a relatable problem, then build toward the solution
-   - **Question Hook + Answer Slides**: Open with a provocative question, reveal answers slide by slide
-   - **Subtle Product Showcase**: Demonstrate product value through storytelling, not direct selling
-   - **Educational**: Teach something valuable step-by-step, keeping viewers engaged to complete learning
+3. Viral Slideshow Format Selection (MUST pick ONE and categorize in metadata):
+   - **Insider Secrets** (most viral): Leaked TikTok knowledge, algorithm insights, behind-the-scenes info
+   - **Listicles**: Numbered mistakes/secrets that build anticipation
+   - **Problem-Solution Storyline**: Present relatable creator frustrations, then reveal solutions
+   - **Educational Deep-Dive**: Teach complex algorithm concepts step-by-step
+   - **Day in the Life**: Personal creator journey with progressive revelations
+   - Choose the format that best fits the source posts and content strategy
 
-4. Content Flow:
-   - HOOK: Follow the HOOK SLIDE FORMULA above exactly. Establish authority/credibility, tease the topic, end with "heres what ive learned" pattern. DO NOT reveal the insight - create an open loop that MUST be closed by swiping.
-   - CONTENT slides: Build knowledge progressively, each slide flowing naturally from the previous (like telling a story). EACH slide must create a new open loop while closing the previous one. Maintain the casual, authentic voice from the hook.
-   - Soft CTA (SECOND-TO-LAST SLIDE): ${productContext ? 'This should read like a genuine personal recommendation, NOT marketing copy. Lead with the transformation/benefit that solves pain points from earlier slides, then casually introduce the product as your personal discovery. Use first-person experience markers ("I found", "I use", "honestly", "I swear") and maintain the same conversational tone as the rest of the carousel. Study the reference posts\' CTA style - notice how they sound like secrets being shared, not products being sold.' : 'Study the reference posts\' CTA style and adapt it naturally without altering the core approach. It should flowing naturally from the previous slide.'}
-   - FINAL SLIDE (LAST SLIDE): Add a satisfying conclusion/summary that wraps up the storyteller's journey and provides closure after the CTA
-   - The sequence must feel conversational, not jumpy or disconnected
-   - Open loops should create a natural pull to the next slide, not feel forced${productContext ? '\n\n**CRITICAL: CTA Slide Guidelines (Second-to-Last Slide):**\n   - LENGTH REQUIREMENT: 45-60 words MINIMUM (this is crucial - short CTAs underperform!)\n   - TWO-PART STRUCTURE:\n     • Part 1 (15-20 words): Start with a relatable realization or problem ("one of the biggest changes?", "easy to overthink your content", "used to be like \'why did this flop?\'")\n     • Part 2 (30-40 words): Casual tool introduction with specific benefits\n   - Frame it as YOUR personal discovery, not a recommendation ("i use this app called...", "started using...", "i found...")\n   - LIFESTYLE INTEGRATION: Weave into daily routine ("while i do my skincare", "before i post", "sipping my coffee")\n   - SPECIFIC FEATURES: Mention 2-3 concrete benefits ("predicts performance", "tells me what to fix", "shows hook strength") WITHOUT sounding like marketing\n   - AUTHENTIC MARKERS: Include natural reactions ("honestly", "ngl", "pretty helpful honestly", "it\'s like...", "i swear")\n   - CONVERSATIONAL TONE: Use lowercase, natural pauses, incomplete thoughts, casual rhythm\n   - The benefit should directly address pain points built up in CONTENT slides\n   - Make it feel like sharing a secret with a friend, NOT selling a product' : ''}
+4. Content Flow & Emotional Arc:
 
-3. Slide Count:
+   **HOOK (Slide 1):**
+   - Follow HOOK SLIDE FORMULA exactly - use one of the 5 authority types
+   - Create maximum information gap - DO NOT reveal the actual insight
+   - End with "heres what ive learned/discovered/shocked me" pattern
+   - Use lowercase, drop apostrophes, keep it raw (no emojis)
+
+   **CONTENT SLIDES (Slides 2-4/5):**
+   - Follow the 3-Part Slide Structure: Bold Statement → Why It Matters → Personal Reaction
+   - Use Proven Slide Openers from CONTENT SLIDE FORMULA
+   - Apply Emotional Spike Sequencing:
+     • Slide 2: Shock/Surprise (counterintuitive revelation)
+     • Slide 3: Validation/Relief (reframe their fear)
+     • Slide 4: Empowerment (permission/possibility)
+   - Use Algorithm Anthropomorphization - make the system feel sentient
+   - Include Insider Language - sound like you worked at TikTok
+   - Sprinkle Authenticity Markers (1-2 per slide)
+   - Follow Casual Grammar Rules religiously
+   - ONE idea per slide - let each breathe
+
+   **CTA SLIDE (Second-to-Last):**${productContext ? '\n   - Follow the 4-Part Rhythm Structure exactly (50-70 words)\n   - Transition → Discovery Moment → Specific Benefits → Authentic Marker\n   - Frame as YOUR discovery ("i use", "i found", "started using")\n   - Include 2-3 concrete features without marketing language\n   - Optional: Lifestyle Integration ("while i do my skincare")\n   - Must include Authenticity Markers ("honestly", "literally", "ngl")\n   - Use casual grammar (lowercase "i", dropped apostrophes)\n   - Optional soft emojis at end only: 🫶💗🥺💖' : '\n   - Adapt naturally from reference posts\' CTA style\n   - Keep conversational and authentic'}
+
+   **FINAL SLIDE (Last):**
+   - Provide satisfying closure to the journey
+   - Can be a bonus tip, summary insight, or encouraging message
+   - Maintains the same casual, authentic voice
+   - Creates sense of completion (viewer feels satisfied they stayed till the end)
+
+5. Slide Count Strategy:
    - Generate exactly ${variationCount} variations
-   - Each variation should have between ${slidesRange.min} and ${slidesRange.max} slides
-   - Maintain the hook → content → cta structure regardless of total slides
+   - **TARGET: 6 slides per variation** (this is the proven viral sweet spot)
+   - Acceptable range: ${slidesRange.min}-${slidesRange.max} slides
+   - Structure: 1 hook + 3-4 content + 1 CTA + 1 conclusion
 
-5. Language & Style - AUTHENTICITY IS CRITICAL:
-   - Follow the specified language style, but prioritize authenticity over perfection
-   - Write like you're texting a friend, NOT writing an essay or marketing copy
-   - Use casual, lowercase grammar naturally: "heres" not "here's", "ive" not "I've", "dont" not "don't"
-   - AVOID dramatic marketing language: NO "truth bomb", "mind blown", "changed EVERYTHING", "totally", "absolutely"
-   - AVOID all caps for emphasis unless it's natural/conversational
-   - Keep it conversational and imperfect - this builds trust and feels authentic
-   - Study the reference posts' casual tone and replicate it exactly across ALL slides
-   - Each slide should sound like it came from the same real person, not a copywriter
-   - Ensure each slide builds upon the previous one with natural transitions
-   - Make each variation unique and valuable
+6. Language & Style - AUTHENTICITY IS EVERYTHING:
+   - Follow the specified language style: ${languageStyle}
+   - But ALWAYS prioritize the Casual Grammar Rules from CONTENT SLIDE FORMULA
+   - Write like texting a friend, NOT creating content
+   - Every slide should sound like the same real person (consistent voice)
+   - Use Authenticity Markers throughout to build trust
+   - Study reference posts' tone - replicate that exact casual energy
+   - Imperfection = authenticity = trust = engagement
 
-6. Variation Metadata:
-   - For each variation, create a cohesive "description" field that paraphrases ALL slides as one flowing narrative
-   - This description should read like a natural, engaging story that captures the entire carousel journey
-   - It should flow smoothly from the hook through the content to the conclusion
-   - Keep the same tone and style as the carousel content
-   - This is NOT a meta-description about the carousel - it IS the story told by the carousel in paragraph form
+7. Variation Metadata:
+   - Create a cohesive "description" field that paraphrases ALL slides as one flowing story
+   - This should read like a natural paragraph capturing the entire carousel journey
+   - Flow from hook → content insights → CTA → conclusion as one narrative
+   - Maintain the same casual, authentic tone
+   - This is the story TOLD by the carousel, not a description ABOUT the carousel
 
 Return the structured JSON response following the schema.`
 
