@@ -75,6 +75,8 @@ const SavePostSchema = z.object({
   videoUrl: z.string().optional(),
   coverUrl: z.string().optional(),
   musicUrl: z.string().optional(),
+  musicTitle: z.string().optional(),
+  musicAuthor: z.string().optional(),
   images: z.array(z.object({
     url: z.string(),
     width: z.number(),
@@ -147,6 +149,8 @@ export async function POST(request: NextRequest) {
         videoId: cachedMedia.cachedVideo,
         coverId: cachedMedia.cachedCover,
         musicId: cachedMedia.cachedMusic,
+        musicTitle: validatedData.musicTitle,
+        musicAuthor: validatedData.musicAuthor,
         images: JSON.stringify(cachedMedia.cachedImages.length > 0 ? cachedMedia.cachedImages : validatedData.images),
         publishedAt: validatedData.publishedAt ? new Date(validatedData.publishedAt) : null
       }

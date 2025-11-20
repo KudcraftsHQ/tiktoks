@@ -55,6 +55,8 @@ export interface TikTokPost {
   coverId?: string // Cache asset ID (for reference, usually not used directly in UI)
   musicUrl?: string // Resolved music URL from musicId via API
   musicId?: string // Cache asset ID (for reference, usually not used directly in UI)
+  musicTitle?: string // Music title (e.g., "original sound - username")
+  musicAuthor?: string // Music author/artist name
   images: Array<{
     url: string // Resolved image URL from cacheAssetId via API
     width: number
@@ -567,6 +569,26 @@ export const createPostsTableColumns = ({
                 })}
               </div>
             </div>
+          )}
+
+          {/* Row 2.5: Music Info */}
+          {post.musicTitle && post.musicAuthor && post.musicUrl && (
+            <a
+              href={post.musicUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+              </svg>
+              <span className="truncate">
+                <span className="font-medium">{post.musicTitle}</span>
+                {post.musicAuthor && <span className="ml-1">· {post.musicAuthor}</span>}
+              </span>
+              <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+            </a>
           )}
 
           {/* Row 3: Published and Updated date */}

@@ -20,7 +20,7 @@ import { invalidateSlideThumbnail } from '@/components/SlideThumbnail'
 import { DraftSettingsDialog } from '@/components/DraftSettingsDialog'
 import type { RemixSlideType } from '@/lib/validations/remix-schema'
 import { SortingState, RowSelectionState } from '@tanstack/react-table'
-import { FileText, Loader2, Sparkles, Edit, ExternalLink, Trash2, Copy, Plus, GripVertical, Settings, Download, Pencil } from 'lucide-react'
+import { FileText, Loader2, Sparkles, Edit, ExternalLink, Trash2, Copy, Plus, GripVertical, Settings, Download, Pencil, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { DateRange } from '@/components/DateRangeFilter'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
@@ -528,6 +528,17 @@ export function ProjectPostsTable({
     setSettingsDialogOpen(true)
   }, [])
 
+  // Helper to safely get slides array from draft row
+  const getSlidesArray = useCallback((slides: any): any[] => {
+    try {
+      return typeof slides === 'string'
+        ? JSON.parse(slides)
+        : (Array.isArray(slides) ? slides : [])
+    } catch {
+      return []
+    }
+  }, [])
+
   // Handler to download draft as ZIP
   const handleDownloadDraft = useCallback(async (draft: RemixPost) => {
     try {
@@ -564,6 +575,43 @@ export function ProjectPostsTable({
       })
     }
   }, [])
+
+  // Handler to send draft to Telegram
+  const handleSendToTelegram = useCallback(async (draft: RemixPost) => {
+    try {
+      toast.info('Sending to Telegram...', {
+        description: 'This may take a moment'
+      })
+
+      const slides = getSlidesArray(draft.slides)
+
+      const response = await fetch('/api/telegram/send-draft', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          draftName: draft.name,
+          draftDescription: draft.description,
+          slides: slides
+        })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to send to Telegram')
+      }
+
+      toast.success('Sent to Telegram', {
+        description: `${slides.length} slides sent successfully`
+      })
+    } catch (error) {
+      console.error('Failed to send to Telegram:', error)
+      toast.error('Failed to send to Telegram', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
+    }
+  }, [getSlidesArray])
 
   // Handler to update post description
   const handleSavePostDescription = useCallback(async (postId: string, newDescription: string) => {
@@ -656,17 +704,6 @@ export function ProjectPostsTable({
       throw error
     }
   }, [displayRows, rows])
-
-  // Helper to safely get slides array from draft row
-  const getSlidesArray = useCallback((slides: any): any[] => {
-    try {
-      return typeof slides === 'string'
-        ? JSON.parse(slides)
-        : (Array.isArray(slides) ? slides : [])
-    } catch {
-      return []
-    }
-  }, [])
 
   // Handler to update draft slide text
   const handleSaveDraftSlideText = useCallback(async (draftId: string, slideIndex: number, newText: string) => {
@@ -1446,7 +1483,7 @@ export function ProjectPostsTable({
             </TooltipContent>
           </Tooltip>
 
-          {/* Edit Draft */}
+          {/* Send to Telegram */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -1454,15 +1491,15 @@ export function ProjectPostsTable({
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation()
-                  window.open(`/remix/${draft.id}/edit`, '_blank')
+                  handleSendToTelegram(draft)
                 }}
                 className="h-8 w-8 p-0"
               >
-                <Edit className="h-4 w-4" />
+                <Send className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="left">
-              <p>Edit Draft</p>
+              <p>Send to Telegram</p>
             </TooltipContent>
           </Tooltip>
 
@@ -1528,7 +1565,7 @@ export function ProjectPostsTable({
         </div>
       </TooltipProvider>
     )
-  }, [viewMode, handleToggleBookmark, handleCopyDraftToClipboard, handleSettingsClick, handleDownloadDraft, handleDeleteClick])
+  }, [viewMode, handleToggleBookmark, handleCopyDraftToClipboard, handleSendToTelegram, handleSettingsClick, handleDownloadDraft, handleDeleteClick])
 
   // Create columns - memoized with all necessary dependencies
   const columns = useMemo(() => {

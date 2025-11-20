@@ -112,8 +112,8 @@ export default function ProfilesPage() {
       const activity = calculateActivityData(result.profiles)
       setActivityData(activity)
 
-      // Calculate daily views data
-      const dailyViews = await calculateDailyViewsData(result.profiles)
+      // Fetch daily views data from API
+      const dailyViews = await fetchDailyViewsData()
       setDailyViewsData(dailyViews)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -130,14 +130,33 @@ export default function ProfilesPage() {
     return []
   }
 
-  // Calculate daily views with backfill strategy
-  const calculateDailyViewsData = async (profiles: TikTokProfile[]): Promise<DailyViewsDataPoint[]> => {
-    // This is a placeholder implementation
-    // In reality, you'd need to:
-    // 1. Fetch metrics history for all profiles
-    // 2. Calculate daily deltas from monitoring start
-    // 3. Backfill with average for dates before monitoring
-    return []
+  // Fetch daily views data from API
+  const fetchDailyViewsData = async (): Promise<DailyViewsDataPoint[]> => {
+    try {
+      const params = new URLSearchParams()
+
+      if (dateRange.from) {
+        params.append('dateFrom', dateRange.from.toISOString())
+      }
+      if (dateRange.to) {
+        params.append('dateTo', dateRange.to.toISOString())
+      }
+      if (selectedGroup && selectedGroup !== 'all') {
+        params.append('groupId', selectedGroup)
+      }
+
+      const response = await fetch(`/api/tiktok/profiles/daily-views?${params}`)
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to fetch daily views')
+      }
+
+      return result.data || []
+    } catch (err) {
+      console.error('Failed to fetch daily views:', err)
+      return []
+    }
   }
 
   const handleRefresh = useCallback(() => {

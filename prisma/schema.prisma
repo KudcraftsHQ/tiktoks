@@ -132,6 +132,10 @@ model TiktokPost {
   coverId     String?  @db.Uuid // Cover cache asset ID reference
   musicId     String?  @db.Uuid // Music cache asset ID reference
 
+  // Music metadata
+  musicTitle  String?  // Music title (e.g., "original sound - username")
+  musicAuthor String?  // Music author/artist name
+
   // Image carousel data (for photo posts)
   // Array of objects: [{"cacheAssetId": "uuid", "width": 100, "height": 200}]
   images      Json     @default("[]")
