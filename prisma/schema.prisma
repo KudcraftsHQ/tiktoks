@@ -569,3 +569,67 @@ enum NotificationType {
   NEW_POST            // Future: new post detected
 }
 
+// Concept Bank - Knowledge base for viral content generation
+
+model ConceptBank {
+  id              String   @id @default(cuid())
+
+  // Core concept data
+  concept         String   // Short name: "Draft Timestamp Penalty"
+  insiderTerm     String?  // Internal jargon: "draft decay"
+  explanation     String   @db.Text // "System timestamps drafts at creation, not posting"
+  consequence     String?  @db.Text // "Older drafts seen as outdated content"
+  viralAngle      String?  @db.Text // "videos left in your drafts lose power"
+  proofPhrase     String?  // "this one shocked me"
+  credibilitySource String? // "we tracked this internally"
+
+  // Categorization
+  category        ConceptCategory @default(ALGORITHM_MECHANICS)
+
+  // Source tracking
+  source          ConceptSource @default(EXTRACTED)
+  sourcePostIds   String[] @default([]) // TikTokPost IDs this was extracted from
+
+  // Usage tracking for freshness
+  timesUsed       Int      @default(0)
+  lastUsedAt      DateTime?
+  freshness       ConceptFreshness @default(HIGH)
+
+  // Deduplication
+  conceptHash     String   @unique // Hash of concept + explanation for deduplication
+
+  // Status
+  isActive        Boolean  @default(true) // Can be disabled without deleting
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("concept_bank")
+  @@index([category])
+  @@index([source])
+  @@index([freshness])
+  @@index([isActive, freshness])
+  @@index([timesUsed])
+}
+
+enum ConceptCategory {
+  ALGORITHM_MECHANICS   // How TikTok algorithm works
+  ENGAGEMENT            // Community and engagement strategies
+  CONTENT_STRATEGY      // Content creation approaches
+  MISTAKES              // Common creator mistakes
+  MINDSET               // Creator psychology and mindset
+  HIDDEN_FEATURES       // TikTok features and tools
+}
+
+enum ConceptSource {
+  EXTRACTED      // Extracted from existing TikTok posts
+  CURATED        // Manually added/curated
+  WEB_SCRAPED    // Fetched from internet sources
+}
+
+enum ConceptFreshness {
+  HIGH    // New concept (< 30 days old or < 3 uses)
+  MEDIUM  // Moderate use (3-10 uses)
+  LOW     // Overused (> 10 uses in last 60 days)
+}
+
