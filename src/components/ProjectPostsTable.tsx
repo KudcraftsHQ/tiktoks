@@ -20,7 +20,7 @@ import { invalidateSlideThumbnail } from '@/components/SlideThumbnail'
 import { DraftSettingsDialog } from '@/components/DraftSettingsDialog'
 import type { RemixSlideType } from '@/lib/validations/remix-schema'
 import { SortingState, RowSelectionState } from '@tanstack/react-table'
-import { FileText, Loader2, Sparkles, Edit, ExternalLink, Trash2, Copy, Plus, GripVertical, Settings, Download, Pencil, Send } from 'lucide-react'
+import { FileText, Loader2, Sparkles, Edit, ExternalLink, Trash2, Copy, Plus, GripVertical, Settings, Download, Pencil, Send, Lightbulb } from 'lucide-react'
 import { toast } from 'sonner'
 import { DateRange } from '@/components/DateRangeFilter'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
@@ -186,7 +186,7 @@ function SortableSlide({
           isDragging && 'z-50'
         )}
       >
-        {/* Slide header with drag handle, number badge, type, and remove button */}
+        {/* Slide header with drag handle, number badge, type, concept indicator, and remove button */}
         <div className="flex items-center gap-1.5 mb-2">
           <div
             {...attributes}
@@ -205,6 +205,19 @@ function SortableSlide({
               currentType={classification?.type as 'hook' | 'content' | 'cta' | null}
             />
           </div>
+          {/* Concept indicator - shows if slide was generated from a concept */}
+          {classification?.conceptTitle && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 text-[10px] font-medium px-1.5 py-0.5 rounded cursor-default">
+                  <Lightbulb className="h-2.5 w-2.5" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p className="font-medium">Concept: {classification.conceptTitle}</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
           {totalSlides > 1 && (
             <Tooltip>
               <TooltipTrigger asChild>

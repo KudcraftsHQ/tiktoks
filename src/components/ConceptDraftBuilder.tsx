@@ -1,0 +1,558 @@
+'use client'
+
+import React, { useState, useEffect, useCallback } from 'react'
+import {
+  X,
+  Sparkles,
+  Loader2,
+  Plus,
+  Minus,
+  Wand2,
+  GripVertical,
+  ChevronDown,
+  AlertCircle
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import { SlideClassificationBadge } from '@/components/SlideClassificationBadge'
+
+// Types
+interface Concept {
+  id: string
+  title: string
+  coreMessage: string
+  type: 'HOOK' | 'CONTENT' | 'CTA'
+  timesUsed: number
+  _count: { examples: number }
+  examples?: ConceptExample[]
+}
+
+interface ConceptExample {
+  id: string
+  text: string
+  sourceType: string
+}
+
+interface GroupedConcepts {
+  HOOK: Concept[]
+  CONTENT: Concept[]
+  CTA: Concept[]
+}
+
+interface SlideConceptSelection {
+  slideIndex: number
+  type: 'HOOK' | 'CONTENT' | 'CTA'
+  conceptId: string | null // null means "Let AI decide"
+  conceptTitle?: string
+}
+
+interface ConceptDraftBuilderProps {
+  isOpen: boolean
+  onClose: () => void
+  projectId: string
+  onDraftCreated?: (draft: any) => void
+  referencePostCount?: number // Number of reference posts in the project
+}
+
+export function ConceptDraftBuilder({
+  isOpen,
+  onClose,
+  projectId,
+  onDraftCreated,
+  referencePostCount = 0
+}: ConceptDraftBuilderProps) {
+  // Loading states
+  const [isLoadingConcepts, setIsLoadingConcepts] = useState(false)
+  const [isSuggestingConcepts, setIsSuggestingConcepts] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
+
+  // Data
+  const [groupedConcepts, setGroupedConcepts] = useState<GroupedConcepts>({
+    HOOK: [],
+    CONTENT: [],
+    CTA: []
+  })
+
+  // Form state
+  const [topic, setTopic] = useState('')
+  const [slideSelections, setSlideSelections] = useState<SlideConceptSelection[]>([
+    { slideIndex: 0, type: 'HOOK', conceptId: null },
+    { slideIndex: 1, type: 'CONTENT', conceptId: null },
+    { slideIndex: 2, type: 'CONTENT', conceptId: null },
+    { slideIndex: 3, type: 'CTA', conceptId: null }
+  ])
+  const [languageStyle, setLanguageStyle] = useState('follow the reference content language style')
+
+  // Fetch concepts when dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchConcepts()
+      // Reset form
+      setTopic('')
+      setSlideSelections([
+        { slideIndex: 0, type: 'HOOK', conceptId: null },
+        { slideIndex: 1, type: 'CONTENT', conceptId: null },
+        { slideIndex: 2, type: 'CONTENT', conceptId: null },
+        { slideIndex: 3, type: 'CTA', conceptId: null }
+      ])
+      setLanguageStyle('follow the reference content language style')
+    }
+  }, [isOpen])
+
+  const fetchConcepts = async () => {
+    setIsLoadingConcepts(true)
+    try {
+      const response = await fetch('/api/concepts?isActive=true')
+      if (!response.ok) throw new Error('Failed to fetch concepts')
+      const data = await response.json()
+      setGroupedConcepts(data.grouped || { HOOK: [], CONTENT: [], CTA: [] })
+    } catch (error) {
+      console.error('Failed to fetch concepts:', error)
+      toast.error('Failed to load concepts')
+    } finally {
+      setIsLoadingConcepts(false)
+    }
+  }
+
+  // Add a slide
+  const addSlide = () => {
+    if (slideSelections.length >= 10) {
+      toast.error('Maximum 10 slides allowed')
+      return
+    }
+
+    // Insert a CONTENT slide before the last slide (CTA)
+    const newSelections = [...slideSelections]
+    const ctaSlide = newSelections.pop()! // Remove CTA
+    const newIndex = newSelections.length
+    newSelections.push({
+      slideIndex: newIndex,
+      type: 'CONTENT',
+      conceptId: null
+    })
+    // Re-add CTA with updated index
+    newSelections.push({
+      ...ctaSlide,
+      slideIndex: newIndex + 1
+    })
+    setSlideSelections(newSelections)
+  }
+
+  // Remove a slide
+  const removeSlide = (index: number) => {
+    if (slideSelections.length <= 3) {
+      toast.error('Minimum 3 slides required')
+      return
+    }
+
+    // Can't remove first (HOOK) or last (CTA)
+    if (index === 0 || index === slideSelections.length - 1) {
+      toast.error("Can't remove HOOK or CTA slide")
+      return
+    }
+
+    const newSelections = slideSelections
+      .filter((_, i) => i !== index)
+      .map((s, i) => ({ ...s, slideIndex: i }))
+    setSlideSelections(newSelections)
+  }
+
+  // Update concept selection for a slide
+  const updateSlideConceptId = (slideIndex: number, conceptId: string | null) => {
+    setSlideSelections(prev =>
+      prev.map(s => {
+        if (s.slideIndex === slideIndex) {
+          const concept = conceptId
+            ? [...groupedConcepts.HOOK, ...groupedConcepts.CONTENT, ...groupedConcepts.CTA].find(c => c.id === conceptId)
+            : null
+          return {
+            ...s,
+            conceptId,
+            conceptTitle: concept?.title
+          }
+        }
+        return s
+      })
+    )
+  }
+
+  // Let AI suggest concepts for all slides
+  const handleAISuggest = async () => {
+    if (!topic.trim()) {
+      toast.error('Please enter a topic first')
+      return
+    }
+
+    setIsSuggestingConcepts(true)
+    try {
+      const response = await fetch('/api/concepts/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: topic.trim(),
+          slideCount: slideSelections.length,
+          projectId
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to get AI suggestions')
+      }
+
+      const data = await response.json()
+
+      // Update slide selections with AI suggestions
+      if (data.suggestions && Array.isArray(data.suggestions)) {
+        setSlideSelections(prev =>
+          prev.map((slide, index) => {
+            const suggestion = data.suggestions.find((s: any) => s.slideIndex === index)
+            if (suggestion) {
+              const concept = [...groupedConcepts.HOOK, ...groupedConcepts.CONTENT, ...groupedConcepts.CTA]
+                .find(c => c.id === suggestion.conceptId)
+              return {
+                ...slide,
+                conceptId: suggestion.conceptId,
+                conceptTitle: concept?.title || suggestion.conceptTitle
+              }
+            }
+            return slide
+          })
+        )
+        toast.success('AI suggested concepts for all slides')
+      }
+    } catch (error) {
+      console.error('Failed to get AI suggestions:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to get AI suggestions')
+    } finally {
+      setIsSuggestingConcepts(false)
+    }
+  }
+
+  // Generate the draft
+  const handleGenerate = async () => {
+    if (!topic.trim()) {
+      toast.error('Please enter a topic')
+      return
+    }
+
+    // Check if at least some concepts are selected
+    const selectedCount = slideSelections.filter(s => s.conceptId).length
+    if (selectedCount === 0) {
+      // All slides set to "Let AI decide" - that's OK, but warn
+      toast.info('All slides set to "Let AI decide" - generating with AI-selected concepts')
+    }
+
+    setIsGenerating(true)
+    try {
+      const response = await fetch('/api/remixes/generate-with-concepts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          topic: topic.trim(),
+          languageStyle,
+          slides: slideSelections.map(s => ({
+            slideIndex: s.slideIndex,
+            type: s.type,
+            conceptId: s.conceptId // null means AI decides
+          }))
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to generate draft')
+      }
+
+      const data = await response.json()
+
+      toast.success('Draft created successfully!')
+      onClose()
+
+      if (onDraftCreated && data.remix) {
+        onDraftCreated(data.remix)
+      }
+    } catch (error) {
+      console.error('Failed to generate draft:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to generate draft')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  // Get concepts for a slide type
+  const getConceptsForType = (type: 'HOOK' | 'CONTENT' | 'CTA') => {
+    return groupedConcepts[type] || []
+  }
+
+  // Check if we have any concepts
+  const hasAnyConcepts = groupedConcepts.HOOK.length > 0 ||
+    groupedConcepts.CONTENT.length > 0 ||
+    groupedConcepts.CTA.length > 0
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            Create Draft with Concepts
+          </DialogTitle>
+          <DialogDescription>
+            Select concepts for each slide, then generate a cohesive draft.
+            {referencePostCount > 0 && (
+              <span className="ml-1">
+                Using {referencePostCount} reference post{referencePostCount !== 1 ? 's' : ''} for style.
+              </span>
+            )}
+          </DialogDescription>
+        </DialogHeader>
+
+        <ScrollArea className="flex-1 pr-4">
+          <div className="space-y-6 pb-4">
+            {/* Topic Input */}
+            <div className="space-y-2">
+              <Label htmlFor="topic">Topic / Angle *</Label>
+              <Textarea
+                id="topic"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="What is this carousel about? e.g., '5 ways to grow your LinkedIn following' or 'Why most people fail at building habits'"
+                rows={2}
+              />
+            </div>
+
+            {/* AI Suggest Button */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={handleAISuggest}
+                disabled={isSuggestingConcepts || !topic.trim() || !hasAnyConcepts}
+                className="flex-1"
+              >
+                {isSuggestingConcepts ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    AI is suggesting...
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="h-4 w-4 mr-2" />
+                    Let AI Suggest All Concepts
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* No Concepts Warning */}
+            {!hasAnyConcepts && !isLoadingConcepts && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+                <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 flex-shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium text-yellow-800 dark:text-yellow-200">No concepts in your bank yet</p>
+                  <p className="text-yellow-700 dark:text-yellow-300 mt-1">
+                    Add concepts to your Concept Bank first, or let AI decide all slides.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Slide Concept Selections */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Slide Structure ({slideSelections.length} slides)</Label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={addSlide}
+                  disabled={slideSelections.length >= 10}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Slide
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {slideSelections.map((slide, index) => {
+                  const concepts = getConceptsForType(slide.type)
+                  const selectedConcept = slide.conceptId
+                    ? concepts.find(c => c.id === slide.conceptId)
+                    : null
+                  const isFirst = index === 0
+                  const isLast = index === slideSelections.length - 1
+                  const canRemove = !isFirst && !isLast && slideSelections.length > 3
+
+                  return (
+                    <div
+                      key={slide.slideIndex}
+                      className={cn(
+                        "flex items-center gap-2 p-3 rounded-lg border",
+                        slide.conceptId ? "bg-primary/5 border-primary/20" : "bg-muted/30"
+                      )}
+                    >
+                      {/* Slide Number */}
+                      <div className="flex items-center gap-1 w-16 flex-shrink-0">
+                        <GripVertical className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">#{index + 1}</span>
+                      </div>
+
+                      {/* Slide Type Badge */}
+                      <SlideClassificationBadge type={slide.type} className="w-20 justify-center" />
+
+                      {/* Concept Selector */}
+                      <div className="flex-1">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-between h-auto py-2"
+                              disabled={isLoadingConcepts}
+                            >
+                              <span className={cn(
+                                "text-left truncate",
+                                !slide.conceptId && "text-muted-foreground"
+                              )}>
+                                {slide.conceptId
+                                  ? (selectedConcept?.title || slide.conceptTitle || 'Selected')
+                                  : 'Let AI decide'
+                                }
+                              </span>
+                              <ChevronDown className="h-4 w-4 ml-2 flex-shrink-0" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80 p-0" align="start">
+                            <div className="p-2 border-b">
+                              <p className="text-sm font-medium">Select {slide.type} Concept</p>
+                            </div>
+                            <ScrollArea className="h-[250px]">
+                              <div className="p-2 space-y-1">
+                                {/* AI Decide Option */}
+                                <button
+                                  className={cn(
+                                    "w-full text-left p-2 rounded-md hover:bg-muted transition-colors",
+                                    !slide.conceptId && "bg-muted"
+                                  )}
+                                  onClick={() => updateSlideConceptId(slide.slideIndex, null)}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <Wand2 className="h-4 w-4 text-muted-foreground" />
+                                    <span className="text-sm font-medium">Let AI decide</span>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mt-1 ml-6">
+                                    AI will choose the best concept for this slide
+                                  </p>
+                                </button>
+
+                                {concepts.length === 0 ? (
+                                  <p className="text-sm text-muted-foreground p-2">
+                                    No {slide.type.toLowerCase()} concepts available
+                                  </p>
+                                ) : (
+                                  concepts.map(concept => (
+                                    <button
+                                      key={concept.id}
+                                      className={cn(
+                                        "w-full text-left p-2 rounded-md hover:bg-muted transition-colors",
+                                        slide.conceptId === concept.id && "bg-primary/10 border border-primary/20"
+                                      )}
+                                      onClick={() => updateSlideConceptId(slide.slideIndex, concept.id)}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-sm font-medium truncate">{concept.title}</span>
+                                        <Badge variant="outline" className="text-xs ml-2">
+                                          {concept._count.examples} ex
+                                        </Badge>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                        {concept.coreMessage}
+                                      </p>
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            </ScrollArea>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+
+                      {/* Remove Button */}
+                      {canRemove ? (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeSlide(index)}
+                          className="h-8 w-8 flex-shrink-0"
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <div className="w-8 flex-shrink-0" />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Language Style */}
+            <div className="space-y-2">
+              <Label htmlFor="languageStyle">Language Style</Label>
+              <Input
+                id="languageStyle"
+                value={languageStyle}
+                onChange={(e) => setLanguageStyle(e.target.value)}
+                placeholder="e.g., casual, formal, emoji-heavy"
+              />
+            </div>
+          </div>
+        </ScrollArea>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-2 pt-4 border-t">
+          <Button variant="outline" onClick={onClose} disabled={isGenerating}>
+            Cancel
+          </Button>
+          <Button onClick={handleGenerate} disabled={isGenerating || !topic.trim()}>
+            {isGenerating ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4 mr-2" />
+                Generate Draft
+              </>
+            )}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}

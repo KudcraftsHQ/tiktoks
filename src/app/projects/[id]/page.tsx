@@ -4,9 +4,10 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { PageLayout } from '@/components/PageLayout'
 import { Button } from '@/components/ui/button'
-import { Sparkles, Pencil, Trash2, FilePlus, Clipboard, ExternalLink, Copy } from 'lucide-react'
+import { Sparkles, Pencil, Trash2, FilePlus, Clipboard, ExternalLink, Copy, Lightbulb } from 'lucide-react'
 import { toast } from 'sonner'
 import { GenerateContentDrawer } from '@/components/GenerateContentDrawer'
+import { ConceptDraftBuilder } from '@/components/ConceptDraftBuilder'
 import { ProjectPostsTable, ProjectTableRow } from '@/components/ProjectPostsTable'
 import { TikTokPost } from '@/components/posts-table-columns'
 import { Input } from '@/components/ui/input'
@@ -43,6 +44,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isGenerateDrawerOpen, setIsGenerateDrawerOpen] = useState(false)
+  const [isConceptBuilderOpen, setIsConceptBuilderOpen] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editedTitle, setEditedTitle] = useState('')
   const [isSavingTitle, setIsSavingTitle] = useState(false)
@@ -265,6 +267,12 @@ export default function ProjectDetailPage() {
       // Fallback to refetching if no drafts provided
       fetchProject()
     }
+  }
+
+  const handleConceptDraftCreated = (draft: RemixPost) => {
+    // Add new draft to the state
+    addDraftToState(draft)
+    toast.success('Draft created with concepts!')
   }
 
   const handleRemoveSelected = async () => {
@@ -776,6 +784,15 @@ export default function ProjectDetailPage() {
                 {isCreatingDraft ? 'Creating...' : 'New Draft'}
               </Button>
               <Button
+                variant={isConceptBuilderOpen ? "default" : "outline"}
+                onClick={() => setIsConceptBuilderOpen(true)}
+                className="w-full sm:w-auto h-8 px-3 text-xs"
+                title="Create draft with concept-guided structure"
+              >
+                <Lightbulb className="h-3 w-3" />
+                With Concepts
+              </Button>
+              <Button
                 variant={isGenerateDrawerOpen ? "default" : "outline"}
                 onClick={() => setIsGenerateDrawerOpen(!isGenerateDrawerOpen)}
                 className="w-full sm:w-auto h-8 px-3 text-xs"
@@ -830,6 +847,15 @@ export default function ProjectDetailPage() {
         defaultVariationCount={1}
         defaultMinSlides={defaultMinSlides}
         defaultMaxSlides={defaultMaxSlides}
+      />
+
+      {/* Concept Draft Builder */}
+      <ConceptDraftBuilder
+        isOpen={isConceptBuilderOpen}
+        onClose={() => setIsConceptBuilderOpen(false)}
+        projectId={projectId}
+        onDraftCreated={handleConceptDraftCreated}
+        referencePostCount={referencePosts.length}
       />
 
       {/* Remove Confirmation Dialog */}
