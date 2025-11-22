@@ -462,6 +462,39 @@ export function ProjectPostsTable({
     }
   }, [])
 
+  const handleExtractConcepts = useCallback(async (postId: string) => {
+    try {
+      const response = await fetch('/api/concepts/extract', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ postIds: [postId] })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to extract concepts')
+      }
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast.success(`Extracted ${data.conceptsCreated} new concepts`, {
+          description: data.examplesAdded > 0
+            ? `${data.examplesAdded} examples added to existing concepts`
+            : undefined,
+        })
+      } else {
+        throw new Error(data.error || 'Failed to extract concepts')
+      }
+    } catch (err) {
+      console.error('Failed to extract concepts:', err)
+      toast.error('Failed to extract concepts')
+      throw err
+    }
+  }, [])
+
+
 
   const handleDeleteClick = useCallback((id: string, type: 'post' | 'draft', name: string) => {
     setItemToDelete({ id, type, name })
@@ -1574,6 +1607,7 @@ export function ProjectPostsTable({
       onRemixPost: handleRemixPost,
       onRowClick: handleRowClick,
       onTriggerOCR: handleTriggerOCR,
+      onExtractConcepts: handleExtractConcepts,
       onRefetchPosts: onRefetchData,
       searchTerms
     })
@@ -1674,7 +1708,7 @@ export function ProjectPostsTable({
     }))
   }, [
     handlePreviewPost, handleOpenImageGallery, handleRemixPost, handleRowClick,
-    handleTriggerOCR, onRefetchData, viewMode, searchTerms, formatDate,
+    handleTriggerOCR, handleExtractConcepts, onRefetchData, viewMode, searchTerms, formatDate,
     handleDeleteClick, handleSavePostDescription, getSlidesArray,
     renderDraftAuthorColumn, renderDraftContentColumn, renderDraftDescriptionColumn,
     renderDraftActionsColumn, formatDateTime

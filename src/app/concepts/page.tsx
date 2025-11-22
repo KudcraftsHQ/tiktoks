@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
-import { ConceptsTable, Concept } from '@/components/ConceptsTable'
+import { ConceptsTable, Concept, ConceptExample } from '@/components/ConceptsTable'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { RefreshCw, Lightbulb, Plus, Sparkles, Filter } from 'lucide-react'
+import { RefreshCw, Plus, Filter } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
 import { PageLayout } from '@/components/PageLayout'
 import { toast } from 'sonner'
 import {
@@ -26,32 +26,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { SlideClassificationBadge } from '@/components/SlideClassificationBadge'
 
 interface ConceptsResponse {
   concepts: Concept[]
   totalCount: number
-  stats: Record<string, number>
+  typeCounts: Record<string, number>
 }
 
-const categoryOptions = [
-  { value: 'ALGORITHM_MECHANICS', label: 'Algorithm Mechanics' },
-  { value: 'ENGAGEMENT', label: 'Engagement' },
-  { value: 'CONTENT_STRATEGY', label: 'Content Strategy' },
-  { value: 'MISTAKES', label: 'Mistakes' },
-  { value: 'MINDSET', label: 'Mindset' },
-  { value: 'HIDDEN_FEATURES', label: 'Hidden Features' },
-]
-
-const sourceOptions = [
-  { value: 'EXTRACTED', label: 'Extracted' },
-  { value: 'CURATED', label: 'Curated' },
-  { value: 'WEB_SCRAPED', label: 'Web Scraped' },
-]
-
-const freshnessOptions = [
-  { value: 'HIGH', label: 'High' },
-  { value: 'MEDIUM', label: 'Medium' },
-  { value: 'LOW', label: 'Low' },
+const typeOptions = [
+  { value: 'HOOK', label: 'Hook', description: 'Opening slide patterns' },
+  { value: 'CONTENT', label: 'Content', description: 'Body slide lessons' },
+  { value: 'CTA', label: 'CTA', description: 'Closing slide patterns' },
 ]
 
 export default function ConceptsPage() {
@@ -59,26 +51,35 @@ export default function ConceptsPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [totalCount, setTotalCount] = useState(0)
-  const [stats, setStats] = useState<Record<string, number>>({})
+  const [typeCounts, setTypeCounts] = useState<Record<string, number>>({})
 
-  // Filters
-  const [categoryFilter, setCategoryFilter] = useState<string>('all')
-  const [sourceFilter, setSourceFilter] = useState<string>('all')
-  const [freshnessFilter, setFreshnessFilter] = useState<string>('all')
+  // Multi-select type filter
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set(['HOOK', 'CONTENT', 'CTA']))
   const [searchQuery, setSearchQuery] = useState('')
+
+  const toggleType = (type: string) => {
+    const newSelected = new Set(selectedTypes)
+    if (newSelected.has(type)) {
+      // Don't allow deselecting all types
+      if (newSelected.size > 1) {
+        newSelected.delete(type)
+      }
+    } else {
+      newSelected.add(type)
+    }
+    setSelectedTypes(newSelected)
+  }
+
+  const allTypesSelected = selectedTypes.size === 3
 
   // Add concept dialog
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [newConcept, setNewConcept] = useState({
-    concept: '',
-    insiderTerm: '',
-    explanation: '',
-    consequence: '',
-    viralAngle: '',
-    proofPhrase: '',
-    credibilitySource: '',
-    category: 'ALGORITHM_MECHANICS',
+    title: '',
+    coreMessage: '',
+    type: 'CONTENT',
+    exampleText: '',
   })
 
   const fetchConcepts = useCallback(async () => {
@@ -88,15 +89,7 @@ export default function ConceptsPage() {
     try {
       const params = new URLSearchParams()
 
-      if (categoryFilter && categoryFilter !== 'all') {
-        params.append('category', categoryFilter)
-      }
-      if (sourceFilter && sourceFilter !== 'all') {
-        params.append('source', sourceFilter)
-      }
-      if (freshnessFilter && freshnessFilter !== 'all') {
-        params.append('freshness', freshnessFilter)
-      }
+      // Fetch all concepts (no type filter in API call)
       if (searchQuery) {
         params.append('search', searchQuery)
       }
@@ -110,22 +103,58 @@ export default function ConceptsPage() {
 
       setConcepts(result.concepts)
       setTotalCount(result.totalCount)
-      setStats(result.stats)
+      setTypeCounts(result.typeCounts)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
       setConcepts([])
     } finally {
       setLoading(false)
     }
-  }, [categoryFilter, sourceFilter, freshnessFilter, searchQuery])
+  }, [searchQuery])
 
   const handleRefresh = useCallback(() => {
     fetchConcepts()
   }, [fetchConcepts])
 
+  // Optimistically update concepts when new examples are added
+  const handleExamplesAdded = useCallback((conceptId: string, newExamples: ConceptExample[]) => {
+    setConcepts(prevConcepts =>
+      prevConcepts.map(concept =>
+        concept.id === conceptId
+          ? {
+              ...concept,
+              examples: [...concept.examples, ...newExamples],
+              _count: {
+                ...concept._count,
+                examples: concept._count.examples + newExamples.length
+              }
+            }
+          : concept
+      )
+    )
+  }, [])
+
+  // Optimistically update concepts when an example is deleted
+  const handleExampleDeleted = useCallback((conceptId: string, exampleId: string) => {
+    setConcepts(prevConcepts =>
+      prevConcepts.map(concept =>
+        concept.id === conceptId
+          ? {
+              ...concept,
+              examples: concept.examples.filter(ex => ex.id !== exampleId),
+              _count: {
+                ...concept._count,
+                examples: Math.max(0, concept._count.examples - 1)
+              }
+            }
+          : concept
+      )
+    )
+  }, [])
+
   const handleAddConcept = async () => {
-    if (!newConcept.concept || !newConcept.explanation) {
-      toast.error('Concept name and explanation are required')
+    if (!newConcept.title || !newConcept.coreMessage) {
+      toast.error('Title and core message are required')
       return
     }
 
@@ -135,20 +164,12 @@ export default function ConceptsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...newConcept,
-          insiderTerm: newConcept.insiderTerm || null,
-          consequence: newConcept.consequence || null,
-          viralAngle: newConcept.viralAngle || null,
-          proofPhrase: newConcept.proofPhrase || null,
-          credibilitySource: newConcept.credibilitySource || null,
+          title: newConcept.title,
+          coreMessage: newConcept.coreMessage,
+          type: newConcept.type,
+          exampleText: newConcept.exampleText || undefined,
         }),
       })
-
-      if (response.status === 409) {
-        const data = await response.json()
-        toast.error('A similar concept already exists')
-        return
-      }
 
       if (!response.ok) {
         throw new Error('Failed to create concept')
@@ -157,14 +178,10 @@ export default function ConceptsPage() {
       toast.success('Concept created successfully')
       setIsAddDialogOpen(false)
       setNewConcept({
-        concept: '',
-        insiderTerm: '',
-        explanation: '',
-        consequence: '',
-        viralAngle: '',
-        proofPhrase: '',
-        credibilitySource: '',
-        category: 'ALGORITHM_MECHANICS',
+        title: '',
+        coreMessage: '',
+        type: 'CONTENT',
+        exampleText: '',
       })
       fetchConcepts()
     } catch (err) {
@@ -178,77 +195,70 @@ export default function ConceptsPage() {
     fetchConcepts()
   }, [fetchConcepts])
 
-  // Calculate stats summary
-  const totalStats = useMemo(() => {
-    return Object.values(stats).reduce((sum, count) => sum + count, 0)
-  }, [stats])
+  // Filter concepts by selected types for display
+  const filteredConcepts = concepts.filter(c => selectedTypes.has(c.type))
 
   return (
     <PageLayout
       title={
         <div className="flex items-center gap-2">
-          <Lightbulb className="h-5 w-5 text-yellow-500" />
           <span>Concept Bank</span>
-          <Badge variant="secondary" className="ml-2">
-            {totalCount} concepts
-          </Badge>
-        </div>
-      }
-      description="Viral content insights extracted from TikTok posts"
-      headerActions={
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto items-center">
-          {/* Search */}
           <Input
             placeholder="Search concepts..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full sm:w-[200px] h-8 text-xs"
           />
-
-          {/* Category Filter */}
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-full sm:w-[150px] h-8 text-xs">
-              <SelectValue placeholder="Category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {categoryOptions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* Source Filter */}
-          <Select value={sourceFilter} onValueChange={setSourceFilter}>
-            <SelectTrigger className="w-full sm:w-[120px] h-8 text-xs">
-              <SelectValue placeholder="Source" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Sources</SelectItem>
-              {sourceOptions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* Freshness Filter */}
-          <Select value={freshnessFilter} onValueChange={setFreshnessFilter}>
-            <SelectTrigger className="w-full sm:w-[120px] h-8 text-xs">
-              <SelectValue placeholder="Freshness" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Freshness</SelectItem>
-              {freshnessOptions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        </div>
+      }
+      headerActions={
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto items-center">
+          {/* Type Multi-Select Filter */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 px-3 text-xs gap-1.5">
+                <Filter className="h-3 w-3" />
+                {allTypesSelected ? (
+                  <span>All Types</span>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    {selectedTypes.has('HOOK') && <SlideClassificationBadge type="HOOK" className="text-[10px] px-1.5 py-0" />}
+                    {selectedTypes.has('CONTENT') && <SlideClassificationBadge type="CONTENT" className="text-[10px] px-1.5 py-0" />}
+                    {selectedTypes.has('CTA') && <SlideClassificationBadge type="CTA" className="text-[10px] px-1.5 py-0" />}
+                  </div>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuCheckboxItem
+                checked={selectedTypes.has('HOOK')}
+                onCheckedChange={() => toggleType('HOOK')}
+              >
+                <div className="flex items-center gap-2">
+                  <SlideClassificationBadge type="HOOK" />
+                  <span className="text-xs text-muted-foreground">({typeCounts['HOOK'] || 0})</span>
+                </div>
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={selectedTypes.has('CONTENT')}
+                onCheckedChange={() => toggleType('CONTENT')}
+              >
+                <div className="flex items-center gap-2">
+                  <SlideClassificationBadge type="CONTENT" />
+                  <span className="text-xs text-muted-foreground">({typeCounts['CONTENT'] || 0})</span>
+                </div>
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={selectedTypes.has('CTA')}
+                onCheckedChange={() => toggleType('CTA')}
+              >
+                <div className="flex items-center gap-2">
+                  <SlideClassificationBadge type="CTA" />
+                  <span className="text-xs text-muted-foreground">({typeCounts['CTA'] || 0})</span>
+                </div>
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Add Concept */}
           <Button
@@ -273,166 +283,130 @@ export default function ConceptsPage() {
       }
     >
       {error ? (
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-red-200 bg-red-50 mx-4">
           <CardContent className="p-6">
             <p className="text-red-600">{error}</p>
           </CardContent>
         </Card>
-      ) : (
-        <>
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 px-4 pt-4">
-            {categoryOptions.map((cat) => (
-              <div
-                key={cat.value}
-                className="rounded-lg border border-border bg-card p-3 cursor-pointer hover:bg-accent transition-colors"
-                onClick={() => setCategoryFilter(categoryFilter === cat.value ? 'all' : cat.value)}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-muted-foreground truncate">{cat.label}</span>
-                  {categoryFilter === cat.value && (
-                    <Filter className="h-3 w-3 text-primary" />
-                  )}
+      ) : loading && filteredConcepts.length === 0 ? (
+        <div className="mx-4">
+          {/* Skeleton Table Header */}
+          <div className="rounded-md border">
+            <div className="border-b bg-muted/50 px-4 py-3">
+              <div className="flex items-center gap-4">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-12" />
+                <Skeleton className="h-4 w-24" />
+                <div className="flex-1" />
+                <Skeleton className="h-4 w-8" />
+              </div>
+            </div>
+            {/* Skeleton Table Rows */}
+            {[...Array(6)].map((_, rowIndex) => (
+              <div key={rowIndex} className="border-b last:border-b-0 px-4 py-4">
+                <div className="flex items-start gap-4">
+                  {/* Concept column skeleton */}
+                  <div className="w-[200px] flex-shrink-0 space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-full" />
+                    <Skeleton className="h-3 w-3/4" />
+                  </div>
+                  {/* Type column skeleton */}
+                  <div className="w-[80px] flex-shrink-0">
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                  </div>
+                  {/* Examples column skeleton - horizontal cards */}
+                  <div className="flex-1 flex gap-3 overflow-hidden">
+                    {[...Array(4)].map((_, cardIndex) => (
+                      <div key={cardIndex} className="w-52 flex-shrink-0 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Skeleton className="h-3 w-12" />
+                          <Skeleton className="h-3 w-10" />
+                        </div>
+                        <Skeleton className="h-32 w-full rounded-md" />
+                      </div>
+                    ))}
+                  </div>
+                  {/* Actions column skeleton */}
+                  <div className="w-[50px] flex-shrink-0 flex flex-col gap-1">
+                    <Skeleton className="h-8 w-8 rounded" />
+                    <Skeleton className="h-8 w-8 rounded" />
+                  </div>
                 </div>
-                <div className="text-xl font-bold">{stats[cat.value] || 0}</div>
               </div>
             ))}
           </div>
-
-          {/* Concepts Table */}
-          {concepts.length > 0 ? (
-            <div className="px-4 pb-4">
-              <ConceptsTable
-                concepts={concepts}
-                onRefresh={handleRefresh}
-                isLoading={loading}
-              />
-            </div>
-          ) : loading ? (
-            <Card className="mx-4">
-              <CardContent className="flex items-center justify-center py-12">
-                <div className="flex items-center space-x-2">
-                  <RefreshCw className="w-5 h-5 animate-spin" />
-                  <span>Loading concepts...</span>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="mx-4">
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Sparkles className="w-12 h-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No concepts found</h3>
-                <p className="text-muted-foreground text-center max-w-md mb-4">
-                  {searchQuery || categoryFilter !== 'all' || sourceFilter !== 'all' || freshnessFilter !== 'all'
-                    ? 'No concepts match your filters. Try adjusting your search criteria.'
-                    : 'Start by extracting concepts from TikTok posts or add them manually.'}
-                </p>
-                <Button onClick={() => setIsAddDialogOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Your First Concept
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-        </>
+        </div>
+      ) : (
+        <ConceptsTable
+          concepts={filteredConcepts}
+          onRefresh={handleRefresh}
+          onExamplesAdded={handleExamplesAdded}
+          onExampleDeleted={handleExampleDeleted}
+          isLoading={loading}
+        />
       )}
 
       {/* Add Concept Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>Add New Concept</DialogTitle>
             <DialogDescription>
-              Manually add a viral content insight to your concept bank
+              Create a reusable content pattern for your carousels
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Concept Name *</Label>
-                <Input
-                  value={newConcept.concept}
-                  onChange={(e) => setNewConcept({ ...newConcept, concept: e.target.value })}
-                  placeholder="e.g., Draft Timestamp Penalty"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Insider Term</Label>
-                <Input
-                  value={newConcept.insiderTerm}
-                  onChange={(e) => setNewConcept({ ...newConcept, insiderTerm: e.target.value })}
-                  placeholder="e.g., 'draft decay'"
-                />
-              </div>
-            </div>
-
             <div className="space-y-2">
-              <Label>Explanation *</Label>
-              <Textarea
-                value={newConcept.explanation}
-                onChange={(e) => setNewConcept({ ...newConcept, explanation: e.target.value })}
-                rows={2}
-                placeholder="How this insight works"
+              <Label>Title *</Label>
+              <Input
+                value={newConcept.title}
+                onChange={(e) => setNewConcept({ ...newConcept, title: e.target.value })}
+                placeholder="e.g., Story over niche"
               />
             </div>
 
             <div className="space-y-2">
-              <Label>Consequence</Label>
+              <Label>Core Message *</Label>
               <Textarea
-                value={newConcept.consequence}
-                onChange={(e) => setNewConcept({ ...newConcept, consequence: e.target.value })}
+                value={newConcept.coreMessage}
+                onChange={(e) => setNewConcept({ ...newConcept, coreMessage: e.target.value })}
                 rows={2}
-                placeholder="What happens as a result"
+                placeholder="One sentence summary: e.g., People follow people, not topics"
               />
             </div>
 
             <div className="space-y-2">
-              <Label>Viral Angle</Label>
-              <Textarea
-                value={newConcept.viralAngle}
-                onChange={(e) => setNewConcept({ ...newConcept, viralAngle: e.target.value })}
-                rows={2}
-                placeholder="How to phrase in a slide (casual, lowercase)"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Proof Phrase</Label>
-                <Input
-                  value={newConcept.proofPhrase}
-                  onChange={(e) => setNewConcept({ ...newConcept, proofPhrase: e.target.value })}
-                  placeholder="e.g., 'this one shocked me'"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Credibility Source</Label>
-                <Input
-                  value={newConcept.credibilitySource}
-                  onChange={(e) => setNewConcept({ ...newConcept, credibilitySource: e.target.value })}
-                  placeholder="e.g., 'we tracked this internally'"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Category</Label>
+              <Label>Type</Label>
               <Select
-                value={newConcept.category}
-                onValueChange={(value) => setNewConcept({ ...newConcept, category: value })}
+                value={newConcept.type}
+                onValueChange={(value) => setNewConcept({ ...newConcept, type: value })}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {categoryOptions.map((opt) => (
+                  {typeOptions.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
+                      <div className="flex flex-col">
+                        <span>{opt.label}</span>
+                        <span className="text-xs text-muted-foreground">{opt.description}</span>
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Example Copy (optional)</Label>
+              <Textarea
+                value={newConcept.exampleText}
+                onChange={(e) => setNewConcept({ ...newConcept, exampleText: e.target.value })}
+                rows={4}
+                placeholder="Add an example of how this concept is written in a slide..."
+              />
             </div>
           </div>
 

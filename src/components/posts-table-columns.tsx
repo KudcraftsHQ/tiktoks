@@ -23,7 +23,8 @@ import {
   ScanLine,
   Clock,
   CheckIcon,
-  XIcon
+  XIcon,
+  Lightbulb
 } from 'lucide-react'
 import { SlideTypeDropdown } from '@/components/SlideTypeDropdown'
 import { InlineEditableText } from '@/components/InlineEditableText'
@@ -94,6 +95,7 @@ interface PostsTableColumnsProps {
   onRemixPost?: (post: TikTokPost) => void
   onRowClick?: (post: TikTokPost) => void
   onTriggerOCR?: (postId: string) => Promise<void>
+  onExtractConcepts?: (postId: string) => Promise<void>
   onRefetchPosts?: () => void
   selectedPosts?: Set<string>
   onSelectPost?: (postId: string, checked: boolean) => void
@@ -291,13 +293,16 @@ function OCRStatusButton({ post, onTriggerOCR, compact = false }: OCRStatusButto
 const ActionsCell = ({
   post,
   onTriggerOCR,
-  onRemixPost
+  onRemixPost,
+  onExtractConcepts
 }: {
   post: TikTokPost
   onTriggerOCR?: (postId: string) => Promise<void>
   onRemixPost?: (post: TikTokPost) => void
+  onExtractConcepts?: (postId: string) => Promise<void>
 }) => {
   const [isCopying, setIsCopying] = useState(false)
+  const [isExtracting, setIsExtracting] = useState(false)
 
   const handleCopyToClipboard = async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -461,6 +466,38 @@ const ActionsCell = ({
           </TooltipContent>
         </Tooltip>
         )}
+
+        {/* Extract Concepts Button - only for photo posts with completed OCR */}
+        {post.contentType === 'photo' && post.ocrStatus === 'completed' && onExtractConcepts && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async (e) => {
+                  e.stopPropagation()
+                  setIsExtracting(true)
+                  try {
+                    await onExtractConcepts(post.id)
+                  } finally {
+                    setIsExtracting(false)
+                  }
+                }}
+                disabled={isExtracting}
+                className="h-8 w-8 p-0"
+              >
+                {isExtracting ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-yellow-600" />
+                ) : (
+                  <Lightbulb className="h-4 w-4 text-yellow-600" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              <p>Extract Concepts</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </TooltipProvider>
   )
@@ -471,6 +508,7 @@ export const createPostsTableColumns = ({
   onOpenImageGallery,
   onRemixPost,
   onTriggerOCR,
+  onExtractConcepts,
   onRefetchPosts,
   searchTerms = []
 }: PostsTableColumnsProps): ColumnDef<TikTokPost>[] => [
@@ -820,6 +858,7 @@ export const createPostsTableColumns = ({
         post={row.original}
         onTriggerOCR={onTriggerOCR}
         onRemixPost={onRemixPost}
+        onExtractConcepts={onExtractConcepts}
       />
     )
   }

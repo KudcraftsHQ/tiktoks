@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { FileText, Users, BookmarkCheck, Edit, Library, Tag, ImageIcon, CogIcon, FolderPlus, Folder, Check, X, Trash2, GalleryHorizontalEnd, LibraryIcon, SquareLibrary } from 'lucide-react'
+import { FileText, Users, BookmarkCheck, Edit, Library, Tag, ImageIcon, CogIcon, FolderPlus, Folder, Check, X, Trash2, GalleryHorizontalEnd, LibraryIcon, SquareLibrary, Lightbulb } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -70,6 +70,11 @@ export function AppSidebar() {
       title: 'Drafts',
       url: '/drafts',
       icon: LibraryIcon,
+    },
+    {
+      title: 'Concepts',
+      url: '/concepts',
+      icon: Lightbulb,
     },
     {
       title: 'Assets',

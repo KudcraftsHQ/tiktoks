@@ -42,7 +42,7 @@ const OCR_RESPONSE_SCHEMA = {
           slideType: {
             type: Type.STRING,
             enum: ['hook', 'content', 'cta'],
-            description: "MUST be one of: 'hook' (first slide should always be hook), 'content' (middle slides), or 'cta' (usually last or second-last slide, the slide that contains product mention, cta or even soft selling)"
+            description: "Classify each slide: 'hook' = first slide that grabs attention with bold claims, questions, or curiosity gaps. 'content' = middle slides that teach, explain, share tips, or provide value WITHOUT promoting anything. 'cta' = slides that promote a tool/product/service, ask users to take action (follow, comment, try something), mention specific apps/tools to use, or contain soft-selling like 'use this tool', 'try this app', 'check out X'. If a slide mentions a specific tool, product, or asks the viewer to do something, it's CTA even if it appears early in the carousel."
           },
           ocrText: {
             type: Type.STRING,

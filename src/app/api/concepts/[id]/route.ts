@@ -3,7 +3,7 @@ import { PrismaClient } from '@/generated/prisma'
 
 const prisma = new PrismaClient()
 
-// GET /api/concepts/[id] - Get a single concept
+// GET /api/concepts/[id] - Get a single concept with examples
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -12,7 +12,15 @@ export async function GET(
     const { id } = await params
 
     const concept = await prisma.conceptBank.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        examples: {
+          orderBy: { createdAt: 'desc' }
+        },
+        _count: {
+          select: { examples: true }
+        }
+      }
     })
 
     if (!concept) {
@@ -42,44 +50,30 @@ export async function PATCH(
     const body = await request.json()
 
     const {
-      concept,
-      insiderTerm,
-      explanation,
-      consequence,
-      viralAngle,
-      proofPhrase,
-      credibilitySource,
-      category,
+      title,
+      coreMessage,
+      type,
       isActive
     } = body
 
     const updateData: any = {}
 
-    if (concept !== undefined) updateData.concept = concept
-    if (insiderTerm !== undefined) updateData.insiderTerm = insiderTerm
-    if (explanation !== undefined) updateData.explanation = explanation
-    if (consequence !== undefined) updateData.consequence = consequence
-    if (viralAngle !== undefined) updateData.viralAngle = viralAngle
-    if (proofPhrase !== undefined) updateData.proofPhrase = proofPhrase
-    if (credibilitySource !== undefined) updateData.credibilitySource = credibilitySource
-    if (category !== undefined) updateData.category = category
+    if (title !== undefined) updateData.title = title
+    if (coreMessage !== undefined) updateData.coreMessage = coreMessage
+    if (type !== undefined) updateData.type = type
     if (isActive !== undefined) updateData.isActive = isActive
-
-    // If concept or explanation changed, update hash
-    if (concept !== undefined || explanation !== undefined) {
-      const existing = await prisma.conceptBank.findUnique({ where: { id } })
-      if (existing) {
-        const crypto = await import('crypto')
-        const newConcept = concept ?? existing.concept
-        const newExplanation = explanation ?? existing.explanation
-        const normalized = `${newConcept.toLowerCase().trim()}|${newExplanation.toLowerCase().trim()}`
-        updateData.conceptHash = crypto.createHash('sha256').update(normalized).digest('hex').substring(0, 32)
-      }
-    }
 
     const updated = await prisma.conceptBank.update({
       where: { id },
-      data: updateData
+      data: updateData,
+      include: {
+        examples: {
+          orderBy: { createdAt: 'desc' }
+        },
+        _count: {
+          select: { examples: true }
+        }
+      }
     })
 
     return NextResponse.json(updated)
@@ -92,7 +86,7 @@ export async function PATCH(
   }
 }
 
-// DELETE /api/concepts/[id] - Delete a concept
+// DELETE /api/concepts/[id] - Delete a concept (examples deleted via cascade)
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }

@@ -8,9 +8,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
 
-    const category = searchParams.get('category')
-    const source = searchParams.get('source')
-    const freshness = searchParams.get('freshness')
+    const type = searchParams.get('type') // HOOK, CONTENT, CTA
     const isActive = searchParams.get('isActive')
     const search = searchParams.get('search')
     const sortBy = searchParams.get('sortBy') || 'createdAt'
@@ -18,16 +16,8 @@ export async function GET(request: Request) {
 
     const where: any = {}
 
-    if (category) {
-      where.category = category
-    }
-
-    if (source) {
-      where.source = source
-    }
-
-    if (freshness) {
-      where.freshness = freshness
+    if (type) {
+      where.type = type
     }
 
     if (isActive !== null && isActive !== undefined) {
@@ -36,31 +26,96 @@ export async function GET(request: Request) {
 
     if (search) {
       where.OR = [
-        { concept: { contains: search, mode: 'insensitive' } },
-        { insiderTerm: { contains: search, mode: 'insensitive' } },
-        { explanation: { contains: search, mode: 'insensitive' } },
-        { viralAngle: { contains: search, mode: 'insensitive' } }
+        { title: { contains: search, mode: 'insensitive' } },
+        { coreMessage: { contains: search, mode: 'insensitive' } },
+        // Search in examples text
+        { examples: { some: { text: { contains: search, mode: 'insensitive' } } } }
       ]
     }
 
     const concepts = await prisma.conceptBank.findMany({
       where,
+      include: {
+        examples: {
+          orderBy: { createdAt: 'desc' }
+        },
+        _count: {
+          select: { examples: true }
+        }
+      },
       orderBy: { [sortBy]: sortOrder },
     })
 
-    // Get summary stats
-    const stats = await prisma.conceptBank.groupBy({
-      by: ['category'],
+    // Collect all sourcePostIds from examples
+    const sourcePostIds = concepts.flatMap(c =>
+      c.examples
+        .filter(e => e.sourcePostId)
+        .map(e => e.sourcePostId!)
+    )
+
+    // Fetch source posts if there are any
+    const sourcePosts = sourcePostIds.length > 0
+      ? await prisma.tiktokPost.findMany({
+          where: { id: { in: sourcePostIds } },
+          select: {
+            id: true,
+            viewCount: true,
+            images: true,
+          }
+        })
+      : []
+
+    // Create a map for quick lookup, converting BigInt to number for JSON serialization
+    const postMap = new Map(sourcePosts.map(p => [p.id, {
+      id: p.id,
+      viewCount: p.viewCount ? Number(p.viewCount) : null,
+      images: p.images,
+    }]))
+
+    // Enrich examples with source post data and sort by viewCount
+    const conceptsWithSortedExamples = concepts.map(concept => ({
+      ...concept,
+      examples: [...concept.examples]
+        .map(example => ({
+          ...example,
+          sourcePost: example.sourcePostId ? postMap.get(example.sourcePostId) || null : null
+        }))
+        .sort((a, b) => {
+          const viewsA = Number(a.sourcePost?.viewCount ?? 0)
+          const viewsB = Number(b.sourcePost?.viewCount ?? 0)
+          return viewsB - viewsA
+        })
+    }))
+
+    // Sort concepts by type: HOOK -> CONTENT -> CTA
+    const typeOrder: Record<string, number> = { HOOK: 0, CONTENT: 1, CTA: 2 }
+    conceptsWithSortedExamples.sort((a, b) => {
+      const typeA = typeOrder[a.type] ?? 99
+      const typeB = typeOrder[b.type] ?? 99
+      return typeA - typeB
+    })
+
+    // Get counts by type
+    const typeCounts = await prisma.conceptBank.groupBy({
+      by: ['type'],
       _count: { id: true }
     })
 
     const totalCount = await prisma.conceptBank.count({ where })
 
+    // Group by type for easier frontend consumption
+    const grouped = {
+      HOOK: conceptsWithSortedExamples.filter(c => c.type === 'HOOK'),
+      CONTENT: conceptsWithSortedExamples.filter(c => c.type === 'CONTENT'),
+      CTA: conceptsWithSortedExamples.filter(c => c.type === 'CTA')
+    }
+
     return NextResponse.json({
-      concepts,
+      concepts: conceptsWithSortedExamples,
+      grouped,
       totalCount,
-      stats: stats.reduce((acc, s) => {
-        acc[s.category] = s._count.id
+      typeCounts: typeCounts.reduce((acc, t) => {
+        acc[t.type] = t._count.id
         return acc
       }, {} as Record<string, number>)
     })
@@ -73,61 +128,47 @@ export async function GET(request: Request) {
   }
 }
 
-// POST /api/concepts - Create a new concept manually
+// POST /api/concepts - Create a new concept
 export async function POST(request: Request) {
   try {
     const body = await request.json()
 
     const {
-      concept,
-      insiderTerm,
-      explanation,
-      consequence,
-      viralAngle,
-      proofPhrase,
-      credibilitySource,
-      category
+      title,
+      coreMessage,
+      type,
+      exampleText // Optional initial example
     } = body
 
-    if (!concept || !explanation) {
+    if (!title || !coreMessage) {
       return NextResponse.json(
-        { error: 'concept and explanation are required' },
+        { error: 'title and coreMessage are required' },
         { status: 400 }
-      )
-    }
-
-    // Generate hash for deduplication
-    const crypto = await import('crypto')
-    const normalized = `${concept.toLowerCase().trim()}|${explanation.toLowerCase().trim()}`
-    const conceptHash = crypto.createHash('sha256').update(normalized).digest('hex').substring(0, 32)
-
-    // Check for duplicates
-    const existing = await prisma.conceptBank.findUnique({
-      where: { conceptHash }
-    })
-
-    if (existing) {
-      return NextResponse.json(
-        { error: 'A similar concept already exists', existingId: existing.id },
-        { status: 409 }
       )
     }
 
     const newConcept = await prisma.conceptBank.create({
       data: {
-        concept,
-        insiderTerm: insiderTerm || null,
-        explanation,
-        consequence: consequence || null,
-        viralAngle: viralAngle || null,
-        proofPhrase: proofPhrase || null,
-        credibilitySource: credibilitySource || null,
-        category: category || 'ALGORITHM_MECHANICS',
-        source: 'CURATED',
-        conceptHash,
-        freshness: 'HIGH',
+        title,
+        coreMessage,
+        type: type || 'CONTENT',
+        isActive: true,
         timesUsed: 0,
-        isActive: true
+        // Create initial example if provided
+        ...(exampleText ? {
+          examples: {
+            create: {
+              text: exampleText,
+              sourceType: 'MANUAL'
+            }
+          }
+        } : {})
+      },
+      include: {
+        examples: true,
+        _count: {
+          select: { examples: true }
+        }
       }
     })
 

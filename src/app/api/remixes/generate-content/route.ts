@@ -19,6 +19,7 @@ const generateContentSchema = z.object({
     min: z.number().int().min(3).max(15),
     max: z.number().int().min(3).max(20),
   }),
+  selectedConceptIds: z.array(z.string()).optional(),
 })
 
 export async function POST(request: NextRequest) {
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
       contentIdeas,
       variationCount,
       slidesRange,
+      selectedConceptIds,
     } = generateContentSchema.parse(body)
 
     console.log(`📝 [API] Starting content generation for ${selectedPostIds.length} posts`)
@@ -96,6 +98,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Fetch selected concepts if provided
+    let concepts: Array<{ id: string; title: string; coreMessage: string; type: string; examples: Array<{ text: string }> }> | undefined
+    if (selectedConceptIds && selectedConceptIds.length > 0) {
+      const fetchedConcepts = await prisma.conceptBank.findMany({
+        where: {
+          id: { in: selectedConceptIds },
+          isActive: true,
+        },
+        include: {
+          examples: {
+            take: 2, // Include a couple examples for context
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+      })
+      if (fetchedConcepts.length > 0) {
+        concepts = fetchedConcepts
+        console.log(`📚 [API] Using ${concepts.length} concepts from Concept Bank`)
+      }
+    }
+
     // Generate content using Gemini
     const generationResult = await generateContent({
       sourcePosts: parsedSourcePosts,
@@ -105,6 +128,7 @@ export async function POST(request: NextRequest) {
       contentIdeas,
       variationCount,
       slidesRange,
+      concepts,
     })
 
     // Create a draft session to group these variations

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { X, Sparkles, Loader2, Package, Eye } from 'lucide-react'
+import { X, Sparkles, Loader2, Package, Eye, Lightbulb, ChevronDown, ChevronUp, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -9,6 +9,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -28,6 +30,21 @@ interface ProductContext {
   id: string
   title: string
   description: string
+}
+
+interface Concept {
+  id: string
+  title: string
+  coreMessage: string
+  type: 'HOOK' | 'CONTENT' | 'CTA'
+  timesUsed: number
+  _count: { examples: number }
+}
+
+interface GroupedConcepts {
+  HOOK: Concept[]
+  CONTENT: Concept[]
+  CTA: Concept[]
 }
 
 interface GenerateContentDrawerProps {
@@ -56,12 +73,22 @@ export function GenerateContentDrawer({
   const [isGenerating, setIsGenerating] = useState(false)
   const [isLoadingPosts, setIsLoadingPosts] = useState(false)
   const [isLoadingProducts, setIsLoadingProducts] = useState(false)
+  const [isLoadingConcepts, setIsLoadingConcepts] = useState(false)
 
   // Post previews
   const [postPreviews, setPostPreviews] = useState<PostPreview[]>([])
 
   // Product contexts
   const [productContexts, setProductContexts] = useState<ProductContext[]>([])
+
+  // Concepts from Concept Bank
+  const [groupedConcepts, setGroupedConcepts] = useState<GroupedConcepts>({ HOOK: [], CONTENT: [], CTA: [] })
+  const [selectedConceptIds, setSelectedConceptIds] = useState<Set<string>>(new Set())
+  const [conceptSectionsOpen, setConceptSectionsOpen] = useState<Record<string, boolean>>({
+    HOOK: true,
+    CONTENT: true,
+    CTA: true
+  })
 
   // Form state
   const [selectedProductId, setSelectedProductId] = useState<string>('')
@@ -90,6 +117,7 @@ export function GenerateContentDrawer({
   useEffect(() => {
     if (isOpen) {
       fetchProductContexts()
+      fetchConcepts()
     }
   }, [isOpen])
 
@@ -103,6 +131,7 @@ export function GenerateContentDrawer({
       setVariationCount(defaultVariationCount ?? '')
       setMinSlides(defaultMinSlides ?? '')
       setMaxSlides(defaultMaxSlides ?? '')
+      setSelectedConceptIds(new Set())
     }
   }, [isOpen, defaultVariationCount, defaultMinSlides, defaultMaxSlides])
 
@@ -148,6 +177,41 @@ export function GenerateContentDrawer({
     }
   }
 
+  const fetchConcepts = async () => {
+    setIsLoadingConcepts(true)
+    try {
+      const response = await fetch('/api/concepts?isActive=true')
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch concepts')
+      }
+
+      const data = await response.json()
+      setGroupedConcepts(data.grouped || { HOOK: [], CONTENT: [], CTA: [] })
+    } catch (error) {
+      console.error('Failed to fetch concepts:', error)
+      // Don't show error toast for concepts - they're optional
+    } finally {
+      setIsLoadingConcepts(false)
+    }
+  }
+
+  const toggleConceptSelection = (conceptId: string) => {
+    setSelectedConceptIds(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(conceptId)) {
+        newSet.delete(conceptId)
+      } else {
+        newSet.add(conceptId)
+      }
+      return newSet
+    })
+  }
+
+  const getSelectedConceptsByType = (type: 'HOOK' | 'CONTENT' | 'CTA') => {
+    return groupedConcepts[type].filter(c => selectedConceptIds.has(c.id))
+  }
+
   const handleGenerate = async () => {
     if (selectedPostIds.length === 0) {
       toast.error('Please select at least one post')
@@ -175,7 +239,9 @@ export function GenerateContentDrawer({
           slidesRange: {
             min: finalMinSlides,
             max: finalMaxSlides
-          }
+          },
+          // Include selected concepts from Concept Bank
+          selectedConceptIds: selectedConceptIds.size > 0 ? Array.from(selectedConceptIds) : undefined
         })
       })
 
@@ -289,6 +355,117 @@ export function GenerateContentDrawer({
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* Concept Bank Section */}
+          <div className="rounded-lg border p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Lightbulb className="h-5 w-5 text-muted-foreground" />
+              <h3 className="font-medium">Concept Bank</h3>
+              {selectedConceptIds.size > 0 && (
+                <Badge variant="secondary">{selectedConceptIds.size} selected</Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Select concepts to guide content generation. AI will incorporate these patterns.
+            </p>
+
+            {isLoadingConcepts ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {(['HOOK', 'CONTENT', 'CTA'] as const).map((type) => {
+                  const concepts = groupedConcepts[type]
+                  const selectedCount = concepts.filter(c => selectedConceptIds.has(c.id)).length
+                  const typeLabels = { HOOK: 'Hooks', CONTENT: 'Content', CTA: 'CTAs' }
+
+                  return (
+                    <Collapsible
+                      key={type}
+                      open={conceptSectionsOpen[type]}
+                      onOpenChange={(open) => setConceptSectionsOpen(prev => ({ ...prev, [type]: open }))}
+                    >
+                      <CollapsibleTrigger asChild>
+                        <button className="flex items-center justify-between w-full p-2 rounded-md hover:bg-muted/50 transition-colors text-left">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{typeLabels[type]}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {concepts.length}
+                            </Badge>
+                            {selectedCount > 0 && (
+                              <Badge variant="default" className="text-xs">
+                                {selectedCount} selected
+                              </Badge>
+                            )}
+                          </div>
+                          {conceptSectionsOpen[type] ? (
+                            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="space-y-1 mt-1 max-h-[150px] overflow-y-auto">
+                          {concepts.length === 0 ? (
+                            <p className="text-xs text-muted-foreground py-2 px-2">
+                              No {typeLabels[type].toLowerCase()} concepts yet
+                            </p>
+                          ) : (
+                            concepts.map((concept) => {
+                              const isSelected = selectedConceptIds.has(concept.id)
+                              const isTopPerformer = concept.timesUsed >= 3
+
+                              return (
+                                <div
+                                  key={concept.id}
+                                  className={cn(
+                                    "flex items-start gap-2 p-2 rounded-md cursor-pointer transition-colors",
+                                    isSelected ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50"
+                                  )}
+                                  onClick={() => toggleConceptSelection(concept.id)}
+                                >
+                                  <Checkbox
+                                    checked={isSelected}
+                                    onCheckedChange={() => toggleConceptSelection(concept.id)}
+                                    className="mt-0.5"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-sm font-medium truncate">
+                                        {concept.title}
+                                      </span>
+                                      {isTopPerformer && (
+                                        <Star className="h-3 w-3 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground line-clamp-2">
+                                      {concept.coreMessage}
+                                    </p>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <span className="text-xs text-muted-foreground">
+                                        {concept._count.examples} examples
+                                      </span>
+                                      {concept.timesUsed > 0 && (
+                                        <span className="text-xs text-muted-foreground">
+                                          Used {concept.timesUsed}x
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })
+                          )}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  )
+                })}
               </div>
             )}
           </div>

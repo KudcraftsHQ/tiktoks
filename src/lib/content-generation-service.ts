@@ -102,6 +102,14 @@ export interface SourcePost {
   category?: { id: string; name: string } | null
 }
 
+export interface ConceptBankItem {
+  id: string
+  title: string
+  coreMessage: string
+  type: string
+  examples: Array<{ text: string }>
+}
+
 export interface GenerationConfig {
   sourcePosts: SourcePost[]
   productContext?: { title: string; description: string }
@@ -110,6 +118,7 @@ export interface GenerationConfig {
   contentIdeas?: string
   variationCount: number
   slidesRange: { min: number; max: number }
+  concepts?: ConceptBankItem[]
 }
 
 export interface GeneratedSlide {
@@ -140,7 +149,7 @@ export interface GenerationResult {
 }
 
 function buildPrompt(config: GenerationConfig): string {
-  const { sourcePosts, productContext, generationStrategy, languageStyle, contentIdeas, variationCount, slidesRange } = config
+  const { sourcePosts, productContext, generationStrategy, languageStyle, contentIdeas, variationCount, slidesRange, concepts } = config
 
   // Build source posts context
   const postsContext = sourcePosts.map((post, index) => {
@@ -177,6 +186,28 @@ ${productContext.description}\n`
   const contentIdeasSection = contentIdeas
     ? `\n**Additional Content Ideas:**
 ${contentIdeas}\n`
+    : ''
+
+  // Concept Bank section - selected concepts to incorporate
+  const conceptsSection = concepts && concepts.length > 0
+    ? `\n**CONCEPT BANK - Incorporate These Patterns:**
+The user has selected specific content patterns from their Concept Bank. You MUST incorporate these concepts into the generated content.
+
+${concepts.map((concept, idx) => {
+  const examplesText = concept.examples.length > 0
+    ? `\n   Examples:\n${concept.examples.map(ex => `   - "${ex.text}"`).join('\n')}`
+    : ''
+  return `${idx + 1}. **[${concept.type}] ${concept.title}**
+   Core Message: ${concept.coreMessage}${examplesText}`
+}).join('\n\n')}
+
+IMPORTANT: Use the concepts above as inspiration for the corresponding slide types:
+- HOOK concepts should inform your hook/opening slides
+- CONTENT concepts should guide your middle content slides
+- CTA concepts should shape your call-to-action slides
+
+Adapt the core messages to fit the context while maintaining their essence.
+`
     : ''
 
   // Strategy description
@@ -395,7 +426,7 @@ ${productSection}
 **Language Style:**
 ${languageStyle}
 ${contentIdeasSection}
-
+${conceptsSection}
 **Generation Strategy:**
 ${strategyDescription}
 ${hookExamplesSection}

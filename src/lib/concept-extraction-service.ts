@@ -1,199 +1,269 @@
 import { GoogleGenAI, Type } from '@google/genai'
-import { PrismaClient, ConceptCategory, ConceptSource, ConceptFreshness } from '@/generated/prisma'
-import * as Sentry from '@sentry/nextjs'
-import crypto from 'crypto'
+import { PrismaClient } from '@/generated/prisma'
 
 const prisma = new PrismaClient()
 
-// Response schema for structured concept extraction
+// Schema for concept extraction
 const CONCEPT_EXTRACTION_SCHEMA = {
   type: Type.OBJECT,
   properties: {
     concepts: {
       type: Type.ARRAY,
-      description: "Array of unique insights/concepts extracted from the posts",
+      description: "Extracted concepts from the slides",
       items: {
         type: Type.OBJECT,
         properties: {
-          concept: {
+          title: {
             type: Type.STRING,
-            description: "Short, catchy name for the insight (e.g., 'Draft Timestamp Penalty', 'Engagement Mirror Effect')"
+            description: "Short title (2-5 words) naming the pattern or concept"
           },
-          insiderTerm: {
+          coreMessage: {
             type: Type.STRING,
-            description: "Internal jargon or coined term (e.g., 'draft decay', 'circle pairing', 'identity score')"
+            description: "One sentence explaining the underlying lesson or pattern"
           },
-          explanation: {
+          type: {
             type: Type.STRING,
-            description: "Clear explanation of how this works (e.g., 'System timestamps drafts at creation, not posting')"
+            enum: ['HOOK', 'CONTENT', 'CTA'],
+            description: "Type of concept: HOOK (opening), CONTENT (body/teaching), or CTA (closing/action)"
           },
-          consequence: {
-            type: Type.STRING,
-            description: "The result/impact of this insight (e.g., 'Older drafts seen as outdated content')"
-          },
-          viralAngle: {
-            type: Type.STRING,
-            description: "How this would be phrased in a viral slide (e.g., 'videos left in your drafts lose power')"
-          },
-          proofPhrase: {
-            type: Type.STRING,
-            description: "Authentic reaction phrase to use (e.g., 'this one shocked me', 'girl when i found out')"
-          },
-          credibilitySource: {
-            type: Type.STRING,
-            description: "How to frame the source (e.g., 'we tracked this internally', 'behind the scenes data')"
-          },
-          category: {
-            type: Type.STRING,
-            enum: ['ALGORITHM_MECHANICS', 'ENGAGEMENT', 'CONTENT_STRATEGY', 'MISTAKES', 'MINDSET', 'HIDDEN_FEATURES'],
-            description: "Category of the insight"
+          slideIndices: {
+            type: Type.ARRAY,
+            items: { type: Type.NUMBER },
+            description: "Zero-indexed list of slides that belong to this concept"
           }
         },
-        propertyOrdering: ['concept', 'insiderTerm', 'explanation', 'consequence', 'viralAngle', 'proofPhrase', 'credibilitySource', 'category']
+        propertyOrdering: ['title', 'coreMessage', 'type', 'slideIndices']
       }
-    },
-    extractionMetadata: {
-      type: Type.OBJECT,
-      description: "Metadata about the extraction",
-      properties: {
-        totalConcepts: {
-          type: Type.NUMBER,
-          description: "Total number of concepts extracted"
-        },
-        categoryCounts: {
-          type: Type.OBJECT,
-          description: "Count of concepts per category",
-          properties: {
-            ALGORITHM_MECHANICS: { type: Type.NUMBER },
-            ENGAGEMENT: { type: Type.NUMBER },
-            CONTENT_STRATEGY: { type: Type.NUMBER },
-            MISTAKES: { type: Type.NUMBER },
-            MINDSET: { type: Type.NUMBER },
-            HIDDEN_FEATURES: { type: Type.NUMBER }
-          }
-        }
-      },
-      propertyOrdering: ['totalConcepts', 'categoryCounts']
     }
   },
-  propertyOrdering: ['concepts', 'extractionMetadata']
+  propertyOrdering: ['concepts']
 }
 
-export interface ExtractedConcept {
-  concept: string
-  insiderTerm?: string
-  explanation: string
-  consequence?: string
-  viralAngle?: string
-  proofPhrase?: string
-  credibilitySource?: string
-  category: ConceptCategory
+interface SlideContent {
+  slideIndex: number
+  text: string
+  slideType: 'hook' | 'content' | 'cta' | null
+  postId: string
 }
 
-export interface ExtractionResult {
-  concepts: ExtractedConcept[]
-  extractionMetadata: {
-    totalConcepts: number
-    categoryCounts: Record<string, number>
+interface ExtractedConcept {
+  title: string
+  coreMessage: string
+  type: 'HOOK' | 'CONTENT' | 'CTA'
+  exampleText: string
+  sourcePostId: string
+  sourceSlideIndex: number
+}
+
+interface ExtractionResult {
+  conceptsCreated: number
+  examplesAdded: number
+  errors: string[]
+}
+
+/**
+ * Extract concepts from posts using AI
+ * Groups similar slide content into concepts with examples
+ */
+export async function extractConceptsFromPosts(postIds: string[]): Promise<ExtractionResult> {
+  const result: ExtractionResult = {
+    conceptsCreated: 0,
+    examplesAdded: 0,
+    errors: []
   }
-}
 
-function generateConceptHash(concept: string, explanation: string): string {
-  // Create a hash from concept name + explanation for deduplication
-  const normalized = `${concept.toLowerCase().trim()}|${explanation.toLowerCase().trim()}`
-  return crypto.createHash('sha256').update(normalized).digest('hex').substring(0, 32)
-}
+  // Fetch posts with OCR data
+  const posts = await prisma.tiktokPost.findMany({
+    where: {
+      id: { in: postIds },
+      ocrStatus: 'completed'
+    },
+    select: {
+      id: true,
+      ocrTexts: true,
+      slideClassifications: true
+    }
+  })
 
-interface PostData {
-  id: string
-  description?: string | null
-  ocrTexts?: unknown // Can be JsonValue from Prisma, string, or array
-  slideClassifications?: unknown // Can be JsonValue from Prisma, string, or array
-}
+  if (posts.length === 0) {
+    result.errors.push('No posts with completed OCR found')
+    return result
+  }
 
-export async function extractConceptsFromPosts(
-  posts: PostData[],
-  source: ConceptSource = 'EXTRACTED'
-): Promise<{ created: number; duplicates: number; concepts: ExtractedConcept[] }> {
-  try {
-    console.log(`[ConceptExtractor] Starting concept extraction from ${posts.length} posts`)
+  // Collect all slides from all posts
+  const allSlides: SlideContent[] = []
 
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY environment variable is required')
+  for (const post of posts) {
+    // Parse OCR texts
+    let ocrTexts: Array<{ imageIndex: number; text: string; success: boolean }> = []
+    try {
+      if (post.ocrTexts) {
+        const parsed = typeof post.ocrTexts === 'string'
+          ? JSON.parse(post.ocrTexts)
+          : post.ocrTexts
+        ocrTexts = Array.isArray(parsed) ? parsed : []
+      }
+    } catch {
+      continue
     }
 
-    const ai = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
-    })
-
-    // Build context from posts
-    const postsContext = posts.map((post, index) => {
-      // Parse ocrTexts - handle string, array, or JsonValue
-      let ocrTexts: Array<{ imageIndex: number; text: string }> = []
-      if (typeof post.ocrTexts === 'string') {
-        ocrTexts = JSON.parse(post.ocrTexts)
-      } else if (Array.isArray(post.ocrTexts)) {
-        ocrTexts = post.ocrTexts as Array<{ imageIndex: number; text: string }>
+    // Parse slide classifications
+    let classifications: Array<{ slideIndex: number; slideType: string }> = []
+    try {
+      if (post.slideClassifications) {
+        const parsed = typeof post.slideClassifications === 'string'
+          ? JSON.parse(post.slideClassifications)
+          : post.slideClassifications
+        classifications = Array.isArray(parsed) ? parsed : []
       }
+    } catch {
+      classifications = []
+    }
 
-      // Parse slideClassifications - handle string, array, or JsonValue
-      let slideClassifications: Array<{ slideIndex: number; slideType: string }> = []
-      if (typeof post.slideClassifications === 'string') {
-        slideClassifications = JSON.parse(post.slideClassifications)
-      } else if (Array.isArray(post.slideClassifications)) {
-        slideClassifications = post.slideClassifications as Array<{ slideIndex: number; slideType: string }>
+    // Combine OCR text with classification
+    for (const ocr of ocrTexts) {
+      if (!ocr.success || !ocr.text?.trim()) continue
+
+      const classification = classifications.find(c => c.slideIndex === ocr.imageIndex)
+      const slideType = classification?.slideType as 'hook' | 'content' | 'cta' | null
+
+      allSlides.push({
+        slideIndex: ocr.imageIndex,
+        text: ocr.text.trim(),
+        slideType,
+        postId: post.id
+      })
+    }
+  }
+
+  if (allSlides.length === 0) {
+    result.errors.push('No slides with text found in selected posts')
+    return result
+  }
+
+  // Use AI to extract concepts from slides
+  const extractedConcepts = await extractConceptsWithAI(allSlides)
+
+  // Save concepts to database
+  for (const concept of extractedConcepts) {
+    try {
+      // Check if a similar concept already exists
+      const existingConcept = await findSimilarConcept(concept.title, concept.coreMessage)
+
+      if (existingConcept) {
+        // Add as example to existing concept
+        await prisma.conceptExample.create({
+          data: {
+            conceptId: existingConcept.id,
+            text: concept.exampleText,
+            sourceType: 'SLIDE',
+            sourcePostId: concept.sourcePostId,
+            sourceSlideIndex: concept.sourceSlideIndex
+          }
+        })
+        result.examplesAdded++
+      } else {
+        // Create new concept with example
+        await prisma.conceptBank.create({
+          data: {
+            title: concept.title,
+            coreMessage: concept.coreMessage,
+            type: concept.type,
+            examples: {
+              create: {
+                text: concept.exampleText,
+                sourceType: 'SLIDE',
+                sourcePostId: concept.sourcePostId,
+                sourceSlideIndex: concept.sourceSlideIndex
+              }
+            }
+          }
+        })
+        result.conceptsCreated++
       }
+    } catch (error) {
+      console.error('Failed to save concept:', error)
+      result.errors.push(`Failed to save concept: ${concept.title}`)
+    }
+  }
 
-      const ocrText = ocrTexts
-        .map((t) => `Slide ${t.imageIndex + 1}: ${t.text}`)
-        .join('\n')
+  return result
+}
 
-      const classifications = slideClassifications
-        .map((c) => `Slide ${c.slideIndex + 1}: ${c.slideType}`)
-        .join(', ')
+async function findSimilarConcept(title: string, coreMessage: string) {
+  // First try exact title match
+  const exactMatch = await prisma.conceptBank.findFirst({
+    where: {
+      title: {
+        equals: title,
+        mode: 'insensitive'
+      }
+    }
+  })
 
-      return `
-**Post ${index + 1}**
-- Description: ${post.description || 'No description'}
-- Slide Types: ${classifications || 'Unknown'}
-- Content Text:
-${ocrText || 'No text extracted'}
-`
-    }).join('\n\n---\n\n')
+  if (exactMatch) return exactMatch
 
-    const prompt = `You are an expert at analyzing viral TikTok carousel content about social media growth and algorithms.
+  // Try fuzzy match on core message (contains key words)
+  const words = coreMessage.toLowerCase().split(/\s+/).filter(w => w.length > 4)
+  if (words.length === 0) return null
 
-Analyze the following TikTok posts and extract UNIQUE insights/concepts that creators share about:
-- How the TikTok algorithm works
-- Engagement strategies
-- Content creation tips
-- Common mistakes creators make
-- Mindset and psychology
-- Hidden features and tools
+  const similarMatch = await prisma.conceptBank.findFirst({
+    where: {
+      OR: words.slice(0, 3).map(word => ({
+        coreMessage: {
+          contains: word,
+          mode: 'insensitive' as const
+        }
+      }))
+    }
+  })
 
-For each insight, extract:
-1. **concept**: A catchy, memorable name (like "Draft Timestamp Penalty" or "Engagement Mirror Effect")
-2. **insiderTerm**: The internal jargon/coined term creators use (like "draft decay", "identity score")
-3. **explanation**: How this actually works
-4. **consequence**: What happens as a result
-5. **viralAngle**: How to phrase this in a viral slide (casual, lowercase, imperfect grammar)
-6. **proofPhrase**: Authentic reaction phrase ("this one shocked me", "girl when i found out")
-7. **credibilitySource**: How to frame authority ("we tracked this internally", "behind the scenes")
-8. **category**: Classification of the insight
+  return similarMatch
+}
 
-IMPORTANT:
-- Extract DISTINCT concepts - don't repeat similar insights
-- Focus on actionable, specific insights (not generic advice like "be consistent")
-- Capture the "insider knowledge" feel - these should sound like leaked secrets
-- Use casual language for viralAngle (lowercase "i", dropped apostrophes like "heres", "ive")
+async function extractConceptsWithAI(
+  slides: SlideContent[]
+): Promise<ExtractedConcept[]> {
+  const ai = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY,
+  })
 
-POSTS TO ANALYZE:
-${postsContext}
+  // Group slides by their pre-classified type for better extraction
+  const hookSlides = slides.filter(s => s.slideType === 'hook')
+  const contentSlides = slides.filter(s => s.slideType === 'content')
+  const ctaSlides = slides.filter(s => s.slideType === 'cta')
+  const unknownSlides = slides.filter(s => !s.slideType)
 
-Return structured JSON with all extracted concepts.`
+  const prompt = `Analyze these carousel slides and extract reusable content concepts (patterns/lessons).
 
-    console.log(`[ConceptExtractor] Calling Gemini...`)
+The slides have ALREADY been classified into types (HOOK, CONTENT, CTA). Use this classification to determine the concept type.
 
+For each unique concept found, provide:
+1. A short title (2-5 words) that names the pattern
+2. A one-sentence core message explaining the lesson
+3. The type: MUST match the slide's pre-classified type (HOOK, CONTENT, or CTA)
+
+**HOOK SLIDES (Opening/Attention-grabbing):**
+${hookSlides.length > 0 ? hookSlides.map((s, i) => `[Index ${slides.indexOf(s)}] "${s.text}"`).join('\n') : 'None'}
+
+**CONTENT SLIDES (Body/Teaching):**
+${contentSlides.length > 0 ? contentSlides.map((s, i) => `[Index ${slides.indexOf(s)}] "${s.text}"`).join('\n') : 'None'}
+
+**CTA SLIDES (Call-to-Action/Closing):**
+${ctaSlides.length > 0 ? ctaSlides.map((s, i) => `[Index ${slides.indexOf(s)}] "${s.text}"`).join('\n') : 'None'}
+
+${unknownSlides.length > 0 ? `**UNCLASSIFIED SLIDES (determine type based on content):**
+${unknownSlides.map((s, i) => `[Index ${slides.indexOf(s)}] "${s.text}"`).join('\n')}` : ''}
+
+IMPORTANT RULES:
+- Group similar messages into ONE concept (don't create duplicates)
+- Extract the underlying PATTERN, not the specific content
+- Each concept should be reusable for creating new content
+- The concept TYPE must match the slide's pre-classified type
+- The slideIndices should reference which slides (0-indexed from the full list) belong to this concept
+- Create separate concepts for HOOK, CONTENT, and CTA patterns`
+
+  try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-lite',
       contents: [{
@@ -207,193 +277,79 @@ Return structured JSON with all extracted concepts.`
     })
 
     if (!response.text) {
-      throw new Error('No response from Gemini AI')
+      console.error('No response from Gemini AI')
+      return []
     }
 
-    console.log(`[ConceptExtractor] Received response, parsing...`)
+    const parsed = JSON.parse(response.text)
+    const concepts = parsed.concepts || []
 
-    // Parse response
-    let cleanedText = response.text.trim()
-    if (cleanedText.startsWith('```')) {
-      cleanedText = cleanedText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
-    }
+    // Convert to ExtractedConcept format
+    const extractedConcepts: ExtractedConcept[] = []
 
-    const extractionResult: ExtractionResult = JSON.parse(cleanedText)
-    console.log(`[ConceptExtractor] Extracted ${extractionResult.concepts.length} concepts`)
+    // Track which slides have been processed
+    const processedSlideIndices = new Set<number>()
 
-    // Get all existing concept hashes for deduplication
-    const existingConcepts = await prisma.conceptBank.findMany({
-      select: { conceptHash: true, id: true }
-    })
-    const existingHashes = new Set(existingConcepts.map(c => c.conceptHash))
+    for (const concept of concepts) {
+      // Create one concept entry per slide that matches
+      const slideIndices = concept.slideIndices || [0]
 
-    // Process and save concepts
-    let created = 0
-    let duplicates = 0
-    const postIds = posts.map(p => p.id)
+      for (const slideIdx of slideIndices) {
+        const slide = slides[slideIdx]
+        if (!slide) continue
 
-    for (const concept of extractionResult.concepts) {
-      const conceptHash = generateConceptHash(concept.concept, concept.explanation)
+        // CRITICAL: Use the slide's actual pre-classified type, not AI-suggested type
+        // This ensures concepts are strictly grouped by slide type
+        const slideTypeUpper = slide.slideType?.toUpperCase() as 'HOOK' | 'CONTENT' | 'CTA' | undefined
+        const conceptType = slideTypeUpper || (concept.type as 'HOOK' | 'CONTENT' | 'CTA')
 
-      if (existingHashes.has(conceptHash)) {
-        // Concept already exists - update sourcePostIds if needed
-        duplicates++
-        const existing = await prisma.conceptBank.findUnique({
-          where: { conceptHash }
+        // Skip if slide has no type and AI didn't provide one
+        if (!conceptType) continue
+
+        processedSlideIndices.add(slideIdx)
+
+        extractedConcepts.push({
+          title: concept.title,
+          coreMessage: concept.coreMessage,
+          type: conceptType,
+          exampleText: slide.text,
+          sourcePostId: slide.postId,
+          sourceSlideIndex: slide.slideIndex
         })
-        if (existing) {
-          const currentPostIds = existing.sourcePostIds || []
-          const newPostIds = [...new Set([...currentPostIds, ...postIds])]
-          if (newPostIds.length > currentPostIds.length) {
-            await prisma.conceptBank.update({
-              where: { conceptHash },
-              data: { sourcePostIds: newPostIds }
-            })
-          }
-        }
-        continue
+      }
+    }
+
+    // Process any slides that weren't included in AI concepts
+    // This ensures ALL slides get analyzed, especially CTA slides
+    for (let i = 0; i < slides.length; i++) {
+      if (processedSlideIndices.has(i)) continue
+
+      const slide = slides[i]
+      const slideTypeUpper = slide.slideType?.toUpperCase() as 'HOOK' | 'CONTENT' | 'CTA' | undefined
+
+      // Only process slides with a known type
+      if (!slideTypeUpper) continue
+
+      // Create a generic concept for unprocessed slides
+      const typeLabels = {
+        'HOOK': 'Attention Grabber',
+        'CONTENT': 'Teaching Point',
+        'CTA': 'Call to Action'
       }
 
-      // Create new concept
-      await prisma.conceptBank.create({
-        data: {
-          concept: concept.concept,
-          insiderTerm: concept.insiderTerm || null,
-          explanation: concept.explanation,
-          consequence: concept.consequence || null,
-          viralAngle: concept.viralAngle || null,
-          proofPhrase: concept.proofPhrase || null,
-          credibilitySource: concept.credibilitySource || null,
-          category: concept.category as ConceptCategory,
-          source,
-          sourcePostIds: postIds,
-          conceptHash,
-          freshness: 'HIGH',
-          timesUsed: 0,
-          isActive: true
-        }
+      extractedConcepts.push({
+        title: `${typeLabels[slideTypeUpper]} Pattern`,
+        coreMessage: `A ${slideTypeUpper.toLowerCase()} pattern extracted from carousel content`,
+        type: slideTypeUpper,
+        exampleText: slide.text,
+        sourcePostId: slide.postId,
+        sourceSlideIndex: slide.slideIndex
       })
-
-      created++
-      existingHashes.add(conceptHash) // Prevent duplicates within same batch
     }
 
-    console.log(`[ConceptExtractor] Created ${created} new concepts, ${duplicates} duplicates skipped`)
-
-    return {
-      created,
-      duplicates,
-      concepts: extractionResult.concepts
-    }
-
+    return extractedConcepts
   } catch (error) {
-    console.error(`[ConceptExtractor] Failed:`, error)
-    Sentry.captureException(error, {
-      tags: { operation: 'concept_extraction' }
-    })
-    throw error
+    console.error('AI extraction failed:', error)
+    return []
   }
-}
-
-// Get concepts for content generation
-export async function getConceptsForGeneration(options: {
-  count?: number
-  excludeIds?: string[]
-  preferFresh?: boolean
-  categories?: ConceptCategory[]
-}): Promise<Array<{
-  id: string
-  concept: string
-  insiderTerm: string | null
-  explanation: string
-  consequence: string | null
-  viralAngle: string | null
-  proofPhrase: string | null
-  credibilitySource: string | null
-  category: ConceptCategory
-}>> {
-  const { count = 4, excludeIds = [], preferFresh = true, categories } = options
-
-  const concepts = await prisma.conceptBank.findMany({
-    where: {
-      isActive: true,
-      id: { notIn: excludeIds },
-      ...(categories ? { category: { in: categories } } : {}),
-      ...(preferFresh ? { freshness: { in: ['HIGH', 'MEDIUM'] } } : {})
-    },
-    orderBy: preferFresh
-      ? [{ freshness: 'asc' }, { timesUsed: 'asc' }, { createdAt: 'desc' }]
-      : [{ timesUsed: 'asc' }],
-    take: count * 2, // Get more than needed for randomization
-    select: {
-      id: true,
-      concept: true,
-      insiderTerm: true,
-      explanation: true,
-      consequence: true,
-      viralAngle: true,
-      proofPhrase: true,
-      credibilitySource: true,
-      category: true
-    }
-  })
-
-  // Shuffle and take requested count
-  const shuffled = concepts.sort(() => Math.random() - 0.5)
-  return shuffled.slice(0, count)
-}
-
-// Update concept usage after generation
-export async function updateConceptUsage(conceptIds: string[]): Promise<void> {
-  const now = new Date()
-
-  for (const id of conceptIds) {
-    const concept = await prisma.conceptBank.findUnique({
-      where: { id },
-      select: { timesUsed: true }
-    })
-
-    if (concept) {
-      const newTimesUsed = concept.timesUsed + 1
-
-      // Calculate new freshness
-      let freshness: ConceptFreshness = 'HIGH'
-      if (newTimesUsed >= 10) {
-        freshness = 'LOW'
-      } else if (newTimesUsed >= 3) {
-        freshness = 'MEDIUM'
-      }
-
-      await prisma.conceptBank.update({
-        where: { id },
-        data: {
-          timesUsed: newTimesUsed,
-          lastUsedAt: now,
-          freshness
-        }
-      })
-    }
-  }
-}
-
-// Refresh freshness scores for all concepts
-export async function refreshFreshnessScores(): Promise<{ updated: number }> {
-  const thirtyDaysAgo = new Date()
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-
-  // Reset concepts not used in 30 days to HIGH freshness
-  const result = await prisma.conceptBank.updateMany({
-    where: {
-      OR: [
-        { lastUsedAt: null },
-        { lastUsedAt: { lt: thirtyDaysAgo } }
-      ],
-      freshness: { not: 'HIGH' }
-    },
-    data: {
-      freshness: 'HIGH'
-    }
-  })
-
-  return { updated: result.count }
 }

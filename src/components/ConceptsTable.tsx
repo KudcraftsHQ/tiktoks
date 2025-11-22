@@ -1,88 +1,528 @@
 'use client'
 
 import { useState, useMemo, useCallback } from 'react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
+import { InlineEditableTitle } from '@/components/InlineEditableTitle'
+import { InlineEditableText } from '@/components/InlineEditableText'
+import { Textarea } from '@/components/ui/textarea'
+import { ConceptTypeDropdown } from '@/components/ConceptTypeDropdown'
+import { ImageGallery } from '@/components/ImageGallery'
 import { ColumnDef } from '@tanstack/react-table'
-import { Trash2, Edit, ToggleLeft, ToggleRight, ArrowUpDown } from 'lucide-react'
+import { Trash2, ToggleLeft, ToggleRight, Plus, Eye, Sparkles, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { getProxiedImageUrlById } from '@/lib/image-proxy'
+import { GenerateExampleDialog } from '@/components/GenerateExampleDialog'
+
+interface SourcePost {
+  id: string
+  viewCount: number | null
+  images: any // JSON field
+}
+
+export interface ConceptExample {
+  id: string
+  text: string
+  sourceType: string
+  sourcePostId: string | null
+  sourceSlideIndex: number | null
+  createdAt: string
+  sourcePost?: SourcePost | null
+}
 
 export interface Concept {
   id: string
-  concept: string
-  insiderTerm: string | null
-  explanation: string
-  consequence: string | null
-  viralAngle: string | null
-  proofPhrase: string | null
-  credibilitySource: string | null
-  category: string
-  source: string
-  freshness: string
+  title: string
+  coreMessage: string
+  type: 'HOOK' | 'CONTENT' | 'CTA'
   timesUsed: number
   isActive: boolean
   createdAt: string
   updatedAt: string
+  examples: ConceptExample[]
+  _count: {
+    examples: number
+  }
 }
 
 interface ConceptsTableProps {
   concepts: Concept[]
   onRefresh: () => void
+  onExamplesAdded?: (conceptId: string, examples: ConceptExample[]) => void
+  onExampleDeleted?: (conceptId: string, exampleId: string) => void
   isLoading?: boolean
 }
 
-const categoryColors: Record<string, string> = {
-  ALGORITHM_MECHANICS: 'bg-purple-100 text-purple-800',
-  ENGAGEMENT: 'bg-blue-100 text-blue-800',
-  CONTENT_STRATEGY: 'bg-green-100 text-green-800',
-  MISTAKES: 'bg-red-100 text-red-800',
-  MINDSET: 'bg-yellow-100 text-yellow-800',
-  HIDDEN_FEATURES: 'bg-pink-100 text-pink-800',
+// Helper to format view count
+const formatViewCount = (count: number | null | undefined): string => {
+  if (!count) return '0'
+  if (count >= 1000000) {
+    return `${(count / 1000000).toFixed(1)}M`
+  } else if (count >= 1000) {
+    return `${(count / 1000).toFixed(1)}K`
+  }
+  return count.toString()
 }
 
-const categoryLabels: Record<string, string> = {
-  ALGORITHM_MECHANICS: 'Algorithm',
-  ENGAGEMENT: 'Engagement',
-  CONTENT_STRATEGY: 'Content',
-  MISTAKES: 'Mistakes',
-  MINDSET: 'Mindset',
-  HIDDEN_FEATURES: 'Features',
+// Cell component for inline editable title with core message
+const ConceptTitleCell = ({
+  concept,
+  onSave
+}: {
+  concept: Concept
+  onSave: (field: string, value: string) => Promise<void>
+}) => {
+  return (
+    <div className="flex flex-col gap-1 py-2 pl-4">
+      <InlineEditableTitle
+        value={concept.title}
+        onSave={(value) => onSave('title', value)}
+        placeholder="Concept title"
+        className="text-sm font-medium"
+      />
+      <InlineEditableText
+        value={concept.coreMessage}
+        onSave={(value) => onSave('coreMessage', value)}
+        placeholder="Core message..."
+        className="text-xs text-muted-foreground"
+        rows={2}
+      />
+    </div>
+  )
 }
 
-const freshnessColors: Record<string, string> = {
-  HIGH: 'bg-green-100 text-green-800',
-  MEDIUM: 'bg-yellow-100 text-yellow-800',
-  LOW: 'bg-red-100 text-red-800',
+// Cell component for examples displayed horizontally like ProjectPostsTable slides
+const ExamplesCell = ({
+  concept,
+  onAddExample,
+  onUpdateExample,
+  onDeleteExample,
+  onOpenGallery,
+  onExamplesAdded
+}: {
+  concept: Concept
+  onAddExample: (conceptId: string, text: string) => Promise<void>
+  onUpdateExample: (conceptId: string, exampleId: string, text: string) => Promise<void>
+  onDeleteExample: (conceptId: string, exampleId: string) => Promise<void>
+  onOpenGallery: (images: Array<{ url: string; width: number; height: number }>, initialIndex: number) => void
+  onExamplesAdded: (conceptId: string, examples: ConceptExample[]) => void
+}) => {
+  const [isAdding, setIsAdding] = useState(false)
+  const [newExampleText, setNewExampleText] = useState('')
+  const [editingExampleId, setEditingExampleId] = useState<string | null>(null)
+  const [editingText, setEditingText] = useState('')
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false)
+  const [deleteConfirmExampleId, setDeleteConfirmExampleId] = useState<string | null>(null)
+
+  const handleStartEditing = (example: ConceptExample) => {
+    if (example.sourceType !== 'MANUAL') return
+    setEditingExampleId(example.id)
+    setEditingText(example.text)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingExampleId || !editingText.trim()) return
+    try {
+      await onUpdateExample(concept.id, editingExampleId, editingText)
+      setEditingExampleId(null)
+      setEditingText('')
+    } catch {
+      // Error handled in parent
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditingExampleId(null)
+    setEditingText('')
+  }
+
+  const handleAddExample = async () => {
+    if (!newExampleText.trim()) return
+    setIsAdding(true)
+    try {
+      await onAddExample(concept.id, newExampleText)
+      setNewExampleText('')
+    } finally {
+      setIsAdding(false)
+    }
+  }
+
+  const handleSlideClick = (example: ConceptExample) => {
+    if (!example.sourcePost?.images || example.sourceSlideIndex === null) return
+
+    // Parse images from JSON
+    let images: Array<{ cacheAssetId?: string; url?: string; width: number; height: number }> = []
+    try {
+      images = typeof example.sourcePost.images === 'string'
+        ? JSON.parse(example.sourcePost.images)
+        : example.sourcePost.images || []
+    } catch {
+      return
+    }
+
+    if (!Array.isArray(images) || images.length === 0) return
+
+    // Convert to gallery format with proxied URLs
+    const galleryImages = images.map(img => ({
+      url: img.cacheAssetId ? getProxiedImageUrlById(img.cacheAssetId) : img.url || '',
+      width: img.width || 1080,
+      height: img.height || 1920
+    }))
+
+    onOpenGallery(galleryImages, example.sourceSlideIndex)
+  }
+
+  return (
+    <TooltipProvider>
+      <div className="flex gap-3 overflow-x-auto pb-2 py-2">
+        {/* Existing examples */}
+        {concept.examples.map((example) => {
+          const isEditing = editingExampleId === example.id
+          const isManual = example.sourceType === 'MANUAL'
+
+          return (
+            <div key={example.id} className="flex-shrink-0 w-52 flex flex-col">
+              {/* Example header - views on left, slide number and delete on right */}
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1">
+                  <Eye className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">
+                    {formatViewCount(example.sourcePost?.viewCount)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {example.sourcePostId && example.sourceSlideIndex !== null && (
+                    <button
+                      onClick={() => handleSlideClick(example)}
+                      className="text-[10px] text-primary hover:underline cursor-pointer"
+                    >
+                      Slide {(example.sourceSlideIndex ?? 0) + 1}
+                    </button>
+                  )}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => setDeleteConfirmExampleId(example.id)}
+                        className="p-0.5 text-muted-foreground hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      <p>Delete example</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </div>
+              {/* Example text */}
+              <div className="h-32 overflow-y-auto">
+                {isEditing ? (
+                  <div className="h-full flex flex-col gap-2">
+                    <Textarea
+                      value={editingText}
+                      onChange={(e) => setEditingText(e.target.value)}
+                      className="flex-1 resize-none text-[12px] leading-tight"
+                      autoFocus
+                    />
+                    <div className="flex gap-1 justify-end">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleCancelEdit}
+                        className="h-6 px-2 text-xs"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleSaveEdit}
+                        disabled={!editingText.trim()}
+                        className="h-6 px-2 text-xs"
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Textarea
+                    value={example.text}
+                    readOnly
+                    onClick={() => isManual && handleStartEditing(example)}
+                    className={`h-full resize-none text-[12px] leading-tight whitespace-pre-wrap break-words overflow-y-auto bg-muted/30 ${
+                      isManual ? 'cursor-pointer hover:bg-muted/50' : 'cursor-default'
+                    }`}
+                    style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
+                  />
+                )}
+              </div>
+            </div>
+          )
+        })}
+
+        {/* Add New Example - dotted border style like ProjectPostsTable add slide */}
+        <div className="flex-shrink-0 w-52 flex flex-col">
+          {/* Spacer to align with existing examples header */}
+          <div className="flex items-center justify-between mb-2 h-4"></div>
+          <div className="h-32">
+            {newExampleText || isAdding ? (
+              <div className="h-full flex flex-col gap-2">
+                <Textarea
+                  value={newExampleText}
+                  onChange={(e) => setNewExampleText(e.target.value)}
+                  placeholder="Add example copy..."
+                  className="flex-1 resize-none text-[12px] leading-tight"
+                  autoFocus
+                />
+                <div className="flex gap-1 justify-end">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setNewExampleText('')}
+                    className="h-6 px-2 text-xs"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleAddExample}
+                    disabled={isAdding || !newExampleText.trim()}
+                    className="h-6 px-2 text-xs"
+                  >
+                    Add
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-muted-foreground/25 rounded-lg gap-2 p-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs w-full"
+                  onClick={() => setNewExampleText(' ')}
+                >
+                  <Pencil className="h-3 w-3 mr-1.5" />
+                  Add Manually
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs w-full"
+                  onClick={() => setShowGenerateDialog(true)}
+                >
+                  <Sparkles className="h-3 w-3 mr-1.5 text-purple-500" />
+                  Generate with AI
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Generate Example Dialog */}
+      <GenerateExampleDialog
+        concept={{
+          id: concept.id,
+          title: concept.title,
+          coreMessage: concept.coreMessage,
+          type: concept.type,
+          examples: concept.examples.map(ex => ({ id: ex.id, text: ex.text }))
+        }}
+        open={showGenerateDialog}
+        onOpenChange={setShowGenerateDialog}
+        onExamplesAdded={onExamplesAdded}
+      />
+
+      {/* Delete Example Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmExampleId !== null} onOpenChange={(open) => !open && setDeleteConfirmExampleId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Example</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this example? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deleteConfirmExampleId) {
+                  onDeleteExample(concept.id, deleteConfirmExampleId)
+                  setDeleteConfirmExampleId(null)
+                }
+              }}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </TooltipProvider>
+  )
 }
 
-const sourceLabels: Record<string, string> = {
-  EXTRACTED: 'Extracted',
-  CURATED: 'Curated',
-  WEB_SCRAPED: 'Web',
+
+// Actions cell component
+const ActionsCell = ({
+  concept,
+  onToggleActive,
+  onDelete,
+  isDeleting
+}: {
+  concept: Concept
+  onToggleActive: (concept: Concept) => Promise<void>
+  onDelete: (id: string) => Promise<void>
+  isDeleting: boolean
+}) => {
+  return (
+    <TooltipProvider>
+      <div className="flex flex-col gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onToggleActive(concept)}
+              className="h-8 w-8"
+            >
+              {concept.isActive ? (
+                <ToggleRight className="h-4 w-4 text-green-600" />
+              ) : (
+                <ToggleLeft className="h-4 w-4 text-gray-400" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left">
+            <p>{concept.isActive ? 'Disable' : 'Enable'}</p>
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onDelete(concept.id)}
+              disabled={isDeleting}
+              className="h-8 w-8 text-red-500 hover:text-red-700"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left">
+            <p>Delete</p>
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    </TooltipProvider>
+  )
 }
 
-export function ConceptsTable({ concepts, onRefresh, isLoading }: ConceptsTableProps) {
-  const [editingConcept, setEditingConcept] = useState<Concept | null>(null)
+export function ConceptsTable({ concepts, onRefresh, onExamplesAdded, onExampleDeleted, isLoading }: ConceptsTableProps) {
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
+
+  // Image gallery state
+  const [galleryImages, setGalleryImages] = useState<Array<{ url: string; width: number; height: number }>>([])
+  const [showGallery, setShowGallery] = useState(false)
+  const [galleryInitialIndex, setGalleryInitialIndex] = useState(0)
+
+  const handleOpenGallery = useCallback((images: Array<{ url: string; width: number; height: number }>, initialIndex: number) => {
+    setGalleryImages(images)
+    setGalleryInitialIndex(initialIndex)
+    setShowGallery(true)
+  }, [])
+
+  const handleSaveField = useCallback(async (conceptId: string, field: string, value: string) => {
+    try {
+      const response = await fetch(`/api/concepts/${conceptId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value || null })
+      })
+
+      if (!response.ok) throw new Error('Failed to update')
+
+      toast.success('Concept updated')
+      onRefresh()
+    } catch (err) {
+      toast.error('Failed to update concept')
+      throw err
+    }
+  }, [onRefresh])
+
+  const handleAddExample = useCallback(async (conceptId: string, text: string) => {
+    try {
+      const response = await fetch(`/api/concepts/${conceptId}/examples`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, sourceType: 'MANUAL' })
+      })
+
+      if (!response.ok) throw new Error('Failed to add example')
+
+      toast.success('Example added')
+      onRefresh()
+    } catch (err) {
+      toast.error('Failed to add example')
+      throw err
+    }
+  }, [onRefresh])
+
+  const handleUpdateExample = useCallback(async (conceptId: string, exampleId: string, text: string) => {
+    try {
+      const response = await fetch(`/api/concepts/${conceptId}/examples`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exampleId, text })
+      })
+
+      if (!response.ok) throw new Error('Failed to update example')
+
+      toast.success('Example updated')
+      onRefresh()
+    } catch (err) {
+      toast.error('Failed to update example')
+      throw err
+    }
+  }, [onRefresh])
+
+  const handleDeleteExample = useCallback(async (conceptId: string, exampleId: string) => {
+    // Optimistically update
+    if (onExampleDeleted) {
+      onExampleDeleted(conceptId, exampleId)
+    }
+
+    try {
+      const response = await fetch(`/api/concepts/${conceptId}/examples?exampleId=${exampleId}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete example')
+      }
+
+      toast.success('Example deleted')
+    } catch (err) {
+      toast.error('Failed to delete example')
+      // Refresh to restore the original state on error
+      onRefresh()
+    }
+  }, [onExampleDeleted, onRefresh])
 
   const handleToggleActive = useCallback(async (concept: Concept) => {
     try {
@@ -119,287 +559,84 @@ export function ConceptsTable({ concepts, onRefresh, isLoading }: ConceptsTableP
     }
   }, [onRefresh])
 
-  const handleSaveEdit = useCallback(async () => {
-    if (!editingConcept) return
-
-    try {
-      const response = await fetch(`/api/concepts/${editingConcept.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          concept: editingConcept.concept,
-          insiderTerm: editingConcept.insiderTerm,
-          explanation: editingConcept.explanation,
-          consequence: editingConcept.consequence,
-          viralAngle: editingConcept.viralAngle,
-          proofPhrase: editingConcept.proofPhrase,
-          credibilitySource: editingConcept.credibilitySource,
-          category: editingConcept.category
-        })
-      })
-
-      if (!response.ok) throw new Error('Failed to update')
-
-      toast.success('Concept updated')
-      setEditingConcept(null)
-      onRefresh()
-    } catch (err) {
-      toast.error('Failed to update concept')
-    }
-  }, [editingConcept, onRefresh])
-
   const columns: ColumnDef<Concept>[] = useMemo(() => [
     {
-      accessorKey: 'concept',
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          className="-ml-4"
-        >
-          Concept
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      ),
+      accessorKey: 'title',
+      header: 'Concept',
       cell: ({ row }) => (
-        <div className="max-w-[200px]">
-          <div className="font-medium truncate">{row.original.concept}</div>
-          {row.original.insiderTerm && (
-            <div className="text-xs text-muted-foreground italic">"{row.original.insiderTerm}"</div>
-          )}
-        </div>
+        <ConceptTitleCell
+          concept={row.original}
+          onSave={(field, value) => handleSaveField(row.original.id, field, value)}
+        />
       ),
-      size: 200,
+      size: 250,
     },
     {
-      accessorKey: 'explanation',
-      header: 'Explanation',
+      accessorKey: 'type',
+      header: 'Type',
       cell: ({ row }) => (
-        <div className="max-w-[300px] text-sm text-muted-foreground line-clamp-2">
-          {row.original.explanation}
-        </div>
-      ),
-      size: 300,
-    },
-    {
-      accessorKey: 'viralAngle',
-      header: 'Viral Angle',
-      cell: ({ row }) => (
-        <div className="max-w-[200px] text-sm italic line-clamp-2">
-          {row.original.viralAngle || '-'}
-        </div>
-      ),
-      size: 200,
-    },
-    {
-      accessorKey: 'category',
-      header: 'Category',
-      cell: ({ row }) => (
-        <Badge className={categoryColors[row.original.category] || 'bg-gray-100'}>
-          {categoryLabels[row.original.category] || row.original.category}
-        </Badge>
+        <ConceptTypeDropdown
+          conceptId={row.original.id}
+          currentType={row.original.type}
+          onUpdate={(newType) => handleSaveField(row.original.id, 'type', newType)}
+        />
       ),
       size: 100,
     },
     {
-      accessorKey: 'freshness',
-      header: 'Fresh',
+      accessorKey: 'examples',
+      header: 'Examples',
       cell: ({ row }) => (
-        <Badge variant="outline" className={freshnessColors[row.original.freshness]}>
-          {row.original.freshness}
-        </Badge>
+        <ExamplesCell
+          concept={row.original}
+          onAddExample={handleAddExample}
+          onUpdateExample={handleUpdateExample}
+          onDeleteExample={handleDeleteExample}
+          onOpenGallery={handleOpenGallery}
+          onExamplesAdded={onExamplesAdded || (() => onRefresh())}
+        />
       ),
-      size: 80,
-    },
-    {
-      accessorKey: 'timesUsed',
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          className="-ml-4"
-        >
-          Used
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      ),
-      cell: ({ row }) => (
-        <div className="text-center">{row.original.timesUsed}</div>
-      ),
-      size: 60,
-    },
-    {
-      accessorKey: 'source',
-      header: 'Source',
-      cell: ({ row }) => (
-        <Badge variant="secondary">
-          {sourceLabels[row.original.source] || row.original.source}
-        </Badge>
-      ),
-      size: 80,
+      size: 600,
     },
     {
       id: 'actions',
-      header: 'Actions',
+      header: '',
       cell: ({ row }) => (
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setEditingConcept(row.original)}
-            className="h-8 w-8"
-          >
-            <Edit className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => handleToggleActive(row.original)}
-            className="h-8 w-8"
-          >
-            {row.original.isActive ? (
-              <ToggleRight className="h-4 w-4 text-green-600" />
-            ) : (
-              <ToggleLeft className="h-4 w-4 text-gray-400" />
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => handleDelete(row.original.id)}
-            disabled={isDeleting === row.original.id}
-            className="h-8 w-8 text-red-500 hover:text-red-700"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
+        <ActionsCell
+          concept={row.original}
+          onToggleActive={handleToggleActive}
+          onDelete={handleDelete}
+          isDeleting={isDeleting === row.original.id}
+        />
       ),
-      size: 120,
+      size: 50,
     },
-  ], [handleToggleActive, handleDelete, isDeleting])
+  ], [handleSaveField, handleAddExample, handleUpdateExample, handleDeleteExample, handleOpenGallery, handleToggleActive, handleDelete, isDeleting, onRefresh, onExamplesAdded])
 
   return (
     <>
-      <DataTable
-        columns={columns}
-        data={concepts}
-        enableSorting={true}
-        enablePagination={true}
-        pageSize={20}
-        isLoading={isLoading}
-        rowClassName={(row) => row.isActive ? '' : 'opacity-50'}
+      <div className="h-full flex flex-col min-h-0 min-w-0">
+        <DataTable
+          columns={columns}
+          data={concepts}
+          enableSorting={true}
+          enablePagination={true}
+          pageSize={25}
+          isLoading={isLoading}
+          fullWidth={true}
+          leftStickyColumnsCount={1}
+          rightStickyColumnsCount={1}
+          rowClassName={(row) => row.isActive ? '' : 'opacity-50'}
+        />
+      </div>
+
+      {/* Image Gallery Dialog */}
+      <ImageGallery
+        images={galleryImages}
+        isOpen={showGallery}
+        onClose={() => setShowGallery(false)}
+        initialIndex={galleryInitialIndex}
       />
-
-      {/* Edit Dialog */}
-      <Dialog open={!!editingConcept} onOpenChange={() => setEditingConcept(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Concept</DialogTitle>
-            <DialogDescription>
-              Update the concept details below
-            </DialogDescription>
-          </DialogHeader>
-
-          {editingConcept && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Concept Name</Label>
-                  <Input
-                    value={editingConcept.concept}
-                    onChange={(e) => setEditingConcept({ ...editingConcept, concept: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Insider Term</Label>
-                  <Input
-                    value={editingConcept.insiderTerm || ''}
-                    onChange={(e) => setEditingConcept({ ...editingConcept, insiderTerm: e.target.value })}
-                    placeholder="e.g., 'draft decay'"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Explanation</Label>
-                <Textarea
-                  value={editingConcept.explanation}
-                  onChange={(e) => setEditingConcept({ ...editingConcept, explanation: e.target.value })}
-                  rows={2}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Consequence</Label>
-                <Textarea
-                  value={editingConcept.consequence || ''}
-                  onChange={(e) => setEditingConcept({ ...editingConcept, consequence: e.target.value })}
-                  rows={2}
-                  placeholder="What happens as a result"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Viral Angle</Label>
-                <Textarea
-                  value={editingConcept.viralAngle || ''}
-                  onChange={(e) => setEditingConcept({ ...editingConcept, viralAngle: e.target.value })}
-                  rows={2}
-                  placeholder="How to phrase in a slide (casual, lowercase)"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Proof Phrase</Label>
-                  <Input
-                    value={editingConcept.proofPhrase || ''}
-                    onChange={(e) => setEditingConcept({ ...editingConcept, proofPhrase: e.target.value })}
-                    placeholder="e.g., 'this one shocked me'"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Credibility Source</Label>
-                  <Input
-                    value={editingConcept.credibilitySource || ''}
-                    onChange={(e) => setEditingConcept({ ...editingConcept, credibilitySource: e.target.value })}
-                    placeholder="e.g., 'we tracked this internally'"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Category</Label>
-                <Select
-                  value={editingConcept.category}
-                  onValueChange={(value) => setEditingConcept({ ...editingConcept, category: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ALGORITHM_MECHANICS">Algorithm Mechanics</SelectItem>
-                    <SelectItem value="ENGAGEMENT">Engagement</SelectItem>
-                    <SelectItem value="CONTENT_STRATEGY">Content Strategy</SelectItem>
-                    <SelectItem value="MISTAKES">Mistakes</SelectItem>
-                    <SelectItem value="MINDSET">Mindset</SelectItem>
-                    <SelectItem value="HIDDEN_FEATURES">Hidden Features</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingConcept(null)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveEdit}>
-              Save Changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   )
 }

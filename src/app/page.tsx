@@ -16,6 +16,7 @@ import {
   MessageSquareIcon,
   FolderPlus,
   ScanText,
+  Lightbulb,
 } from 'lucide-react'
 import { PostsTable } from '@/components/PostsTable'
 import { Card, CardContent } from '@/components/ui/card'
@@ -600,6 +601,7 @@ function PostsPageContent() {
 
   const [isCopyingToClipboard, setIsCopyingToClipboard] = useState(false)
   const [isBulkOCRProcessing, setIsBulkOCRProcessing] = useState(false)
+  const [isExtractingConcepts, setIsExtractingConcepts] = useState(false)
 
   const handleBulkOCR = useCallback(async () => {
     if (selectedPosts.size === 0) return
@@ -635,6 +637,57 @@ function PostsPageContent() {
       setIsBulkOCRProcessing(false)
     }
   }, [selectedPosts, handleRefetchPosts])
+
+  const handleExtractConcepts = useCallback(async () => {
+    if (selectedPosts.size === 0) return
+
+    // Only extract from photo posts with completed OCR
+    const eligiblePosts = posts.filter(p =>
+      selectedPosts.has(p.id) &&
+      p.contentType === 'photo' &&
+      p.ocrStatus === 'completed'
+    )
+
+    if (eligiblePosts.length === 0) {
+      toast.error('No eligible posts selected', {
+        description: 'Select photo posts with completed OCR to extract concepts'
+      })
+      return
+    }
+
+    setIsExtractingConcepts(true)
+    try {
+      const response = await fetch('/api/concepts/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postIds: eligiblePosts.map(p => p.id) })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to extract concepts')
+      }
+
+      toast.success(`Extracted ${data.conceptsCreated} new concepts`, {
+        description: data.examplesAdded > 0
+          ? `${data.examplesAdded} examples added to existing concepts`
+          : `From ${eligiblePosts.length} posts`,
+        action: {
+          label: 'View Concepts',
+          onClick: () => router.push('/concepts')
+        }
+      })
+
+      // Clear selection after successful extraction
+      setSelectedPosts(new Set())
+    } catch (error) {
+      console.error('Failed to extract concepts:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to extract concepts')
+    } finally {
+      setIsExtractingConcepts(false)
+    }
+  }, [selectedPosts, posts, router])
 
   const handleCopyToClipboard = useCallback(async () => {
     if (selectedPosts.size === 0) return
@@ -900,6 +953,16 @@ function PostsPageContent() {
                   title="Process OCR for selected posts"
                 >
                   <ScanText className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleExtractConcepts}
+                  disabled={selectedPosts.size === 0 || isExtractingConcepts}
+                  className="w-8 h-8 px-3 text-xs"
+                  size="icon"
+                  title="Extract concepts from selected posts"
+                >
+                  <Lightbulb className="h-3 w-3" />
                 </Button>
                 <Button
                   variant="outline"

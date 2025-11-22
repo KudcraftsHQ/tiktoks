@@ -197,6 +197,38 @@ export function PostsTable({
     }
   }, [])
 
+  const handleExtractConcepts = useCallback(async (postId: string) => {
+    try {
+      const response = await fetch('/api/concepts/extract', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ postIds: [postId] })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to extract concepts')
+      }
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast.success(`Extracted ${data.conceptsCreated} new concepts`, {
+          description: data.examplesAdded > 0
+            ? `${data.examplesAdded} examples added to existing concepts`
+            : undefined,
+        })
+      } else {
+        throw new Error(data.error || 'Failed to extract concepts')
+      }
+    } catch (err) {
+      console.error('Failed to extract concepts:', err)
+      toast.error('Failed to extract concepts')
+      throw err
+    }
+  }, [])
+
   const handleSelectPost = useCallback((postId: string, selected: boolean) => {
     const newSet = new Set(selectedPosts)
     if (selected) {
@@ -298,10 +330,11 @@ export function PostsTable({
       onOpenImageGallery: handleOpenImageGallery,
       onRemixPost: handleRemixPost,
       onTriggerOCR: handleTriggerOCR,
+      onExtractConcepts: handleExtractConcepts,
       onRefetchPosts,
       searchTerms
     })
-  }, [handlePreviewPost, handleOpenImageGallery, handleRemixPost, handleTriggerOCR, onRefetchPosts, searchTerms])
+  }, [handlePreviewPost, handleOpenImageGallery, handleRemixPost, handleTriggerOCR, handleExtractConcepts, onRefetchPosts, searchTerms])
 
   // Update column visibility whenever hiddenColumns changes
   useEffect(() => {
