@@ -39,7 +39,6 @@ import {
 } from '@/components/ui/popover'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { SlideClassificationBadge } from '@/components/SlideClassificationBadge'
 
 // Types
 interface Concept {
@@ -71,12 +70,18 @@ interface SlideConceptSelection {
   conceptTitle?: string
 }
 
+interface DefaultSlideStructure {
+  slideIndex: number
+  type: 'HOOK' | 'CONTENT' | 'CTA'
+}
+
 interface ConceptDraftBuilderProps {
   isOpen: boolean
   onClose: () => void
   projectId: string
   onDraftCreated?: (draft: any) => void
   referencePostCount?: number // Number of reference posts in the project
+  defaultSlideStructure?: DefaultSlideStructure[] | null // Structure from first reference post
 }
 
 export function ConceptDraftBuilder({
@@ -84,7 +89,8 @@ export function ConceptDraftBuilder({
   onClose,
   projectId,
   onDraftCreated,
-  referencePostCount = 0
+  referencePostCount = 0,
+  defaultSlideStructure
 }: ConceptDraftBuilderProps) {
   // Loading states
   const [isLoadingConcepts, setIsLoadingConcepts] = useState(false)
@@ -108,21 +114,35 @@ export function ConceptDraftBuilder({
   ])
   const [languageStyle, setLanguageStyle] = useState('follow the reference content language style')
 
+  // Build default slide selections based on reference or fallback
+  const getDefaultSlideSelections = useCallback((): SlideConceptSelection[] => {
+    if (defaultSlideStructure && defaultSlideStructure.length > 0) {
+      // Use first reference post's structure
+      return defaultSlideStructure.map(s => ({
+        slideIndex: s.slideIndex,
+        type: s.type,
+        conceptId: null
+      }))
+    }
+    // Fallback to default 4-slide structure
+    return [
+      { slideIndex: 0, type: 'HOOK', conceptId: null },
+      { slideIndex: 1, type: 'CONTENT', conceptId: null },
+      { slideIndex: 2, type: 'CONTENT', conceptId: null },
+      { slideIndex: 3, type: 'CTA', conceptId: null }
+    ]
+  }, [defaultSlideStructure])
+
   // Fetch concepts when dialog opens
   useEffect(() => {
     if (isOpen) {
       fetchConcepts()
-      // Reset form
+      // Reset form with default structure from reference post
       setTopic('')
-      setSlideSelections([
-        { slideIndex: 0, type: 'HOOK', conceptId: null },
-        { slideIndex: 1, type: 'CONTENT', conceptId: null },
-        { slideIndex: 2, type: 'CONTENT', conceptId: null },
-        { slideIndex: 3, type: 'CTA', conceptId: null }
-      ])
+      setSlideSelections(getDefaultSlideSelections())
       setLanguageStyle('follow the reference content language style')
     }
-  }, [isOpen])
+  }, [isOpen, getDefaultSlideSelections])
 
   const fetchConcepts = async () => {
     setIsLoadingConcepts(true)
@@ -139,40 +159,29 @@ export function ConceptDraftBuilder({
     }
   }
 
-  // Add a slide
+  // Add a slide at the end
   const addSlide = () => {
     if (slideSelections.length >= 10) {
       toast.error('Maximum 10 slides allowed')
       return
     }
 
-    // Insert a CONTENT slide before the last slide (CTA)
-    const newSelections = [...slideSelections]
-    const ctaSlide = newSelections.pop()! // Remove CTA
-    const newIndex = newSelections.length
-    newSelections.push({
-      slideIndex: newIndex,
-      type: 'CONTENT',
-      conceptId: null
-    })
-    // Re-add CTA with updated index
-    newSelections.push({
-      ...ctaSlide,
-      slideIndex: newIndex + 1
-    })
-    setSlideSelections(newSelections)
+    // Add a CONTENT slide at the end
+    const newIndex = slideSelections.length
+    setSlideSelections([
+      ...slideSelections,
+      {
+        slideIndex: newIndex,
+        type: 'CONTENT',
+        conceptId: null
+      }
+    ])
   }
 
-  // Remove a slide
+  // Remove a slide (can remove any slide except first if it would leave < 3 slides)
   const removeSlide = (index: number) => {
     if (slideSelections.length <= 3) {
       toast.error('Minimum 3 slides required')
-      return
-    }
-
-    // Can't remove first (HOOK) or last (CTA)
-    if (index === 0 || index === slideSelections.length - 1) {
-      toast.error("Can't remove HOOK or CTA slide")
       return
     }
 
@@ -180,6 +189,18 @@ export function ConceptDraftBuilder({
       .filter((_, i) => i !== index)
       .map((s, i) => ({ ...s, slideIndex: i }))
     setSlideSelections(newSelections)
+  }
+
+  // Update slide type
+  const updateSlideType = (slideIndex: number, newType: 'HOOK' | 'CONTENT' | 'CTA') => {
+    setSlideSelections(prev =>
+      prev.map(s => {
+        if (s.slideIndex === slideIndex) {
+          return { ...s, type: newType, conceptId: null, conceptTitle: undefined }
+        }
+        return s
+      })
+    )
   }
 
   // Update concept selection for a slide
@@ -404,9 +425,8 @@ export function ConceptDraftBuilder({
                   const selectedConcept = slide.conceptId
                     ? concepts.find(c => c.id === slide.conceptId)
                     : null
-                  const isFirst = index === 0
-                  const isLast = index === slideSelections.length - 1
-                  const canRemove = !isFirst && !isLast && slideSelections.length > 3
+                  // Can remove any slide as long as we have more than 3
+                  const canRemove = slideSelections.length > 3
 
                   return (
                     <div
@@ -417,13 +437,31 @@ export function ConceptDraftBuilder({
                       )}
                     >
                       {/* Slide Number */}
-                      <div className="flex items-center gap-1 w-16 flex-shrink-0">
+                      <div className="flex items-center gap-1 w-12 flex-shrink-0">
                         <GripVertical className="h-4 w-4 text-muted-foreground" />
                         <span className="text-sm font-medium">#{index + 1}</span>
                       </div>
 
-                      {/* Slide Type Badge */}
-                      <SlideClassificationBadge type={slide.type} className="w-20 justify-center" />
+                      {/* Slide Type Selector */}
+                      <Select
+                        value={slide.type}
+                        onValueChange={(value) => updateSlideType(slide.slideIndex, value as 'HOOK' | 'CONTENT' | 'CTA')}
+                      >
+                        <SelectTrigger className="w-24 h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="HOOK">
+                            <span className="text-blue-600 font-medium">HOOK</span>
+                          </SelectItem>
+                          <SelectItem value="CONTENT">
+                            <span className="text-green-600 font-medium">CONTENT</span>
+                          </SelectItem>
+                          <SelectItem value="CTA">
+                            <span className="text-orange-600 font-medium">CTA</span>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
 
                       {/* Concept Selector */}
                       <div className="flex-1">

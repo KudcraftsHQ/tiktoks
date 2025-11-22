@@ -615,6 +615,42 @@ export default function ProjectDetailPage() {
     }))
   }, [project])
 
+  // Extract first reference post's slide structure for ConceptDraftBuilder
+  const firstReferenceSlideStructure = useMemo(() => {
+    if (!project || project.posts.length === 0) {
+      return null
+    }
+
+    const firstPost = project.posts[0].post
+
+    // Parse slideClassifications
+    let classifications: Array<{ slideIndex: number; slideType?: string; type?: string }> = []
+    try {
+      if (firstPost.slideClassifications) {
+        classifications = typeof firstPost.slideClassifications === 'string'
+          ? JSON.parse(firstPost.slideClassifications)
+          : firstPost.slideClassifications
+      }
+    } catch {
+      classifications = []
+    }
+
+    // Get slide count from images
+    const slideCount = Array.isArray(firstPost.images) ? firstPost.images.length : 0
+    if (slideCount === 0) return null
+
+    // Build structure from classifications or default
+    const structure: Array<{ slideIndex: number; type: 'HOOK' | 'CONTENT' | 'CTA' }> = []
+    for (let i = 0; i < slideCount; i++) {
+      const classification = classifications.find(c => c.slideIndex === i)
+      const typeRaw = classification?.slideType || classification?.type || 'CONTENT'
+      const type = typeRaw.toUpperCase() as 'HOOK' | 'CONTENT' | 'CTA'
+      structure.push({ slideIndex: i, type })
+    }
+
+    return structure
+  }, [project])
+
   // Calculate default min and max slides from reference posts
   const { defaultMinSlides, defaultMaxSlides } = useMemo(() => {
     if (!project || project.posts.length === 0) {
@@ -856,6 +892,7 @@ export default function ProjectDetailPage() {
         projectId={projectId}
         onDraftCreated={handleConceptDraftCreated}
         referencePostCount={referencePosts.length}
+        defaultSlideStructure={firstReferenceSlideStructure}
       />
 
       {/* Remove Confirmation Dialog */}
