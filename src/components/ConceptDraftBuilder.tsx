@@ -10,7 +10,10 @@ import {
   Wand2,
   GripVertical,
   ChevronDown,
-  AlertCircle
+  AlertCircle,
+  Lightbulb,
+  RefreshCw,
+  Check
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -75,6 +78,12 @@ interface DefaultSlideStructure {
   type: 'HOOK' | 'CONTENT' | 'CTA'
 }
 
+interface TopicSuggestion {
+  topic: string
+  angle: string
+  description: string
+}
+
 interface ConceptDraftBuilderProps {
   isOpen: boolean
   onClose: () => void
@@ -96,6 +105,11 @@ export function ConceptDraftBuilder({
   const [isLoadingConcepts, setIsLoadingConcepts] = useState(false)
   const [isSuggestingConcepts, setIsSuggestingConcepts] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isSuggestingTopics, setIsSuggestingTopics] = useState(false)
+
+  // Topic suggestions
+  const [topicSuggestions, setTopicSuggestions] = useState<TopicSuggestion[]>([])
+  const [showTopicSuggestions, setShowTopicSuggestions] = useState(false)
 
   // Data
   const [groupedConcepts, setGroupedConcepts] = useState<GroupedConcepts>({
@@ -275,6 +289,50 @@ export function ConceptDraftBuilder({
     }
   }
 
+  // Fetch topic suggestions from AI based on reference posts
+  const handleSuggestTopics = async () => {
+    if (referencePostCount === 0) {
+      toast.error('Add reference posts to get topic suggestions')
+      return
+    }
+
+    setIsSuggestingTopics(true)
+    try {
+      const response = await fetch('/api/topics/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          count: 3
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to get topic suggestions')
+      }
+
+      const data = await response.json()
+
+      if (data.suggestions && Array.isArray(data.suggestions)) {
+        setTopicSuggestions(data.suggestions)
+        setShowTopicSuggestions(true)
+      }
+    } catch (error) {
+      console.error('Failed to get topic suggestions:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to get topic suggestions')
+    } finally {
+      setIsSuggestingTopics(false)
+    }
+  }
+
+  // Select a topic suggestion
+  const handleSelectTopic = (suggestion: TopicSuggestion) => {
+    setTopic(suggestion.topic)
+    setShowTopicSuggestions(false)
+    toast.success('Topic selected')
+  }
+
   // Generate the draft
   const handleGenerate = async () => {
     if (!topic.trim()) {
@@ -359,7 +417,88 @@ export function ConceptDraftBuilder({
           <div className="space-y-6 pb-4">
             {/* Topic Input */}
             <div className="space-y-2">
-              <Label htmlFor="topic">Topic / Angle *</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="topic">Topic / Angle *</Label>
+                <Popover open={showTopicSuggestions} onOpenChange={setShowTopicSuggestions}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleSuggestTopics}
+                      disabled={isSuggestingTopics || referencePostCount === 0}
+                      className="h-7 text-xs gap-1.5"
+                    >
+                      {isSuggestingTopics ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Thinking...
+                        </>
+                      ) : (
+                        <>
+                          <Lightbulb className="h-3 w-3" />
+                          AI Suggest
+                        </>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-96 p-0" align="end">
+                    <div className="p-3 border-b flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Topic Suggestions</p>
+                        <p className="text-xs text-muted-foreground">Based on your reference posts</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleSuggestTopics}
+                        disabled={isSuggestingTopics}
+                        className="h-7 w-7 p-0"
+                      >
+                        <RefreshCw className={cn("h-3.5 w-3.5", isSuggestingTopics && "animate-spin")} />
+                      </Button>
+                    </div>
+                    <div className="p-2 space-y-2 max-h-[300px] overflow-y-auto">
+                      {topicSuggestions.length === 0 && !isSuggestingTopics && (
+                        <p className="text-sm text-muted-foreground p-2 text-center">
+                          Click to generate suggestions
+                        </p>
+                      )}
+                      {isSuggestingTopics && (
+                        <div className="flex items-center justify-center p-4">
+                          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                        </div>
+                      )}
+                      {!isSuggestingTopics && topicSuggestions.map((suggestion, index) => (
+                        <button
+                          key={index}
+                          className={cn(
+                            "w-full text-left p-3 rounded-lg border hover:bg-muted/50 transition-colors",
+                            "hover:border-primary/30"
+                          )}
+                          onClick={() => handleSelectTopic(suggestion)}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium leading-tight">{suggestion.topic}</p>
+                              {suggestion.angle && (
+                                <Badge variant="secondary" className="mt-1.5 text-xs">
+                                  {suggestion.angle}
+                                </Badge>
+                              )}
+                              {suggestion.description && (
+                                <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">
+                                  {suggestion.description}
+                                </p>
+                              )}
+                            </div>
+                            <Check className="h-4 w-4 text-muted-foreground/50 flex-shrink-0 mt-0.5" />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
               <Textarea
                 id="topic"
                 value={topic}
@@ -367,6 +506,11 @@ export function ConceptDraftBuilder({
                 placeholder="What is this carousel about? e.g., '5 ways to grow your LinkedIn following' or 'Why most people fail at building habits'"
                 rows={2}
               />
+              {referencePostCount === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Add reference posts to enable AI topic suggestions
+                </p>
+              )}
             </div>
 
             {/* AI Suggest Button */}

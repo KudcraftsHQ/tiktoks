@@ -190,7 +190,7 @@ async function sendTelegramPhoto(cacheAssetId: string, caption: string) {
 
 function escapeMarkdown(text: string): string {
   // Escape special characters for Telegram Markdown
-  // Only escape: _ * [ ] ( ) ~ ` > # + = | { }
-  // NOT escaping: . ! - (these are not special in Telegram Markdown)
-  return text.replace(/([_*\[\]()~`>#+|{}])/g, '\\$1')
+  // Only escape: _ * [ ] ( ) ~ ` > + = | { }
+  // NOT escaping: . ! - # (these are not special in Telegram Markdown, # is kept for hashtags)
+  return text.replace(/([_*\[\]()~`>+|{}])/g, '\\$1')
 }

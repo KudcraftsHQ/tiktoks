@@ -17,7 +17,7 @@ import {
   Share,
   Bookmark,
   Eye,
-  Sparkles,
+  FolderPlus,
   Loader2,
   Copy,
   ScanLine,
@@ -92,7 +92,7 @@ export interface TikTokPost {
 interface PostsTableColumnsProps {
   onPreviewPost: (post: TikTokPost) => void
   onOpenImageGallery?: (images: Array<{ url: string; width: number; height: number }>, initialIndex: number) => void
-  onRemixPost?: (post: TikTokPost) => void
+  onCreateProject?: (post: TikTokPost) => void
   onRowClick?: (post: TikTokPost) => void
   onTriggerOCR?: (postId: string) => Promise<void>
   onExtractConcepts?: (postId: string) => Promise<void>
@@ -293,12 +293,12 @@ function OCRStatusButton({ post, onTriggerOCR, compact = false }: OCRStatusButto
 const ActionsCell = ({
   post,
   onTriggerOCR,
-  onRemixPost,
+  onCreateProject,
   onExtractConcepts
 }: {
   post: TikTokPost
   onTriggerOCR?: (postId: string) => Promise<void>
-  onRemixPost?: (post: TikTokPost) => void
+  onCreateProject?: (post: TikTokPost) => void
   onExtractConcepts?: (postId: string) => Promise<void>
 }) => {
   const [isCopying, setIsCopying] = useState(false)
@@ -445,8 +445,8 @@ const ActionsCell = ({
           </TooltipContent>
         </Tooltip>
 
-        {/* Create Remix Button - only for photo posts */}
-        {post.contentType === 'photo' && onRemixPost && (
+        {/* Create Project Button - only for photo posts */}
+        {post.contentType === 'photo' && onCreateProject && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -454,15 +454,15 @@ const ActionsCell = ({
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation()
-                  onRemixPost(post)
+                  onCreateProject(post)
                 }}
                 className="h-8 w-8 p-0"
               >
-                <Sparkles className="h-4 w-4 text-purple-600" />
+                <FolderPlus className="h-4 w-4 text-purple-600" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="left">
-            <p>Create Remix</p>
+            <p>Create Project</p>
           </TooltipContent>
         </Tooltip>
         )}
@@ -506,7 +506,7 @@ const ActionsCell = ({
 export const createPostsTableColumns = ({
   onPreviewPost,
   onOpenImageGallery,
-  onRemixPost,
+  onCreateProject,
   onTriggerOCR,
   onExtractConcepts,
   onRefetchPosts,
@@ -857,7 +857,7 @@ export const createPostsTableColumns = ({
       <ActionsCell
         post={row.original}
         onTriggerOCR={onTriggerOCR}
-        onRemixPost={onRemixPost}
+        onCreateProject={onCreateProject}
         onExtractConcepts={onExtractConcepts}
       />
     )

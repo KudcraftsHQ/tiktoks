@@ -7,6 +7,20 @@ import * as Sentry from '@sentry/nextjs'
 
 const prisma = new PrismaClient()
 
+// Schema for reference structure (for following exact slide structure)
+const referenceStructureSchema = z.object({
+  slideCount: z.number().int().min(1),
+  slideClassifications: z.array(z.object({
+    slideIndex: z.number().int(),
+    slideType: z.string(),
+    confidence: z.number()
+  })),
+  hookCount: z.number().int().min(0),
+  contentCount: z.number().int().min(0),
+  ctaCount: z.number().int().min(0),
+  conclusionCount: z.number().int().min(0)
+}).optional()
+
 const generateContentSchema = z.object({
   selectedPostIds: z.array(z.string()).min(1, 'At least one post is required'),
   productContextId: z.string().optional(),
@@ -20,6 +34,7 @@ const generateContentSchema = z.object({
     max: z.number().int().min(3).max(20),
   }),
   selectedConceptIds: z.array(z.string()).optional(),
+  referenceStructure: referenceStructureSchema, // Optional: when provided, follow this exact structure
 })
 
 export async function POST(request: NextRequest) {
@@ -35,6 +50,7 @@ export async function POST(request: NextRequest) {
       variationCount,
       slidesRange,
       selectedConceptIds,
+      referenceStructure,
     } = generateContentSchema.parse(body)
 
     console.log(`📝 [API] Starting content generation for ${selectedPostIds.length} posts`)
@@ -119,6 +135,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Log if following reference structure
+    if (referenceStructure) {
+      console.log(`📐 [API] Following reference structure: ${referenceStructure.slideCount} slides (${referenceStructure.hookCount} hook, ${referenceStructure.contentCount} content, ${referenceStructure.ctaCount} cta, ${referenceStructure.conclusionCount} conclusion)`)
+    }
+
     // Generate content using Gemini
     const generationResult = await generateContent({
       sourcePosts: parsedSourcePosts,
@@ -129,6 +150,7 @@ export async function POST(request: NextRequest) {
       variationCount,
       slidesRange,
       concepts,
+      referenceStructure, // Pass to content generation service
     })
 
     // Create a draft session to group these variations

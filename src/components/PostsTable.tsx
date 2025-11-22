@@ -16,7 +16,7 @@ import { ImageGallery } from '@/components/ImageGallery'
 import { getProxiedImageUrlById } from '@/lib/image-proxy'
 import { PostAnalyticsSheet } from '@/components/PostAnalyticsSheet'
 import { SortingState } from '@tanstack/react-table'
-import { FileText, Loader2, Sparkles } from 'lucide-react'
+import { FileText, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { DateRange } from '@/components/DateRangeFilter'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
@@ -170,9 +170,40 @@ export function PostsTable({
     setShowGallery(true)
   }, [])
 
-  const handleRemixPost = useCallback((post: TikTokPost) => {
-    window.open(`/posts/${post.id}/remix`, '_blank')
-  }, [])
+  const [isCreatingProject, setIsCreatingProject] = useState(false)
+
+  const handleCreateProject = useCallback(async (post: TikTokPost) => {
+    setIsCreatingProject(true)
+    try {
+      const response = await fetch('/api/projects/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postIds: [post.id] })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to create project')
+      }
+
+      const data = await response.json()
+
+      if (data.projects && data.projects.length > 0) {
+        toast.success('Project created', {
+          description: data.projects[0].name,
+          action: {
+            label: 'View Project',
+            onClick: () => router.push(`/projects/${data.projects[0].id}`)
+          }
+        })
+      }
+    } catch (error) {
+      console.error('Failed to create project:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to create project')
+    } finally {
+      setIsCreatingProject(false)
+    }
+  }, [router])
 
   const handleRowClick = useCallback((post: TikTokPost) => {
     setAnalyticsPost(post)
@@ -328,13 +359,13 @@ export function PostsTable({
     return createPostsTableColumns({
       onPreviewPost: handlePreviewPost,
       onOpenImageGallery: handleOpenImageGallery,
-      onRemixPost: handleRemixPost,
+      onCreateProject: handleCreateProject,
       onTriggerOCR: handleTriggerOCR,
       onExtractConcepts: handleExtractConcepts,
       onRefetchPosts,
       searchTerms
     })
-  }, [handlePreviewPost, handleOpenImageGallery, handleRemixPost, handleTriggerOCR, handleExtractConcepts, onRefetchPosts, searchTerms])
+  }, [handlePreviewPost, handleOpenImageGallery, handleCreateProject, handleTriggerOCR, handleExtractConcepts, onRefetchPosts, searchTerms])
 
   // Update column visibility whenever hiddenColumns changes
   useEffect(() => {

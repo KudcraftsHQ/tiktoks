@@ -253,7 +253,6 @@ function SortableSlide({
             className="text-[12px]"
             rows={8}
             searchTerms={searchTerms}
-            textBoxMode={true}
           />
         </div>
       </div>
@@ -951,11 +950,21 @@ export function ProjectPostsTable({
       return
     }
 
-    // Optimistically update UI
+    // Optimistically update UI - remove slide and update slideClassifications
     const updatedSlides = existingSlides.filter((_, index) => index !== slideIndex)
+    // Remove classification for deleted slide and decrement indices for slides after it
+    const updatedClassifications = draft.slideClassifications
+      ?.filter(classification => classification.slideIndex !== slideIndex)
+      .map(classification => ({
+        ...classification,
+        slideIndex: classification.slideIndex > slideIndex
+          ? classification.slideIndex - 1
+          : classification.slideIndex
+      }))
     const updatedDraft = {
       ...draft,
-      slides: updatedSlides
+      slides: updatedSlides,
+      slideClassifications: updatedClassifications
     }
     const updatedRows = [...displayRows]
     updatedRows[draftIndex] = updatedDraft
@@ -1042,11 +1051,22 @@ export function ProjectPostsTable({
     // Parse existing slides
     let existingSlides = getSlidesArray(draft.slides)
 
-    // Optimistically reorder slides
+    // Create index mapping from old indices to new indices
+    const indexMapping = new Map<number, number>()
+    slideIndices.forEach((oldIndex, newIndex) => {
+      indexMapping.set(oldIndex, newIndex)
+    })
+
+    // Optimistically reorder slides and update slideClassifications
     const reorderedSlides = slideIndices.map(oldIndex => existingSlides[oldIndex])
+    const updatedClassifications = draft.slideClassifications?.map(classification => ({
+      ...classification,
+      slideIndex: indexMapping.get(classification.slideIndex) ?? classification.slideIndex
+    }))
     const updatedDraft = {
       ...draft,
-      slides: reorderedSlides
+      slides: reorderedSlides,
+      slideClassifications: updatedClassifications
     }
     const updatedRows = [...displayRows]
     updatedRows[draftIndex] = updatedDraft
@@ -1395,7 +1415,7 @@ export function ProjectPostsTable({
                   strategy={horizontalListSortingStrategy}
                 >
                   {sortableItems.map(({ id, slide, index }) => {
-                    const classification = draft.slideClassifications?.[index]
+                    const classification = draft.slideClassifications?.find(c => c.slideIndex === index)
 
                     return (
                       <SortableSlide
@@ -1617,7 +1637,6 @@ export function ProjectPostsTable({
     const postColumns = createPostsTableColumns({
       onPreviewPost: handlePreviewPost,
       onOpenImageGallery: handleOpenImageGallery,
-      onRemixPost: handleRemixPost,
       onRowClick: handleRowClick,
       onTriggerOCR: handleTriggerOCR,
       onExtractConcepts: handleExtractConcepts,

@@ -1115,8 +1115,14 @@ function PostsPageContent() {
       {/* Project Selector Modal */}
       <ProjectSelectorModal
         isOpen={isProjectSelectorOpen}
-        onClose={() => setIsProjectSelectorOpen(false)}
+        onClose={() => {
+          setIsProjectSelectorOpen(false)
+          // Clear selection after closing (batch creation clears on success)
+          setSelectedPosts(new Set())
+        }}
         onSelect={handleAddToProject}
+        selectedPostCount={selectedPosts.size}
+        postIds={Array.from(selectedPosts)}
       />
 
       {/* Content Analysis Sidebar - spans full height */}

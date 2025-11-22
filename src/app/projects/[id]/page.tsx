@@ -4,10 +4,9 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { PageLayout } from '@/components/PageLayout'
 import { Button } from '@/components/ui/button'
-import { Sparkles, Pencil, Trash2, FilePlus, Clipboard, ExternalLink, Copy, Lightbulb } from 'lucide-react'
+import { Sparkles, Pencil, Trash2, FilePlus, Clipboard, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import { GenerateContentDrawer } from '@/components/GenerateContentDrawer'
-import { ConceptDraftBuilder } from '@/components/ConceptDraftBuilder'
 import { ProjectPostsTable, ProjectTableRow } from '@/components/ProjectPostsTable'
 import { TikTokPost } from '@/components/posts-table-columns'
 import { Input } from '@/components/ui/input'
@@ -44,7 +43,6 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isGenerateDrawerOpen, setIsGenerateDrawerOpen] = useState(false)
-  const [isConceptBuilderOpen, setIsConceptBuilderOpen] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editedTitle, setEditedTitle] = useState('')
   const [isSavingTitle, setIsSavingTitle] = useState(false)
@@ -267,12 +265,6 @@ export default function ProjectDetailPage() {
       // Fallback to refetching if no drafts provided
       fetchProject()
     }
-  }
-
-  const handleConceptDraftCreated = (draft: RemixPost) => {
-    // Add new draft to the state
-    addDraftToState(draft)
-    toast.success('Draft created with concepts!')
   }
 
   const handleRemoveSelected = async () => {
@@ -615,67 +607,66 @@ export default function ProjectDetailPage() {
     }))
   }, [project])
 
-  // Extract first reference post's slide structure for ConceptDraftBuilder
-  const firstReferenceSlideStructure = useMemo(() => {
-    if (!project || project.posts.length === 0) {
-      return null
-    }
+  // Get the single reference post (projects should have only one reference post now)
+  const referencePost = useMemo(() => {
+    if (!project || project.posts.length === 0) return null
+    return project.posts[0].post
+  }, [project])
 
-    const firstPost = project.posts[0].post
+  // Extract the reference post's slide structure for generation
+  const referencePostStructure = useMemo(() => {
+    if (!referencePost) return null
 
-    // Parse slideClassifications
-    let classifications: Array<{ slideIndex: number; slideType?: string; type?: string }> = []
+    // Parse slide classifications
+    let slideClassifications: Array<{ slideIndex: number; slideType: string; confidence: number }> = []
     try {
-      if (firstPost.slideClassifications) {
-        classifications = typeof firstPost.slideClassifications === 'string'
-          ? JSON.parse(firstPost.slideClassifications)
-          : firstPost.slideClassifications
+      if (referencePost.slideClassifications) {
+        const parsed = typeof referencePost.slideClassifications === 'string'
+          ? JSON.parse(referencePost.slideClassifications)
+          : referencePost.slideClassifications
+        slideClassifications = Array.isArray(parsed) ? parsed : []
       }
     } catch {
-      classifications = []
+      slideClassifications = []
     }
 
     // Get slide count from images
-    const slideCount = Array.isArray(firstPost.images) ? firstPost.images.length : 0
-    if (slideCount === 0) return null
+    const slideCount = referencePost.images && Array.isArray(referencePost.images)
+      ? referencePost.images.length
+      : 0
 
-    // Build structure from classifications or default
-    const structure: Array<{ slideIndex: number; type: 'HOOK' | 'CONTENT' | 'CTA' }> = []
-    for (let i = 0; i < slideCount; i++) {
-      const classification = classifications.find(c => c.slideIndex === i)
-      const typeRaw = classification?.slideType || classification?.type || 'CONTENT'
-      const type = typeRaw.toUpperCase() as 'HOOK' | 'CONTENT' | 'CTA'
-      structure.push({ slideIndex: i, type })
+    // Count each type
+    const hookCount = slideClassifications.filter(c => c.slideType?.toLowerCase() === 'hook').length
+    const contentCount = slideClassifications.filter(c => c.slideType?.toLowerCase() === 'content').length
+    const ctaCount = slideClassifications.filter(c => c.slideType?.toLowerCase() === 'cta').length
+    const conclusionCount = slideClassifications.filter(c => c.slideType?.toLowerCase() === 'conclusion').length
+
+    return {
+      slideCount,
+      slideClassifications,
+      hookCount,
+      contentCount,
+      ctaCount,
+      conclusionCount,
+      // Derive structure description for UI
+      structureDescription: slideCount > 0
+        ? `${slideCount} slides (${hookCount} Hook, ${contentCount} Content, ${ctaCount} CTA${conclusionCount > 0 ? `, ${conclusionCount} Conclusion` : ''})`
+        : null
     }
+  }, [referencePost])
 
-    return structure
-  }, [project])
-
-  // Calculate default min and max slides from reference posts
+  // Calculate default min and max slides from reference post (exact match)
   const { defaultMinSlides, defaultMaxSlides } = useMemo(() => {
-    if (!project || project.posts.length === 0) {
+    if (!referencePostStructure || referencePostStructure.slideCount === 0) {
       return { defaultMinSlides: undefined, defaultMaxSlides: undefined }
     }
 
-    const slideCounts = project.posts
-      .map(({ post }) => {
-        // Get slide count from images array length
-        if (post.images && Array.isArray(post.images)) {
-          return post.images.length
-        }
-        return 0
-      })
-      .filter(count => count > 0)
-
-    if (slideCounts.length === 0) {
-      return { defaultMinSlides: undefined, defaultMaxSlides: undefined }
+    // Use exact slide count from reference post
+    return {
+      defaultMinSlides: referencePostStructure.slideCount,
+      defaultMaxSlides: referencePostStructure.slideCount
     }
-
-    const minSlides = Math.min(...slideCounts)
-    const maxSlides = Math.max(...slideCounts)
-
-    return { defaultMinSlides: minSlides, defaultMaxSlides: maxSlides }
-  }, [project])
+  }, [referencePostStructure])
 
   // Combine reference posts and drafts into a single table
   const combinedTableData: ProjectTableRow[] = useMemo(() => {
@@ -820,15 +811,6 @@ export default function ProjectDetailPage() {
                 {isCreatingDraft ? 'Creating...' : 'New Draft'}
               </Button>
               <Button
-                variant={isConceptBuilderOpen ? "default" : "outline"}
-                onClick={() => setIsConceptBuilderOpen(true)}
-                className="w-full sm:w-auto h-8 px-3 text-xs"
-                title="Create draft with concept-guided structure"
-              >
-                <Lightbulb className="h-3 w-3" />
-                With Concepts
-              </Button>
-              <Button
                 variant={isGenerateDrawerOpen ? "default" : "outline"}
                 onClick={() => setIsGenerateDrawerOpen(!isGenerateDrawerOpen)}
                 className="w-full sm:w-auto h-8 px-3 text-xs"
@@ -883,16 +865,7 @@ export default function ProjectDetailPage() {
         defaultVariationCount={1}
         defaultMinSlides={defaultMinSlides}
         defaultMaxSlides={defaultMaxSlides}
-      />
-
-      {/* Concept Draft Builder */}
-      <ConceptDraftBuilder
-        isOpen={isConceptBuilderOpen}
-        onClose={() => setIsConceptBuilderOpen(false)}
-        projectId={projectId}
-        onDraftCreated={handleConceptDraftCreated}
-        referencePostCount={referencePosts.length}
-        defaultSlideStructure={firstReferenceSlideStructure}
+        referencePostStructure={referencePostStructure}
       />
 
       {/* Remove Confirmation Dialog */}

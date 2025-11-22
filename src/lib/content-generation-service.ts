@@ -110,6 +110,16 @@ export interface ConceptBankItem {
   examples: Array<{ text: string }>
 }
 
+// Reference structure for following exact slide structure from source post
+export interface ReferenceStructure {
+  slideCount: number
+  slideClassifications: Array<{ slideIndex: number; slideType: string; confidence: number }>
+  hookCount: number
+  contentCount: number
+  ctaCount: number
+  conclusionCount: number
+}
+
 export interface GenerationConfig {
   sourcePosts: SourcePost[]
   productContext?: { title: string; description: string }
@@ -119,6 +129,7 @@ export interface GenerationConfig {
   variationCount: number
   slidesRange: { min: number; max: number }
   concepts?: ConceptBankItem[]
+  referenceStructure?: ReferenceStructure // Optional: when provided, follow this exact structure
 }
 
 export interface GeneratedSlide {
@@ -149,7 +160,7 @@ export interface GenerationResult {
 }
 
 function buildPrompt(config: GenerationConfig): string {
-  const { sourcePosts, productContext, generationStrategy, languageStyle, contentIdeas, variationCount, slidesRange, concepts } = config
+  const { sourcePosts, productContext, generationStrategy, languageStyle, contentIdeas, variationCount, slidesRange, concepts, referenceStructure } = config
 
   // Build source posts context
   const postsContext = sourcePosts.map((post, index) => {
@@ -212,7 +223,17 @@ Adapt the core messages to fit the context while maintaining their essence.
 
   // Strategy description
   const strategyDescription = generationStrategy === 'remix'
-    ? `Your goal is to **remix and paraphrase** the reference posts above. Keep the core structure, themes, and key messages, but rewrite the text in a fresh way while maintaining the essence of the original content.`
+    ? `Your goal is to **remix and paraphrase** the reference posts above. Keep the core structure, themes, and key messages, but rewrite the text in a fresh way while maintaining the essence of the original content.
+
+**CRITICAL - NO PARROTING RULE:**
+   ❌ DO NOT copy or closely paraphrase the exact wording from the reference posts
+   ❌ DO NOT use the same hook text - create a completely NEW hook angle
+   ❌ DO NOT reuse phrases verbatim - every sentence must be freshly written
+   ✅ DO extract the CONCEPT/INSIGHT from each slide, then express it in YOUR OWN words
+   ✅ DO use different examples, metaphors, and phrasing than the original
+   ✅ DO change the hook authority type (e.g., if original uses "internship at tiktok", use "posting for 5 months" or "copied a 1M creator" instead)
+
+   Think of it like this: You're a different person who learned the SAME insights but would naturally explain them differently. The reference post teaches you WHAT to say, not HOW to say it.`
     : `Your goal is to **create new content inspired by** the reference posts above. Use them as inspiration for themes, structure, and style, but create completely new content that explores different angles, examples, or perspectives.`
 
   // Hook examples for the model to learn from
@@ -441,7 +462,17 @@ ${ctaExamplesSection}
    - Exactly ONE CTA slide (MUST be second-to-last slide)${productContext ? ' - use the 4-Part Rhythm Structure from CTA examples above' : ''}
    - Exactly ONE FINAL CONCLUSION slide (last slide - wraps up the journey)
    - **OPTIMAL TOTAL: 6 slides** (hook + 3 content + cta + conclusion) - this is the proven viral formula
+${productContext ? `
+   **PRODUCT MENTION RULE (CRITICAL - DO NOT VIOLATE):**
+   ❌ NEVER mention "${productContext.title}" or any product/tool/app on HOOK slides
+   ❌ NEVER mention "${productContext.title}" or any product/tool/app on CONTENT slides
+   ❌ NEVER mention "${productContext.title}" or any product/tool/app on CONCLUSION slides
+   ✅ ONLY mention "${productContext.title}" on the CTA slide (second-to-last)
 
+   The hook, content, and conclusion slides must feel like pure value sharing - no selling, no product hints.
+   Only the CTA slide introduces the product as a natural personal discovery.
+   This maintains authenticity and prevents the content from feeling like an advertisement.
+` : ''}
 2. Open Loop Psychology - CRITICAL FOR VIRALITY:
    - Each slide MUST create an open loop (information gap) that hooks the viewer to swipe to the next slide
    - Viewers must feel compelled to close this info gap by swiping
@@ -463,7 +494,7 @@ ${ctaExamplesSection}
    - Follow HOOK SLIDE FORMULA exactly - use one of the 5 authority types
    - Create maximum information gap - DO NOT reveal the actual insight
    - End with "heres what ive learned/discovered/shocked me" pattern
-   - Use lowercase, drop apostrophes, keep it raw (no emojis)
+   - Use lowercase, drop apostrophes, keep it raw (no emojis)${productContext ? '\n   - ❌ NO PRODUCT MENTIONS - hook is pure intrigue, no selling' : ''}
 
    **CONTENT SLIDES (Slides 2-4/5):**
    - Follow the 3-Part Slide Structure: Bold Statement → Why It Matters → Personal Reaction
@@ -476,7 +507,7 @@ ${ctaExamplesSection}
    - Include Insider Language - sound like you worked at TikTok
    - Sprinkle Authenticity Markers (1-2 per slide)
    - Follow Casual Grammar Rules religiously
-   - ONE idea per slide - let each breathe
+   - ONE idea per slide - let each breathe${productContext ? '\n   - ❌ NO PRODUCT MENTIONS - content slides are pure value, no selling' : ''}
 
    **CTA SLIDE (Second-to-Last):**${productContext ? '\n   - Follow the 4-Part Rhythm Structure exactly (50-70 words)\n   - Transition → Discovery Moment → Specific Benefits → Authentic Marker\n   - Frame as YOUR discovery ("i use", "i found", "started using")\n   - Include 2-3 concrete features without marketing language\n   - Optional: Lifestyle Integration ("while i do my skincare")\n   - Must include Authenticity Markers ("honestly", "literally", "ngl")\n   - Use casual grammar (lowercase "i", dropped apostrophes)\n   - Optional soft emojis at end only: 🫶💗🥺💖' : '\n   - Adapt naturally from reference posts\' CTA style\n   - Keep conversational and authentic'}
 
@@ -484,13 +515,23 @@ ${ctaExamplesSection}
    - Provide satisfying closure to the journey
    - Can be a bonus tip, summary insight, or encouraging message
    - Maintains the same casual, authentic voice
-   - Creates sense of completion (viewer feels satisfied they stayed till the end)
+   - Creates sense of completion (viewer feels satisfied they stayed till the end)${productContext ? '\n   - ❌ NO PRODUCT MENTIONS - conclusion is pure value wrap-up, no selling' : ''}
 
 5. Slide Count Strategy:
-   - Generate exactly ${variationCount} variations
+   - Generate exactly ${variationCount} variations${referenceStructure ? `
+   - **EXACT STRUCTURE REQUIRED - FOLLOW THIS SLIDE SEQUENCE PRECISELY**:
+     - Total slides: ${referenceStructure.slideCount}
+     - **EXACT SLIDE ORDER (MUST FOLLOW THIS SEQUENCE)**:
+${referenceStructure.slideClassifications
+  .sort((a, b) => a.slideIndex - b.slideIndex)
+  .map(s => `       • Slide ${s.slideIndex + 1}: ${s.slideType.toUpperCase()}`)
+  .join('\n')}
+     - DO NOT rearrange the slide types. The sequence above is MANDATORY.
+     - Each variation must have slides in exactly this order.
+   - Match this structure precisely for each variation` : `
    - **TARGET: 6 slides per variation** (this is the proven viral sweet spot)
    - Acceptable range: ${slidesRange.min}-${slidesRange.max} slides
-   - Structure: 1 hook + 3-4 content + 1 CTA + 1 conclusion
+   - Structure: 1 hook + 3-4 content + 1 CTA + 1 conclusion`}
 
 6. Language & Style - AUTHENTICITY IS EVERYTHING:
    - Follow the specified language style: ${languageStyle}

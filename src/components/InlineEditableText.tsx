@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
-import { Copy, Check, Trash2, Plus, MoveDown } from 'lucide-react'
+import { Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { HighlightedText } from '@/components/HighlightedText'
@@ -20,7 +20,6 @@ interface InlineEditableTextProps {
   fixedHeight?: boolean
   heightClass?: string
   searchTerms?: string[]
-  textBoxMode?: boolean // When true, split by newlines and render multiple textareas (one per text box)
 }
 
 export function InlineEditableText({
@@ -34,8 +33,7 @@ export function InlineEditableText({
   disabledMessage = 'Editing is disabled',
   fixedHeight = false,
   heightClass = 'h-40',
-  searchTerms = [],
-  textBoxMode = false
+  searchTerms = []
 }: InlineEditableTextProps) {
   const [localValue, setLocalValue] = useState(value)
   const [isSaving, setIsSaving] = useState(false)
@@ -43,21 +41,13 @@ export function InlineEditableText({
   const [isFocused, setIsFocused] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // For text box mode: split value into array of text boxes
-  const [textBoxes, setTextBoxes] = useState<string[]>(() =>
-    textBoxMode ? value.split('\n').filter(line => line.trim() !== '') : []
-  )
-
   // Show highlighted text when search terms exist and not focused
   const showHighlightedView = searchTerms.length > 0 && !isFocused
 
   // Update local value when prop changes
   useEffect(() => {
     setLocalValue(value)
-    if (textBoxMode) {
-      setTextBoxes(value.split('\n').filter(line => line.trim() !== ''))
-    }
-  }, [value, textBoxMode])
+  }, [value])
 
   const handleBlur = async () => {
     // Only save if value has changed
@@ -87,160 +77,6 @@ export function InlineEditableText({
       toast.error('Failed to copy to clipboard')
     }
   }
-
-  // Text box mode handlers
-  const handleTextBoxChange = (index: number, newText: string) => {
-    const updated = [...textBoxes]
-    updated[index] = newText
-    setTextBoxes(updated)
-  }
-
-  const handleTextBoxBlur = async (index: number) => {
-    // Join all text boxes with newlines and save
-    const joinedText = textBoxes.join('\n')
-    if (joinedText !== value && !isSaving) {
-      setIsSaving(true)
-      try {
-        await onSave(joinedText)
-        setLocalValue(joinedText)
-      } catch (error) {
-        console.error('Failed to save:', error)
-        toast.error('Failed to save changes')
-        // Revert
-        setTextBoxes(value.split('\n').filter(line => line.trim() !== ''))
-      } finally {
-        setIsSaving(false)
-      }
-    }
-  }
-
-  const handleAddTextBox = () => {
-    setTextBoxes([...textBoxes, ''])
-  }
-
-  const handleRemoveTextBox = async (index: number) => {
-    if (textBoxes.length <= 1) {
-      toast.error('Cannot remove the last text box')
-      return
-    }
-
-    const updated = textBoxes.filter((_, i) => i !== index)
-    setTextBoxes(updated)
-
-    // Auto-save after removal (background save - no loading spinner)
-    const joinedText = updated.join('\n')
-    try {
-      await onSave(joinedText)
-      setLocalValue(joinedText)
-      toast.success('Text box removed')
-    } catch (error) {
-      console.error('Failed to save:', error)
-      toast.error('Failed to save changes')
-      // Revert
-      setTextBoxes(value.split('\n').filter(line => line.trim() !== ''))
-    }
-  }
-
-  const handleMergeTextBox = async (index: number) => {
-    if (index >= textBoxes.length - 1) {
-      toast.error('Cannot merge the last text box')
-      return
-    }
-
-    // Merge current text box with the next one
-    const updated = [...textBoxes]
-    updated[index] = `${updated[index]}\n${updated[index + 1]}`
-    updated.splice(index + 1, 1)
-    setTextBoxes(updated)
-
-    // Auto-save after merge (background save - no loading spinner)
-    const joinedText = updated.join('\n')
-    try {
-      await onSave(joinedText)
-      setLocalValue(joinedText)
-      toast.success('Text boxes merged')
-    } catch (error) {
-      console.error('Failed to save:', error)
-      toast.error('Failed to save changes')
-      // Revert
-      setTextBoxes(value.split('\n').filter(line => line.trim() !== ''))
-    }
-  }
-
-  // Text box mode rendering
-  if (textBoxMode) {
-    const textBoxHeight = textBoxes.length === 2 ? 'h-1/2' : 'h-full'
-
-    return (
-      <div className={cn('flex flex-col', fixedHeight && heightClass, textBoxes.length === 2 ? 'gap-2' : '')}>
-        {textBoxes.map((text, index) => (
-          <div key={index} className={cn('relative group/textbox', textBoxHeight)}>
-            <Textarea
-              value={text}
-              onChange={(e) => handleTextBoxChange(index, e.target.value)}
-              onBlur={() => handleTextBoxBlur(index)}
-              placeholder={`Text box ${index + 1}`}
-              maxLength={maxLength}
-              disabled={disabled}
-              className={cn(
-                'h-full pr-16 resize-none text-[10px] leading-tight whitespace-pre-wrap break-words overflow-y-auto',
-                disabled && 'cursor-not-allowed bg-muted/50',
-                className
-              )}
-              style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
-            />
-            {/* Top-right buttons: Merge (if not last) and Delete (if more than 1) */}
-            <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover/textbox:opacity-100 transition-opacity">
-              {index < textBoxes.length - 1 && (
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="h-6 w-6"
-                  onClick={() => handleMergeTextBox(index)}
-                  disabled={disabled}
-                  title="Merge with next text box"
-                >
-                  <MoveDown className="h-3 w-3 text-blue-500" />
-                </Button>
-              )}
-              {textBoxes.length > 1 && (
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="h-6 w-6"
-                  onClick={() => handleRemoveTextBox(index)}
-                  disabled={disabled}
-                  title="Remove text box"
-                >
-                  <Trash2 className="h-3 w-3 text-destructive" />
-                </Button>
-              )}
-            </div>
-            {/* Bottom-right button: Add (only show if less than 2 text boxes) */}
-            {textBoxes.length < 2 && (
-              <div className="absolute bottom-2 right-2 opacity-0 group-hover/textbox:opacity-100 transition-opacity">
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="h-6 w-6"
-                  onClick={handleAddTextBox}
-                  disabled={disabled}
-                  title="Add text box"
-                >
-                  <Plus className="h-3 w-3" />
-                </Button>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    )
-  }
-
-  // Standard mode rendering
   return (
     <div className={cn('relative group', fixedHeight && 'h-full')}>
       {showHighlightedView ? (

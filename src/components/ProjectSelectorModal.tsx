@@ -13,8 +13,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Folder, Loader2, Check } from 'lucide-react'
+import { Plus, Folder, Loader2, Check, FolderPlus } from 'lucide-react'
 import { toast } from 'sonner'
+import { useRouter } from 'next/navigation'
 
 interface Project {
   id: string
@@ -29,20 +30,29 @@ interface ProjectSelectorModalProps {
   isOpen: boolean
   onClose: () => void
   onSelect: (projectId: string) => void | Promise<void>
+  selectedPostCount?: number // Number of posts being added
+  postIds?: string[] // Post IDs for batch creation
 }
 
 export function ProjectSelectorModal({
   isOpen,
   onClose,
-  onSelect
+  onSelect,
+  selectedPostCount = 1,
+  postIds = []
 }: ProjectSelectorModalProps) {
+  const router = useRouter()
   const [projects, setProjects] = useState<Project[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isBatchCreating, setIsBatchCreating] = useState(false)
   const [newProjectName, setNewProjectName] = useState('')
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
+
+  // Show batch creation option when multiple posts are selected
+  const showBatchOption = selectedPostCount > 1 && postIds.length > 1
 
   useEffect(() => {
     if (isOpen) {
@@ -123,13 +133,52 @@ export function ProjectSelectorModal({
     onClose()
   }
 
+  // Batch create projects - one per post
+  const handleBatchCreate = async () => {
+    if (postIds.length === 0) return
+
+    setIsBatchCreating(true)
+    try {
+      const response = await fetch('/api/projects/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postIds })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to create projects')
+      }
+
+      const data = await response.json()
+
+      toast.success(`Created ${data.count} project${data.count !== 1 ? 's' : ''}`, {
+        description: 'One project per selected post',
+        action: data.count === 1 ? {
+          label: 'View Project',
+          onClick: () => router.push(`/projects/${data.projects[0].id}`)
+        } : undefined
+      })
+
+      onClose()
+    } catch (error) {
+      console.error('Failed to batch create projects:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to create projects')
+    } finally {
+      setIsBatchCreating(false)
+    }
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Add to Project</DialogTitle>
           <DialogDescription>
-            Select a project to add the selected posts to, or create a new one.
+            {showBatchOption
+              ? `You have ${selectedPostCount} posts selected. Create individual projects or add to existing.`
+              : 'Select a project to add the selected posts to, or create a new one.'
+            }
           </DialogDescription>
         </DialogHeader>
 
@@ -177,15 +226,38 @@ export function ProjectSelectorModal({
               </div>
             </div>
           ) : (
-            <Button
-              variant="outline"
-              className="w-full justify-start"
-              onClick={() => setShowCreateForm(true)}
-              disabled={isSubmitting}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Create New Project
-            </Button>
+            <div className="space-y-2">
+              {/* Batch creation option for multiple posts */}
+              {showBatchOption && (
+                <Button
+                  variant="default"
+                  className="w-full justify-start"
+                  onClick={handleBatchCreate}
+                  disabled={isBatchCreating || isSubmitting}
+                >
+                  {isBatchCreating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Creating {selectedPostCount} projects...
+                    </>
+                  ) : (
+                    <>
+                      <FolderPlus className="h-4 w-4 mr-2" />
+                      Create {selectedPostCount} Projects (one per post)
+                    </>
+                  )}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={() => setShowCreateForm(true)}
+                disabled={isSubmitting || isBatchCreating}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create New Project
+              </Button>
+            </div>
           )}
 
           {isLoading ? (

@@ -47,6 +47,17 @@ interface GroupedConcepts {
   CTA: Concept[]
 }
 
+// Structure of the reference post for following exact slide structure
+interface ReferencePostStructure {
+  slideCount: number
+  slideClassifications: Array<{ slideIndex: number; slideType: string; confidence: number }>
+  hookCount: number
+  contentCount: number
+  ctaCount: number
+  conclusionCount: number
+  structureDescription: string | null
+}
+
 interface GenerateContentDrawerProps {
   isOpen: boolean
   onClose: () => void
@@ -57,6 +68,7 @@ interface GenerateContentDrawerProps {
   defaultVariationCount?: number // Optional: default number of variations
   defaultMinSlides?: number // Optional: default min slides
   defaultMaxSlides?: number // Optional: default max slides
+  referencePostStructure?: ReferencePostStructure | null // Optional: when provided, generation follows this structure exactly
 }
 
 export function GenerateContentDrawer({
@@ -68,8 +80,11 @@ export function GenerateContentDrawer({
   projectId,
   defaultVariationCount,
   defaultMinSlides,
-  defaultMaxSlides
+  defaultMaxSlides,
+  referencePostStructure
 }: GenerateContentDrawerProps) {
+  // Whether to follow exact reference structure (when in project context with structure info)
+  const followReferenceStructure = !!referencePostStructure && referencePostStructure.slideCount > 0
   const [isGenerating, setIsGenerating] = useState(false)
   const [isLoadingPosts, setIsLoadingPosts] = useState(false)
   const [isLoadingProducts, setIsLoadingProducts] = useState(false)
@@ -131,7 +146,7 @@ export function GenerateContentDrawer({
       setVariationCount(defaultVariationCount ?? '')
       setMinSlides(defaultMinSlides ?? '')
       setMaxSlides(defaultMaxSlides ?? '')
-      setSelectedConceptIds(new Set())
+      // Note: selectedConceptIds is set in fetchConcepts to select all by default
     }
   }, [isOpen, defaultVariationCount, defaultMinSlides, defaultMaxSlides])
 
@@ -187,7 +202,15 @@ export function GenerateContentDrawer({
       }
 
       const data = await response.json()
-      setGroupedConcepts(data.grouped || { HOOK: [], CONTENT: [], CTA: [] })
+      const grouped = data.grouped || { HOOK: [], CONTENT: [], CTA: [] }
+      setGroupedConcepts(grouped)
+
+      // Select all concepts by default
+      const allConceptIds = new Set<string>()
+      ;(['HOOK', 'CONTENT', 'CTA'] as const).forEach(type => {
+        grouped[type].forEach((concept: Concept) => allConceptIds.add(concept.id))
+      })
+      setSelectedConceptIds(allConceptIds)
     } catch (error) {
       console.error('Failed to fetch concepts:', error)
       // Don't show error toast for concepts - they're optional
@@ -206,6 +229,35 @@ export function GenerateContentDrawer({
       }
       return newSet
     })
+  }
+
+  const toggleSelectAllByType = (type: 'HOOK' | 'CONTENT' | 'CTA') => {
+    const conceptsOfType = groupedConcepts[type]
+    const allSelected = conceptsOfType.every(c => selectedConceptIds.has(c.id))
+
+    setSelectedConceptIds(prev => {
+      const newSet = new Set(prev)
+      if (allSelected) {
+        // Deselect all of this type
+        conceptsOfType.forEach(c => newSet.delete(c.id))
+      } else {
+        // Select all of this type
+        conceptsOfType.forEach(c => newSet.add(c.id))
+      }
+      return newSet
+    })
+  }
+
+  const isAllSelectedByType = (type: 'HOOK' | 'CONTENT' | 'CTA') => {
+    const conceptsOfType = groupedConcepts[type]
+    if (conceptsOfType.length === 0) return false
+    return conceptsOfType.every(c => selectedConceptIds.has(c.id))
+  }
+
+  const isSomeSelectedByType = (type: 'HOOK' | 'CONTENT' | 'CTA') => {
+    const conceptsOfType = groupedConcepts[type]
+    const selectedCount = conceptsOfType.filter(c => selectedConceptIds.has(c.id)).length
+    return selectedCount > 0 && selectedCount < conceptsOfType.length
   }
 
   const getSelectedConceptsByType = (type: 'HOOK' | 'CONTENT' | 'CTA') => {
@@ -241,7 +293,16 @@ export function GenerateContentDrawer({
             max: finalMaxSlides
           },
           // Include selected concepts from Concept Bank
-          selectedConceptIds: selectedConceptIds.size > 0 ? Array.from(selectedConceptIds) : undefined
+          selectedConceptIds: selectedConceptIds.size > 0 ? Array.from(selectedConceptIds) : undefined,
+          // Include reference structure when following exact structure
+          referenceStructure: followReferenceStructure ? {
+            slideCount: referencePostStructure!.slideCount,
+            slideClassifications: referencePostStructure!.slideClassifications,
+            hookCount: referencePostStructure!.hookCount,
+            contentCount: referencePostStructure!.contentCount,
+            ctaCount: referencePostStructure!.ctaCount,
+            conclusionCount: referencePostStructure!.conclusionCount
+          } : undefined
         })
       })
 
@@ -377,54 +438,72 @@ export function GenerateContentDrawer({
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <div className="space-y-2">
-                {(['HOOK', 'CONTENT', 'CTA'] as const).map((type) => {
+              <div className="space-y-3">
+                {(['HOOK', 'CONTENT', 'CTA'] as const).map((type, index) => {
                   const concepts = groupedConcepts[type]
                   const selectedCount = concepts.filter(c => selectedConceptIds.has(c.id)).length
                   const typeLabels = { HOOK: 'Hooks', CONTENT: 'Content', CTA: 'CTAs' }
 
                   return (
-                    <Collapsible
-                      key={type}
-                      open={conceptSectionsOpen[type]}
-                      onOpenChange={(open) => setConceptSectionsOpen(prev => ({ ...prev, [type]: open }))}
-                    >
-                      <CollapsibleTrigger asChild>
-                        <button className="flex items-center justify-between w-full p-2 rounded-md hover:bg-muted/50 transition-colors text-left">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">{typeLabels[type]}</span>
-                            <Badge variant="outline" className="text-xs">
-                              {concepts.length}
-                            </Badge>
-                            {selectedCount > 0 && (
-                              <Badge variant="default" className="text-xs">
-                                {selectedCount} selected
+                    <div key={type}>
+                      {/* Separator line between sections */}
+                      {index > 0 && (
+                        <div className="border-t border-border mb-3" />
+                      )}
+                      <Collapsible
+                        open={conceptSectionsOpen[type]}
+                        onOpenChange={(open) => setConceptSectionsOpen(prev => ({ ...prev, [type]: open }))}
+                      >
+                        <CollapsibleTrigger asChild>
+                          <button className="flex items-center justify-between w-full p-2 rounded-md hover:bg-muted/50 transition-colors text-left">
+                            <div className="flex items-center gap-2">
+                              {/* Select All Checkbox */}
+                              {concepts.length > 0 && (
+                                <Checkbox
+                                  checked={isAllSelectedByType(type)}
+                                  ref={(el) => {
+                                    if (el) {
+                                      (el as HTMLButtonElement & { indeterminate: boolean }).indeterminate = isSomeSelectedByType(type)
+                                    }
+                                  }}
+                                  onCheckedChange={() => toggleSelectAllByType(type)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  aria-label={`Select all ${typeLabels[type].toLowerCase()}`}
+                                />
+                              )}
+                              <span className="text-sm font-medium">{typeLabels[type]}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {concepts.length}
                               </Badge>
+                              {selectedCount > 0 && (
+                                <Badge variant="default" className="text-xs">
+                                  {selectedCount} selected
+                                </Badge>
+                              )}
+                            </div>
+                            {conceptSectionsOpen[type] ? (
+                              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
                             )}
-                          </div>
-                          {conceptSectionsOpen[type] ? (
-                            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </button>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <div className="space-y-1 mt-1 max-h-[150px] overflow-y-auto">
-                          {concepts.length === 0 ? (
-                            <p className="text-xs text-muted-foreground py-2 px-2">
-                              No {typeLabels[type].toLowerCase()} concepts yet
-                            </p>
-                          ) : (
-                            concepts.map((concept) => {
-                              const isSelected = selectedConceptIds.has(concept.id)
-                              const isTopPerformer = concept.timesUsed >= 3
+                          </button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="space-y-1 mt-1 ml-6 max-h-[150px] overflow-y-auto">
+                            {concepts.length === 0 ? (
+                              <p className="text-xs text-muted-foreground py-2 px-2">
+                                No {typeLabels[type].toLowerCase()} concepts yet
+                              </p>
+                            ) : (
+                              concepts.map((concept) => {
+                                const isSelected = selectedConceptIds.has(concept.id)
+                                const isTopPerformer = concept.timesUsed >= 3
 
-                              return (
-                                <div
-                                  key={concept.id}
-                                  className={cn(
-                                    "flex items-start gap-2 p-2 rounded-md cursor-pointer transition-colors",
+                                return (
+                                  <div
+                                    key={concept.id}
+                                    className={cn(
+                                      "flex items-start gap-2 p-2 rounded-md cursor-pointer transition-colors",
                                     isSelected ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50"
                                   )}
                                   onClick={() => toggleConceptSelection(concept.id)}
@@ -464,6 +543,7 @@ export function GenerateContentDrawer({
                         </div>
                       </CollapsibleContent>
                     </Collapsible>
+                  </div>
                   )
                 })}
               </div>
@@ -585,7 +665,20 @@ export function GenerateContentDrawer({
                 />
               </div>
 
-              {/* Slides Range */}
+              {/* Reference Structure Info (when following exact structure) */}
+              {followReferenceStructure && referencePostStructure?.structureDescription && (
+                <div className="rounded-lg bg-primary/5 border border-primary/20 p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge variant="secondary" className="text-xs">Following Reference</Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Generated drafts will match: <span className="font-medium text-foreground">{referencePostStructure.structureDescription}</span>
+                  </p>
+                </div>
+              )}
+
+              {/* Slides Range - only show when NOT following reference structure */}
+              {!followReferenceStructure && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="minSlides">Min Slides</Label>
@@ -671,6 +764,7 @@ export function GenerateContentDrawer({
                   />
                 </div>
               </div>
+              )}
             </div>
           </div>
         </div>
