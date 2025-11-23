@@ -63,6 +63,11 @@ export function getProxiedImageUrlById(cacheAssetId: string | null | undefined):
 export function getProxiedImageUrl(originalUrl: string): string {
   if (!originalUrl) return ''
 
+  // If it's already a proxy URL, return as-is
+  if (originalUrl.includes('/api/images/proxy')) {
+    return originalUrl
+  }
+
   // If it's an R2 URL, return as-is (already cached and converted)
   if (isR2Url(originalUrl)) {
     return originalUrl

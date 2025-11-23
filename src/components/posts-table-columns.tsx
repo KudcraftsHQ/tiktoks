@@ -586,7 +586,7 @@ export const createPostsTableColumns = ({
                         className="w-10 aspect-[9/16] rounded object-cover cursor-pointer hover:opacity-80 border"
                         onClick={(e) => {
                           e.stopPropagation()
-                          onOpenImageGallery?.(images.map((img: any) => ({ url: img.url, width: img.width, height: img.height })), index)
+                          onOpenImageGallery?.(images.map((img: any) => ({ url: img._proxiedUrl || img.url, width: img.width, height: img.height })), index)
                         }}
                       />
                       {isLast && remainingCount > 0 && (
@@ -594,7 +594,7 @@ export const createPostsTableColumns = ({
                           className="absolute inset-0 bg-black/70 rounded flex items-center justify-center cursor-pointer hover:bg-black/80 transition-colors"
                           onClick={(e) => {
                             e.stopPropagation()
-                            onOpenImageGallery?.(images.map((img: any) => ({ url: img.url, width: img.width, height: img.height })), index)
+                            onOpenImageGallery?.(images.map((img: any) => ({ url: img._proxiedUrl || img.url, width: img.width, height: img.height })), index)
                           }}
                         >
                           <span className="text-white text-xs font-bold">

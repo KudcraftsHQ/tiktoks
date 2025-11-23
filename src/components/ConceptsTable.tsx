@@ -1,15 +1,13 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
-import { DataTable } from '@/components/ui/data-table'
 import { InlineEditableTitle } from '@/components/InlineEditableTitle'
 import { InlineEditableText } from '@/components/InlineEditableText'
 import { Textarea } from '@/components/ui/textarea'
 import { ConceptTypeDropdown } from '@/components/ConceptTypeDropdown'
 import { ImageGallery } from '@/components/ImageGallery'
-import { ColumnDef } from '@tanstack/react-table'
-import { Trash2, ToggleLeft, ToggleRight, Plus, Eye, Sparkles, Pencil } from 'lucide-react'
+import { Trash2, ToggleLeft, ToggleRight, Sparkles, Pencil, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Tooltip,
@@ -29,6 +27,15 @@ import {
 } from '@/components/ui/alert-dialog'
 import { getProxiedImageUrlById } from '@/lib/image-proxy'
 import { GenerateExampleDialog } from '@/components/GenerateExampleDialog'
+import {
+  ExampleSelectionProvider,
+  useExampleSelection,
+  SelectableExampleCard,
+  FloatingSelectionBar,
+  MoveToConceptDialog,
+  NewConceptFromExamplesDialog
+} from '@/components/concepts'
+import { cn } from '@/lib/utils'
 
 interface SourcePost {
   id: string
@@ -107,50 +114,26 @@ const ConceptTitleCell = ({
   )
 }
 
-// Cell component for examples displayed horizontally like ProjectPostsTable slides
+// Cell component for examples displayed horizontally with selection support
 const ExamplesCell = ({
   concept,
   onAddExample,
-  onUpdateExample,
   onDeleteExample,
   onOpenGallery,
   onExamplesAdded
 }: {
   concept: Concept
   onAddExample: (conceptId: string, text: string) => Promise<void>
-  onUpdateExample: (conceptId: string, exampleId: string, text: string) => Promise<void>
   onDeleteExample: (conceptId: string, exampleId: string) => Promise<void>
   onOpenGallery: (images: Array<{ url: string; width: number; height: number }>, initialIndex: number) => void
   onExamplesAdded: (conceptId: string, examples: ConceptExample[]) => void
 }) => {
   const [isAdding, setIsAdding] = useState(false)
   const [newExampleText, setNewExampleText] = useState('')
-  const [editingExampleId, setEditingExampleId] = useState<string | null>(null)
-  const [editingText, setEditingText] = useState('')
   const [showGenerateDialog, setShowGenerateDialog] = useState(false)
   const [deleteConfirmExampleId, setDeleteConfirmExampleId] = useState<string | null>(null)
 
-  const handleStartEditing = (example: ConceptExample) => {
-    if (example.sourceType !== 'MANUAL') return
-    setEditingExampleId(example.id)
-    setEditingText(example.text)
-  }
-
-  const handleSaveEdit = async () => {
-    if (!editingExampleId || !editingText.trim()) return
-    try {
-      await onUpdateExample(concept.id, editingExampleId, editingText)
-      setEditingExampleId(null)
-      setEditingText('')
-    } catch {
-      // Error handled in parent
-    }
-  }
-
-  const handleCancelEdit = () => {
-    setEditingExampleId(null)
-    setEditingText('')
-  }
+  const { selectedExamples, selectExample } = useExampleSelection()
 
   const handleAddExample = async () => {
     if (!newExampleText.trim()) return
@@ -188,97 +171,39 @@ const ExamplesCell = ({
     onOpenGallery(galleryImages, example.sourceSlideIndex)
   }
 
+  const handleSelectExample = (exampleId: string, multiSelect: boolean) => {
+    const example = concept.examples.find(e => e.id === exampleId)
+    if (!example) return
+
+    selectExample({
+      id: exampleId,
+      conceptId: concept.id,
+      conceptType: concept.type,
+      text: example.text
+    }, multiSelect)
+  }
+
   return (
     <TooltipProvider>
-      <div className="flex gap-3 overflow-x-auto pb-2 py-2">
-        {/* Existing examples */}
-        {concept.examples.map((example) => {
-          const isEditing = editingExampleId === example.id
-          const isManual = example.sourceType === 'MANUAL'
+      <div className="flex flex-wrap gap-3 pb-2 py-2 max-w-[1100px]">
+        {/* Existing examples with selection support */}
+        {concept.examples.map((example) => (
+          <SelectableExampleCard
+            key={example.id}
+            example={example}
+            conceptId={concept.id}
+            isSelected={selectedExamples.has(example.id)}
+            onSelect={handleSelectExample}
+            onDelete={(exampleId) => setDeleteConfirmExampleId(exampleId)}
+            onSlideClick={handleSlideClick}
+            formatViewCount={formatViewCount}
+          />
+        ))}
 
-          return (
-            <div key={example.id} className="flex-shrink-0 w-52 flex flex-col">
-              {/* Example header - views on left, slide number and delete on right */}
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1">
-                  <Eye className="h-3 w-3 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">
-                    {formatViewCount(example.sourcePost?.viewCount)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {example.sourcePostId && example.sourceSlideIndex !== null && (
-                    <button
-                      onClick={() => handleSlideClick(example)}
-                      className="text-[10px] text-primary hover:underline cursor-pointer"
-                    >
-                      Slide {(example.sourceSlideIndex ?? 0) + 1}
-                    </button>
-                  )}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={() => setDeleteConfirmExampleId(example.id)}
-                        className="p-0.5 text-muted-foreground hover:text-red-500 transition-colors"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">
-                      <p>Delete example</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-              </div>
-              {/* Example text */}
-              <div className="h-32 overflow-y-auto">
-                {isEditing ? (
-                  <div className="h-full flex flex-col gap-2">
-                    <Textarea
-                      value={editingText}
-                      onChange={(e) => setEditingText(e.target.value)}
-                      className="flex-1 resize-none text-[12px] leading-tight"
-                      autoFocus
-                    />
-                    <div className="flex gap-1 justify-end">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={handleCancelEdit}
-                        className="h-6 px-2 text-xs"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={handleSaveEdit}
-                        disabled={!editingText.trim()}
-                        className="h-6 px-2 text-xs"
-                      >
-                        Save
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <Textarea
-                    value={example.text}
-                    readOnly
-                    onClick={() => isManual && handleStartEditing(example)}
-                    className={`h-full resize-none text-[12px] leading-tight whitespace-pre-wrap break-words overflow-y-auto bg-muted/30 ${
-                      isManual ? 'cursor-pointer hover:bg-muted/50' : 'cursor-default'
-                    }`}
-                    style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
-                  />
-                )}
-              </div>
-            </div>
-          )
-        })}
-
-        {/* Add New Example - dotted border style like ProjectPostsTable add slide */}
+        {/* Add New Example - dotted border style */}
         <div className="flex-shrink-0 w-52 flex flex-col">
           {/* Spacer to align with existing examples header */}
-          <div className="flex items-center justify-between mb-2 h-4"></div>
+          <div className="flex items-center justify-between mb-2 h-5"></div>
           <div className="h-32">
             {newExampleText || isAdding ? (
               <div className="h-full flex flex-col gap-2">
@@ -433,8 +358,19 @@ const ActionsCell = ({
   )
 }
 
-export function ConceptsTable({ concepts, onRefresh, onExamplesAdded, onExampleDeleted, isLoading }: ConceptsTableProps) {
+// Inner table component that uses selection context
+function ConceptsTableInner({
+  concepts,
+  onRefresh,
+  onExamplesAdded,
+  onExampleDeleted,
+  isLoading
+}: ConceptsTableProps) {
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
+  const [showMoveDialog, setShowMoveDialog] = useState(false)
+  const [showNewConceptDialog, setShowNewConceptDialog] = useState(false)
+
+  const { selectedExamples, clearSelection } = useExampleSelection()
 
   // Image gallery state
   const [galleryImages, setGalleryImages] = useState<Array<{ url: string; width: number; height: number }>>([])
@@ -479,24 +415,6 @@ export function ConceptsTable({ concepts, onRefresh, onExamplesAdded, onExampleD
       onRefresh()
     } catch (err) {
       toast.error('Failed to add example')
-      throw err
-    }
-  }, [onRefresh])
-
-  const handleUpdateExample = useCallback(async (conceptId: string, exampleId: string, text: string) => {
-    try {
-      const response = await fetch(`/api/concepts/${conceptId}/examples`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ exampleId, text })
-      })
-
-      if (!response.ok) throw new Error('Failed to update example')
-
-      toast.success('Example updated')
-      onRefresh()
-    } catch (err) {
-      toast.error('Failed to update example')
       throw err
     }
   }, [onRefresh])
@@ -559,75 +477,152 @@ export function ConceptsTable({ concepts, onRefresh, onExamplesAdded, onExampleD
     }
   }, [onRefresh])
 
-  const columns: ColumnDef<Concept>[] = useMemo(() => [
-    {
-      accessorKey: 'title',
-      header: 'Concept',
-      cell: ({ row }) => (
-        <ConceptTitleCell
-          concept={row.original}
-          onSave={(field, value) => handleSaveField(row.original.id, field, value)}
-        />
-      ),
-      size: 250,
-    },
-    {
-      accessorKey: 'type',
-      header: 'Type',
-      cell: ({ row }) => (
-        <ConceptTypeDropdown
-          conceptId={row.original.id}
-          currentType={row.original.type}
-          onUpdate={(newType) => handleSaveField(row.original.id, 'type', newType)}
-        />
-      ),
-      size: 100,
-    },
-    {
-      accessorKey: 'examples',
-      header: 'Examples',
-      cell: ({ row }) => (
-        <ExamplesCell
-          concept={row.original}
-          onAddExample={handleAddExample}
-          onUpdateExample={handleUpdateExample}
-          onDeleteExample={handleDeleteExample}
-          onOpenGallery={handleOpenGallery}
-          onExamplesAdded={onExamplesAdded || (() => onRefresh())}
-        />
-      ),
-      size: 600,
-    },
-    {
-      id: 'actions',
-      header: '',
-      cell: ({ row }) => (
-        <ActionsCell
-          concept={row.original}
-          onToggleActive={handleToggleActive}
-          onDelete={handleDelete}
-          isDeleting={isDeleting === row.original.id}
-        />
-      ),
-      size: 50,
-    },
-  ], [handleSaveField, handleAddExample, handleUpdateExample, handleDeleteExample, handleOpenGallery, handleToggleActive, handleDelete, isDeleting, onRefresh, onExamplesAdded])
+  // Move examples to existing concept
+  const handleMoveToExisting = useCallback(async (targetConceptId: string) => {
+    const exampleIds = Array.from(selectedExamples.keys())
+
+    try {
+      const response = await fetch('/api/concepts/examples/move', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exampleIds, targetConceptId })
+      })
+
+      if (!response.ok) throw new Error('Failed to move examples')
+
+      toast.success(`Moved ${exampleIds.length} example${exampleIds.length > 1 ? 's' : ''}`)
+      clearSelection()
+      onRefresh()
+    } catch (err) {
+      toast.error('Failed to move examples')
+    }
+  }, [selectedExamples, clearSelection, onRefresh])
+
+  // Create new concept with selected examples
+  const handleCreateNewConcept = useCallback(async (data: {
+    title?: string
+    coreMessage?: string
+    type: 'HOOK' | 'CONTENT' | 'CTA'
+    autoGenerate: boolean
+  }) => {
+    const exampleIds = Array.from(selectedExamples.keys())
+
+    try {
+      const response = await fetch('/api/concepts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: data.title,
+          coreMessage: data.coreMessage,
+          type: data.type,
+          exampleIds,
+          autoGenerate: data.autoGenerate
+        })
+      })
+
+      if (!response.ok) throw new Error('Failed to create concept')
+
+      toast.success('New concept created')
+      clearSelection()
+      onRefresh()
+    } catch (err) {
+      toast.error('Failed to create concept')
+    }
+  }, [selectedExamples, clearSelection, onRefresh])
+
+  // Get exclude concept IDs (concepts that already contain selected examples)
+  const excludeConceptIds = Array.from(new Set(
+    Array.from(selectedExamples.values()).map(e => e.conceptId)
+  ))
+
+  // Get default type from first selected example
+  const defaultType = selectedExamples.size > 0
+    ? selectedExamples.values().next().value?.conceptType || 'CONTENT'
+    : 'CONTENT'
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
 
   return (
     <>
       <div className="h-full flex flex-col min-h-0 min-w-0">
-        <DataTable
-          columns={columns}
-          data={concepts}
-          enableSorting={true}
-          enablePagination={true}
-          pageSize={25}
-          isLoading={isLoading}
-          fullWidth={true}
-          leftStickyColumnsCount={1}
-          rightStickyColumnsCount={1}
-          rowClassName={(row) => row.isActive ? '' : 'opacity-50'}
-        />
+        {/* Table Header - Fixed */}
+        <div className="flex items-center border-b bg-muted/50 flex-shrink-0">
+          <div className="w-[250px] flex-shrink-0 px-4 py-3 text-sm font-medium text-muted-foreground">
+            CONCEPT
+          </div>
+          <div className="w-[100px] flex-shrink-0 px-4 py-3 text-sm font-medium text-muted-foreground">
+            TYPE
+          </div>
+          <div className="flex-1 px-4 py-3 text-sm font-medium text-muted-foreground">
+            EXAMPLES
+          </div>
+          <div className="w-[60px] flex-shrink-0 px-4 py-3 text-sm font-medium text-muted-foreground">
+          </div>
+        </div>
+
+        {/* Table Body - Scrollable */}
+        <div className="flex-1 min-h-0 overflow-auto">
+          {concepts.map((concept) => (
+            <div
+              key={concept.id}
+              className={cn(
+                'flex items-stretch border-b transition-opacity',
+                !concept.isActive && 'opacity-50'
+              )}
+            >
+              {/* Title column */}
+              <div className="w-[250px] flex-shrink-0 border-r bg-background sticky left-0 z-[5]">
+                <ConceptTitleCell
+                  concept={concept}
+                  onSave={(field, value) => handleSaveField(concept.id, field, value)}
+                />
+              </div>
+
+              {/* Type column */}
+              <div className="w-[100px] flex-shrink-0 px-4 py-3 flex items-center">
+                <ConceptTypeDropdown
+                  conceptId={concept.id}
+                  currentType={concept.type}
+                  onUpdate={(newType) => handleSaveField(concept.id, 'type', newType)}
+                />
+              </div>
+
+              {/* Examples column */}
+              <div className="flex-1 px-4">
+                <ExamplesCell
+                  concept={concept}
+                  onAddExample={handleAddExample}
+                  onDeleteExample={handleDeleteExample}
+                  onOpenGallery={handleOpenGallery}
+                  onExamplesAdded={onExamplesAdded || (() => onRefresh())}
+                />
+              </div>
+
+              {/* Actions column */}
+              <div className="w-[60px] flex-shrink-0 px-2 py-3 flex items-start justify-center bg-background">
+                <ActionsCell
+                  concept={concept}
+                  onToggleActive={handleToggleActive}
+                  onDelete={handleDelete}
+                  isDeleting={isDeleting === concept.id}
+                />
+              </div>
+            </div>
+          ))}
+
+          {/* Empty state */}
+          {concepts.length === 0 && (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              No concepts found
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Image Gallery Dialog */}
@@ -637,6 +632,58 @@ export function ConceptsTable({ concepts, onRefresh, onExamplesAdded, onExampleD
         onClose={() => setShowGallery(false)}
         initialIndex={galleryInitialIndex}
       />
+
+      {/* Floating Selection Bar */}
+      <FloatingSelectionBar
+        selectedCount={selectedExamples.size}
+        onClearSelection={clearSelection}
+        onMoveToExisting={() => setShowMoveDialog(true)}
+        onMoveToNew={() => setShowNewConceptDialog(true)}
+      />
+
+      {/* Move to Existing Concept Dialog */}
+      <MoveToConceptDialog
+        open={showMoveDialog}
+        onOpenChange={setShowMoveDialog}
+        concepts={concepts.map(c => ({
+          id: c.id,
+          title: c.title,
+          coreMessage: c.coreMessage,
+          type: c.type
+        }))}
+        selectedCount={selectedExamples.size}
+        excludeConceptIds={excludeConceptIds}
+        onConfirm={handleMoveToExisting}
+      />
+
+      {/* Create New Concept Dialog */}
+      <NewConceptFromExamplesDialog
+        open={showNewConceptDialog}
+        onOpenChange={setShowNewConceptDialog}
+        selectedCount={selectedExamples.size}
+        defaultType={defaultType}
+        onConfirm={handleCreateNewConcept}
+      />
     </>
+  )
+}
+
+export function ConceptsTable({
+  concepts,
+  onRefresh,
+  onExamplesAdded,
+  onExampleDeleted,
+  isLoading
+}: ConceptsTableProps) {
+  return (
+    <ExampleSelectionProvider>
+      <ConceptsTableInner
+        concepts={concepts}
+        onRefresh={onRefresh}
+        onExamplesAdded={onExamplesAdded}
+        onExampleDeleted={onExampleDeleted}
+        isLoading={isLoading}
+      />
+    </ExampleSelectionProvider>
   )
 }
