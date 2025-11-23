@@ -32,20 +32,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all profiles matching the filter
+    // Include ALL posts - we calculate gains from metrics history within date range
     const profiles = await prisma.tiktokProfile.findMany({
       where: profileWhere,
       select: {
         id: true,
         posts: {
           select: {
-            id: true,
-            publishedAt: true,
-            viewCount: true
-          },
-          where: {
-            publishedAt: {
-              lte: toDate
-            }
+            id: true
           }
         }
       }
@@ -80,70 +74,74 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Create a map of dates to view counts
-    const dateViewsMap = new Map<string, { views: bigint; isEstimated: boolean }>()
-
-    // Group metrics by date
-    const metricsByDate = new Map<string, Map<string, bigint>>()
+    // Group metrics by postId, then by date to track cumulative views per post per day
+    // Structure: postId -> date -> viewCount (cumulative)
+    const postMetricsByDate = new Map<string, Map<string, bigint>>()
 
     metricsHistory.forEach(metric => {
       const dateKey = format(startOfDay(metric.recordedAt), 'yyyy-MM-dd')
+      const postId = metric.postId
+      const viewCount = metric.viewCount || BigInt(0)
 
-      if (!metricsByDate.has(dateKey)) {
-        metricsByDate.set(dateKey, new Map())
+      if (!postMetricsByDate.has(postId)) {
+        postMetricsByDate.set(postId, new Map())
       }
 
-      const dayMetrics = metricsByDate.get(dateKey)!
-      const currentViews = dayMetrics.get(metric.postId) || BigInt(0)
-      const newViews = metric.viewCount || BigInt(0)
+      const postDates = postMetricsByDate.get(postId)!
+      const existingViews = postDates.get(dateKey) || BigInt(0)
 
-      // Keep the latest (highest) view count for each post on each day
-      if (newViews > currentViews) {
-        dayMetrics.set(metric.postId, newViews)
+      // Keep the highest view count for each post on each day
+      if (viewCount > existingViews) {
+        postDates.set(dateKey, viewCount)
       }
     })
 
-    // Calculate total views per day
-    metricsByDate.forEach((postViews, dateKey) => {
-      let totalViews = BigInt(0)
-      postViews.forEach(views => {
-        totalViews += views
-      })
-
-      dateViewsMap.set(dateKey, {
-        views: totalViews,
-        isEstimated: false
-      })
-    })
-
-    // Fill in missing dates with estimates
+    // Calculate daily views gained per post (difference between consecutive days)
+    // Then aggregate across all posts for each day
+    const dailyViewsMap = new Map<string, { views: bigint; isEstimated: boolean }>()
     const allDates = eachDayOfInterval({ start: fromDate, end: toDate })
+    const allDateKeys = allDates.map(d => format(d, 'yyyy-MM-dd'))
 
-    allDates.forEach(date => {
-      const dateKey = format(date, 'yyyy-MM-dd')
+    // For each post, calculate daily view gains
+    postMetricsByDate.forEach((dateMetrics, postId) => {
+      const sortedDates = Array.from(dateMetrics.keys()).sort()
 
-      if (!dateViewsMap.has(dateKey)) {
-        // For missing dates, calculate based on post publish dates and current totals
-        let estimatedViews = BigInt(0)
+      sortedDates.forEach((dateKey, index) => {
+        const currentViews = dateMetrics.get(dateKey)!
 
-        profiles.forEach(profile => {
-          profile.posts.forEach(post => {
-            if (post.publishedAt && post.publishedAt <= date) {
-              // Post existed at this date, use its current view count
-              estimatedViews += post.viewCount || BigInt(0)
-            }
-          })
+        let dailyGain = BigInt(0)
+        if (index === 0) {
+          // First recorded day for this post - we don't know how many views it gained
+          // Could be 0 or could be all of them, so we skip (treat as 0 gain)
+          dailyGain = BigInt(0)
+        } else {
+          const prevDate = sortedDates[index - 1]
+          const prevViews = dateMetrics.get(prevDate)!
+          dailyGain = currentViews - prevViews
+          if (dailyGain < BigInt(0)) dailyGain = BigInt(0) // Safety check
+        }
+
+        // Add to daily total
+        const existing = dailyViewsMap.get(dateKey) || { views: BigInt(0), isEstimated: false }
+        dailyViewsMap.set(dateKey, {
+          views: existing.views + dailyGain,
+          isEstimated: false
         })
+      })
+    })
 
-        dateViewsMap.set(dateKey, {
-          views: estimatedViews,
+    // Fill in missing dates with 0 (no data means no recorded gains)
+    allDateKeys.forEach(dateKey => {
+      if (!dailyViewsMap.has(dateKey)) {
+        dailyViewsMap.set(dateKey, {
+          views: BigInt(0),
           isEstimated: true
         })
       }
     })
 
     // Convert to array and sort by date
-    const dailyViewsData = Array.from(dateViewsMap.entries())
+    const dailyViewsData = Array.from(dailyViewsMap.entries())
       .map(([date, data]) => ({
         date,
         views: Number(data.views),
