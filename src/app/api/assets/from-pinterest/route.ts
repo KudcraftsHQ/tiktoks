@@ -3,6 +3,8 @@ import { PrismaClient, CacheStatus } from '@/generated/prisma'
 import { uploadToR2 } from '@/lib/r2'
 import { v4 as uuidv4 } from 'uuid'
 import sharp from 'sharp'
+import heicConvert from 'heic-convert'
+import { analyzeFileBuffer } from '@/lib/file-type-detector'
 
 const prisma = new PrismaClient()
 
@@ -101,7 +103,37 @@ export async function POST(request: NextRequest) {
     const folder = await getOrCreatePinterestFolder()
 
     // Download image
-    const imageBuffer = await downloadImage(imageUrl)
+    let imageBuffer = await downloadImage(imageUrl)
+
+    // Determine file extension from URL or content type
+    const urlPath = new URL(imageUrl).pathname
+    let extension = urlPath.split('.').pop() || 'jpg'
+    let fileName = name || `pinterest-${Date.now()}.${extension}`
+    let contentType = `image/${extension}`
+
+    // Detect and convert HEIC files
+    const fileAnalysis = analyzeFileBuffer(imageBuffer, fileName, contentType)
+
+    if (fileAnalysis.detectedType.format === 'HEIC/HEIF') {
+      console.log(`🔄 [PinterestAsset] Converting HEIC to JPEG: ${fileName}`)
+      try {
+        const convertedBuffer = await heicConvert({
+          buffer: imageBuffer,
+          format: 'JPEG',
+          quality: 0.92
+        })
+        imageBuffer = Buffer.from(convertedBuffer)
+        contentType = 'image/jpeg'
+        extension = 'jpg'
+        // Update filename extension
+        const lastDot = fileName.lastIndexOf('.')
+        fileName = lastDot !== -1 ? fileName.substring(0, lastDot) + '.jpg' : fileName + '.jpg'
+        console.log(`✅ [PinterestAsset] HEIC conversion completed: ${fileName}`)
+      } catch (conversionError) {
+        console.error(`❌ [PinterestAsset] HEIC conversion failed:`, conversionError)
+        // Continue with original buffer if conversion fails
+      }
+    }
 
     // Extract image dimensions
     let width: number | null = null
@@ -113,12 +145,6 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       console.warn('Could not extract image metadata:', error)
     }
-
-    // Determine file extension from URL or content type
-    const urlPath = new URL(imageUrl).pathname
-    const extension = urlPath.split('.').pop() || 'jpg'
-    const fileName = name || `pinterest-${Date.now()}.${extension}`
-    const contentType = `image/${extension}`
 
     // Upload to R2 (using Buffer directly)
     const { url, key } = await uploadToR2(imageBuffer, 'assets/pinterest', fileName, contentType)

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cacheAssetService } from '@/lib/cache-asset-service'
+import { isHeicUrl } from '@/lib/image-proxy'
 
 const TELEGRAM_BOT_API_TOKEN = process.env.TELEGRAM_BOT_API_TOKEN
 const TELEGRAM_BOT_CHAT_ID = process.env.TELEGRAM_BOT_CHAT_ID
@@ -139,11 +140,19 @@ async function sendTelegramPhoto(cacheAssetId: string, caption: string) {
 
   // Get presigned URL from cache asset service
   // preferPublic=true to get public URL that Telegram can access
-  const imageUrl = await cacheAssetService.getUrl(cacheAssetId, undefined, true)
+  let imageUrl = await cacheAssetService.getUrl(cacheAssetId, undefined, true)
 
   if (!imageUrl) {
     console.error('[Telegram] No URL generated for cache asset:', cacheAssetId)
     throw new Error('Failed to generate image URL from cache asset')
+  }
+
+  // Safety fallback: If URL is HEIC, route through proxy for on-the-fly conversion
+  // This handles edge cases where HEIC files weren't converted at upload time
+  if (isHeicUrl(imageUrl)) {
+    console.log('[Telegram] Detected HEIC URL, routing through proxy for conversion:', cacheAssetId)
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    imageUrl = `${baseUrl}/api/images/proxy?id=${encodeURIComponent(cacheAssetId)}`
   }
 
   console.log('[Telegram] Generated image URL:', {
