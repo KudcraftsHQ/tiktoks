@@ -47,9 +47,13 @@ interface ProfileGroup {
 interface AdvancedFiltersProps {
   value: AdvancedFiltersValue
   onChange: (value: AdvancedFiltersValue) => void
+  /**
+   * Hide the account/profile filter sections (useful when viewing a single profile)
+   */
+  hideAccountFilter?: boolean
 }
 
-export function AdvancedFilters({ value, onChange }: AdvancedFiltersProps) {
+export function AdvancedFilters({ value, onChange, hideAccountFilter = false }: AdvancedFiltersProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [profileGroups, setProfileGroups] = useState<ProfileGroup[]>([])
@@ -149,8 +153,8 @@ export function AdvancedFilters({ value, onChange }: AdvancedFiltersProps) {
   }
 
   const activeFilterCount =
-    localFilters.accountIds.length +
-    localFilters.profileGroupIds.length +
+    (hideAccountFilter ? 0 : localFilters.accountIds.length) +
+    (hideAccountFilter ? 0 : localFilters.profileGroupIds.length) +
     (localFilters.viewCountGt ? 1 : 0) +
     (localFilters.viewCountLt ? 1 : 0) +
     (localFilters.ocrStatus && localFilters.ocrStatus !== 'all' ? 1 : 0)
@@ -182,6 +186,7 @@ export function AdvancedFilters({ value, onChange }: AdvancedFiltersProps) {
       <PopoverContent className="w-[400px]" align="end">
         <div className="space-y-4">
           {/* Profile Groups Filter */}
+          {!hideAccountFilter && (
           <div className="space-y-3">
             <Label className="text-sm font-medium">Account Groups</Label>
 
@@ -249,8 +254,10 @@ export function AdvancedFilters({ value, onChange }: AdvancedFiltersProps) {
               </div>
             </ScrollArea>
           </div>
+          )}
 
           {/* Accounts Filter */}
+          {!hideAccountFilter && (
           <div className="space-y-3">
             <Label className="text-sm font-medium">Accounts</Label>
             <Input
@@ -336,6 +343,7 @@ export function AdvancedFilters({ value, onChange }: AdvancedFiltersProps) {
               </div>
             </ScrollArea>
           </div>
+          )}
 
           {/* View Count Filters */}
           <div className="space-y-2">
