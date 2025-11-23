@@ -34,7 +34,7 @@ export function DailyViewsChart({ data, loading = false }: DailyViewsChartProps)
     return (
       <div className="h-full rounded-lg border border-border bg-card">
         <div className="p-4">
-          <h3 className="text-base font-semibold mb-4">Daily Total Views</h3>
+          <h3 className="text-base font-semibold mb-4">Daily Views</h3>
           <div className="flex items-center justify-center h-[200px]">
             <div className="text-sm text-muted-foreground">Loading chart data...</div>
           </div>
@@ -47,7 +47,7 @@ export function DailyViewsChart({ data, loading = false }: DailyViewsChartProps)
     return (
       <div className="h-full rounded-lg border border-border bg-card">
         <div className="p-4">
-          <h3 className="text-base font-semibold mb-4">Daily Total Views</h3>
+          <h3 className="text-base font-semibold mb-4">Daily Views</h3>
           <div className="flex items-center justify-center h-[200px]">
             <div className="text-sm text-muted-foreground">No data available</div>
           </div>
@@ -60,7 +60,7 @@ export function DailyViewsChart({ data, loading = false }: DailyViewsChartProps)
     <div className="h-full rounded-lg border border-border bg-card">
       <div className="p-4">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold">Daily Total Views</h3>
+          <h3 className="text-base font-semibold">Daily Views</h3>
           <div className="flex items-center gap-4 text-xs">
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-0.5 bg-purple-500" />
