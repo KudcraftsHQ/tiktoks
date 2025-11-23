@@ -225,15 +225,34 @@ Adapt the core messages to fit the context while maintaining their essence.
   const strategyDescription = generationStrategy === 'remix'
     ? `Your goal is to **remix and paraphrase** the reference posts above. Keep the core structure, themes, and key messages, but rewrite the text in a fresh way while maintaining the essence of the original content.
 
-**CRITICAL - NO PARROTING RULE:**
-   ❌ DO NOT copy or closely paraphrase the exact wording from the reference posts
-   ❌ DO NOT use the same hook text - create a completely NEW hook angle
-   ❌ DO NOT reuse phrases verbatim - every sentence must be freshly written
-   ✅ DO extract the CONCEPT/INSIGHT from each slide, then express it in YOUR OWN words
-   ✅ DO use different examples, metaphors, and phrasing than the original
-   ✅ DO change the hook authority type (e.g., if original uses "internship at tiktok", use "posting for 5 months" or "copied a 1M creator" instead)
+**⚠️ CRITICAL - ANTI-COPY ENFORCEMENT (READ THIS FIRST) ⚠️**
 
-   Think of it like this: You're a different person who learned the SAME insights but would naturally explain them differently. The reference post teaches you WHAT to say, not HOW to say it.`
+This is the #1 rule. Violations will make the output useless.
+
+**THE GOLDEN RULE:** You are a DIFFERENT PERSON who learned the same insights. You would NEVER say it the same way.
+
+**PER-SLIDE VERIFICATION (Do this for EVERY slide before outputting):**
+   Before writing each slide, ask yourself:
+   1. "Does this share more than 3 consecutive words with the reference?" → If yes, REWRITE
+   2. "Am I using the same sentence structure?" → If yes, RESTRUCTURE
+   3. "Am I using the same example (e.g., 'morning makeup', 'drafts lose power')?" → If yes, REPLACE with different example
+   4. "Would someone compare this to the reference and think I copied?" → If yes, START OVER
+
+**WHAT TO EXTRACT vs WHAT TO CHANGE:**
+   ✅ EXTRACT: The underlying CONCEPT (e.g., "drafts have timestamps")
+   ❌ CHANGE: The exact wording, examples, metaphors, sentence structure
+
+   Example - Reference says: "videos left in your drafts lose power. the system timestamps your draft when you create it"
+   ❌ BAD (copying): "drafts lose power. the system timestamps them on creation"
+   ✅ GOOD (rewriting): "sitting on content kills its potential. tiktok treats old drafts like yesterday's news"
+
+**HOOK TRANSFORMATION IS MANDATORY:**
+   The hook MUST use a completely different authority angle than the reference.
+   Reference: "i got invited to visit tiktoks headquarters"
+   ❌ BAD: "i visited tiktoks algorithm lab" (same angle - insider visit)
+   ✅ GOOD: "i copied a creator with 1M followers for 30 days" (different angle - experiment)
+   ✅ GOOD: "my toxic ex interned at tiktok" (different angle - secondhand insider)
+   ✅ GOOD: "ive been posting daily since february" (different angle - personal experience)`
     : `Your goal is to **create new content inspired by** the reference posts above. Use them as inspiration for themes, structure, and style, but create completely new content that explores different angles, examples, or perspectives.`
 
   // Hook examples for the model to learn from
@@ -258,16 +277,60 @@ Pattern breakdown - Authority Types:
 Hook Structure Formula:
    [Authority/Credibility Source] + [Drama/Intrigue Element] + "heres what [learned/discovered/shocked me]..."
 
+**⚠️ HOOK GOLDEN RULE: CREATE CURIOSITY, NEVER SATISFY IT ⚠️**
+
+The hook's ONLY job is to make them swipe. It should PROMISE information, not DELIVER it.
+
+**THE INFORMATION GAP PRINCIPLE:**
+   Your hook must create an "itch" that can ONLY be scratched by swiping.
+   - Set up WHAT you'll reveal, but NEVER reveal it
+   - Tease the category of secrets, not the secrets themselves
+   - The viewer should think "wait, what did they learn?" and NEED to swipe
+
+**GOOD vs BAD HOOKS (Study These):**
+
+   ❌ TOO MUCH INFO (spills the content):
+   "i learned that drafts lose power and engagement matters more than you think..."
+   → Problem: Already told them 2 insights. Why swipe?
+
+   ❌ TOO VAGUE (no curiosity):
+   "some tiktok tips..."
+   → Problem: No authority, no intrigue, no promise
+
+   ✅ PERFECT (promises without revealing):
+   "i got invited to visit tiktoks headquarters, heres everything they revealed about the algorithm..."
+   → Authority established, promise made, zero content revealed
+
+   ✅ PERFECT:
+   "ive been posting consistently for 5 months, heres what ive learned..."
+   → Experience established, teases learnings, nothing given away
+
+   ✅ PERFECT:
+   "my toxic ex interned at tiktok for 5 months and now im exposing everything he told me..."
+   → Drama + insider access + "exposing" = must swipe
+
+   ✅ PERFECT:
+   "common mistakes i see small creators make on tiktok..."
+   → Implies list of mistakes, viewer thinks "am I making these?"
+
+**HOOK STRUCTURE THAT WORKS:**
+   [Authority/Experience] + "heres what ive [learned/discovered/found out]..."
+   OR
+   [Authority/Experience] + "now im [exposing/spilling/revealing] everything..."
+   OR
+   "[Topic] mistakes i see [audience] make..."
+
 CRITICAL HOOK RULES:
-   ❌ DO NOT reveal the actual insight in the hook (save it for slide 2+)
+   ❌ DO NOT reveal ANY actual insight in the hook (save ALL content for slide 2+)
+   ❌ DO NOT list multiple things you learned (just promise you learned things)
    ❌ DO NOT use dramatic language ("truth bomb", "mind blown", "changed EVERYTHING", "totally")
    ❌ DO NOT be overly polished - use casual, lowercase, imperfect grammar ("heres" not "here's", "ive" not "I've", "im" not "I'm")
    ❌ DO NOT add unnecessary hype words or all caps for emphasis
    ❌ DO NOT use emojis in the hook (keep it raw and authentic)
-   ✅ DO create an information gap that can ONLY be closed by swiping to the next slide
-   ✅ DO establish credibility/authority naturally using one of the 5 authority types above
+   ❌ DO NOT start with the insight - start with the AUTHORITY
+   ✅ DO establish credibility/authority FIRST (experience, access, experiment)
+   ✅ DO end with a promise pattern ("heres what...", "now im exposing...", "this is what i found...")
    ✅ DO keep it conversational - like texting a friend, not writing marketing copy
-   ✅ DO end with the "heres what ive learned/discovered/shocked me" pattern or similar casual promise
    ✅ DO use lowercase "i" consistently (never "I")
 
 The hook should feel like a friend about to share a forbidden secret, not a marketer making a pitch.
@@ -548,6 +611,33 @@ ${referenceStructure.slideClassifications
    - Flow from hook → content insights → CTA → conclusion as one narrative
    - Maintain the same casual, authentic tone
    - This is the story TOLD by the carousel, not a description ABOUT the carousel
+
+8. **⚠️ VARIATION DIVERSITY REQUIREMENT (CRITICAL) ⚠️**
+
+   Each of the ${variationCount} variations MUST be distinctly different. Do NOT generate similar variations.
+
+   **MANDATORY DIVERSITY RULES:**
+
+   A. **HOOK DIVERSITY** - Each variation MUST use a DIFFERENT authority type:
+      - Variation 1: Use authority type A (e.g., "visited headquarters")
+      - Variation 2: Use authority type B (e.g., "posting for X months")
+      - Variation 3: Use authority type C (e.g., "copied a 1M creator")
+      - And so on... NO TWO VARIATIONS can use the same hook angle
+
+   B. **CONTENT ANGLE DIVERSITY** - Each variation should approach the insights differently:
+      - Same concept, different metaphor/example
+      - Same insight, different framing (positive vs cautionary)
+      - Reorder which insights appear in which slides
+
+   C. **CTA OPENER DIVERSITY** - Each variation MUST have a unique CTA opener:
+      - ❌ BAD: All variations start CTA with "you can test your videos"
+      - ✅ GOOD: Var 1: "easy to overthink...", Var 2: "the hidden tool...", Var 3: "some apps can really..."
+
+   **SELF-CHECK BEFORE OUTPUT:**
+   Before returning, verify:
+   - "Are all my hooks using different authority angles?" → If not, rewrite
+   - "Would a reader think these are copy-pastes of each other?" → If yes, differentiate
+   - "Is each variation offering a fresh perspective?" → If not, rework
 
 Return the structured JSON response following the schema.`
 

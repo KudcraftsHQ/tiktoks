@@ -128,6 +128,72 @@ export async function GET(request: Request) {
   }
 }
 
+// Helper function to generate concept title and core message from example texts using AI
+async function generateConceptFromExamples(exampleTexts: string[], type: string): Promise<{ title: string; coreMessage: string }> {
+  // Import Gemini using the same pattern as content-generation-service
+  const { GoogleGenAI } = await import('@google/genai')
+
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) {
+    // Fallback to simple title generation
+    const firstText = exampleTexts[0] || ''
+    const truncated = firstText.slice(0, 50) + (firstText.length > 50 ? '...' : '')
+    return {
+      title: `New ${type} Concept`,
+      coreMessage: truncated || 'No examples provided'
+    }
+  }
+
+  try {
+    const ai = new GoogleGenAI({ apiKey })
+
+    const prompt = `You are analyzing content examples for a TikTok carousel content bank.
+
+Given these example texts that belong to a ${type} slide type:
+${exampleTexts.map((text, i) => `${i + 1}. "${text}"`).join('\n')}
+
+Generate a concise concept title (3-6 words) and a core message (1-2 sentences) that captures the common theme or pattern across these examples.
+
+The type is ${type}:
+- HOOK: Opening slide patterns that grab attention
+- CONTENT: Body slide lessons that provide value
+- CTA: Closing slide patterns with calls to action
+
+Respond in JSON format only:
+{
+  "title": "Your Concept Title Here",
+  "coreMessage": "A brief description of the core message or pattern these examples share."
+}`
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: prompt
+    })
+
+    const responseText = response.text || ''
+
+    // Parse JSON from response
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0])
+      return {
+        title: parsed.title || `New ${type} Concept`,
+        coreMessage: parsed.coreMessage || 'Auto-generated concept'
+      }
+    }
+  } catch (error) {
+    console.error('Failed to generate concept with AI:', error)
+  }
+
+  // Fallback
+  const firstText = exampleTexts[0] || ''
+  const truncated = firstText.slice(0, 50) + (firstText.length > 50 ? '...' : '')
+  return {
+    title: `New ${type} Concept`,
+    coreMessage: truncated || 'No examples provided'
+  }
+}
+
 // POST /api/concepts - Create a new concept
 export async function POST(request: Request) {
   try {
@@ -137,20 +203,40 @@ export async function POST(request: Request) {
       title,
       coreMessage,
       type,
-      exampleText // Optional initial example
+      exampleText, // Optional initial example
+      exampleIds,  // Optional: Move existing examples to this new concept
+      autoGenerate // Optional: Auto-generate title/coreMessage from examples
     } = body
 
-    if (!title || !coreMessage) {
+    // If exampleIds provided with autoGenerate, fetch examples and generate title/coreMessage
+    let finalTitle = title
+    let finalCoreMessage = coreMessage
+
+    if (exampleIds && Array.isArray(exampleIds) && exampleIds.length > 0 && autoGenerate) {
+      // Fetch the example texts
+      const examples = await prisma.conceptExample.findMany({
+        where: { id: { in: exampleIds } }
+      })
+
+      const exampleTexts = examples.map(e => e.text)
+      const generated = await generateConceptFromExamples(exampleTexts, type || 'CONTENT')
+
+      finalTitle = finalTitle || generated.title
+      finalCoreMessage = finalCoreMessage || generated.coreMessage
+    }
+
+    if (!finalTitle || !finalCoreMessage) {
       return NextResponse.json(
-        { error: 'title and coreMessage are required' },
+        { error: 'title and coreMessage are required (or provide exampleIds with autoGenerate=true)' },
         { status: 400 }
       )
     }
 
+    // Create the new concept
     const newConcept = await prisma.conceptBank.create({
       data: {
-        title,
-        coreMessage,
+        title: finalTitle,
+        coreMessage: finalCoreMessage,
         type: type || 'CONTENT',
         isActive: true,
         timesUsed: 0,
@@ -171,6 +257,29 @@ export async function POST(request: Request) {
         }
       }
     })
+
+    // If exampleIds provided, move those examples to this new concept
+    if (exampleIds && Array.isArray(exampleIds) && exampleIds.length > 0) {
+      await prisma.conceptExample.updateMany({
+        where: { id: { in: exampleIds } },
+        data: { conceptId: newConcept.id }
+      })
+
+      // Fetch updated concept with examples
+      const updatedConcept = await prisma.conceptBank.findUnique({
+        where: { id: newConcept.id },
+        include: {
+          examples: {
+            orderBy: { createdAt: 'desc' }
+          },
+          _count: {
+            select: { examples: true }
+          }
+        }
+      })
+
+      return NextResponse.json(updatedConcept, { status: 201 })
+    }
 
     return NextResponse.json(newConcept, { status: 201 })
   } catch (error) {

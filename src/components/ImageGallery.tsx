@@ -70,13 +70,16 @@ export function ImageGallery({ images, isOpen, onClose, initialIndex = 0 }: Imag
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl w-full h-[90vh] p-4 bg-black/95 border-0" hideClose>
-        <div className="relative w-full h-full grid grid-rows-[1fr_auto]">
+      <DialogContent
+        className="max-w-[95vw] w-fit max-h-[95vh] p-4 bg-black/95 border-0 overflow-hidden"
+        hideClose
+      >
+        <div className="relative flex flex-col items-center gap-4 max-h-[calc(95vh-2rem)]">
           {/* Close button */}
           <Button
             variant="ghost"
             size="icon"
-            className="absolute top-2 right-2 z-10 text-white hover:bg-white/20"
+            className="absolute top-0 right-0 z-10 text-white hover:bg-white/20"
             onClick={onClose}
           >
             <X className="w-5 h-5" />
@@ -88,7 +91,7 @@ export function ImageGallery({ images, isOpen, onClose, initialIndex = 0 }: Imag
               <Button
                 variant="ghost"
                 size="icon"
-                className="absolute left-2 top-1/2 -translate-y-1/2 z-10 text-white hover:bg-white/20"
+                className="absolute left-0 top-1/2 -translate-y-1/2 z-10 text-white hover:bg-white/20"
                 onClick={goToPrevious}
               >
                 <ChevronLeft className="w-6 h-6" />
@@ -96,7 +99,7 @@ export function ImageGallery({ images, isOpen, onClose, initialIndex = 0 }: Imag
               <Button
                 variant="ghost"
                 size="icon"
-                className="absolute right-2 top-1/2 -translate-y-1/2 z-10 text-white hover:bg-white/20"
+                className="absolute right-0 top-1/2 -translate-y-1/2 z-10 text-white hover:bg-white/20"
                 onClick={goToNext}
               >
                 <ChevronRight className="w-6 h-6" />
@@ -104,28 +107,24 @@ export function ImageGallery({ images, isOpen, onClose, initialIndex = 0 }: Imag
             </>
           )}
 
-          {/* Main image - First row */}
-          <div className="relative w-full overflow-hidden flex items-center justify-center">
+          {/* Main image container */}
+          <div className="flex-1 min-h-0 flex items-center justify-center px-10">
             <img
               src={getProxiedImageUrl(currentImage.url)}
               alt={`Image ${currentIndex + 1} of ${images.length}`}
-              className="w-auto object-contain"
-              style={{
-                maxHeight: '800px',
-                aspectRatio: `${currentImage.width} / ${currentImage.height}`
-              }}
+              className="max-w-full max-h-[calc(95vh-8rem)] w-auto h-auto object-contain"
             />
           </div>
 
-          {/* Second row - Thumbnails or counter */}
-          <div className="relative flex items-center justify-center pt-4 h-20">
+          {/* Thumbnails or counter */}
+          <div className="flex-shrink-0 flex items-center justify-center h-16">
             {images.length > 1 && images.length <= 10 ? (
               <div className="flex space-x-2">
                 {images.map((image, index) => (
                   <button
                     key={index}
-                    className={`w-10 h-14 rounded border-2 overflow-hidden ${
-                      index === currentIndex ? 'border-white' : 'border-white/30'
+                    className={`w-8 h-12 sm:w-10 sm:h-14 rounded border-2 overflow-hidden transition-colors ${
+                      index === currentIndex ? 'border-white' : 'border-white/30 hover:border-white/60'
                     }`}
                     onClick={() => setCurrentIndex(index)}
                   >

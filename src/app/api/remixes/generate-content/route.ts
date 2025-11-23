@@ -117,21 +117,40 @@ export async function POST(request: NextRequest) {
     // Fetch selected concepts if provided
     let concepts: Array<{ id: string; title: string; coreMessage: string; type: string; examples: Array<{ text: string }> }> | undefined
     if (selectedConceptIds && selectedConceptIds.length > 0) {
+      // Fetch all examples first, then randomly select 4 per concept
       const fetchedConcepts = await prisma.conceptBank.findMany({
         where: {
           id: { in: selectedConceptIds },
           isActive: true,
         },
         include: {
-          examples: {
-            take: 2, // Include a couple examples for context
-            orderBy: { createdAt: 'desc' },
-          },
+          examples: true, // Fetch all examples
         },
       })
+
       if (fetchedConcepts.length > 0) {
-        concepts = fetchedConcepts
-        console.log(`📚 [API] Using ${concepts.length} concepts from Concept Bank`)
+        // Randomly select up to 4 examples per concept
+        concepts = fetchedConcepts.map(concept => {
+          const allExamples = concept.examples
+          let selectedExamples: typeof allExamples
+
+          if (allExamples.length <= 4) {
+            // If 4 or fewer examples, use all of them
+            selectedExamples = allExamples
+          } else {
+            // Shuffle and take 4 random examples
+            const shuffled = [...allExamples].sort(() => Math.random() - 0.5)
+            selectedExamples = shuffled.slice(0, 4)
+          }
+
+          return {
+            ...concept,
+            examples: selectedExamples,
+          }
+        })
+
+        const totalExamples = concepts.reduce((sum, c) => sum + c.examples.length, 0)
+        console.log(`📚 [API] Using ${concepts.length} concepts with ${totalExamples} randomized examples from Concept Bank`)
       }
     }
 
