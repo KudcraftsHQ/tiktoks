@@ -35,8 +35,13 @@ import {
   ChevronRight,
   Check,
   Loader2,
-  Search
+  Search,
+  ChevronUp,
+  ChevronDown,
+  X
 } from 'lucide-react'
+import type { RemixSlideType } from '@/lib/validations/remix-schema'
+import { getProxiedImageUrlById } from '@/lib/image-proxy'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -56,20 +61,44 @@ interface AssetFolder {
   _count: { assets: number }
 }
 
+// Slide assignment for slideMode
+export interface SlideAssignment {
+  slideIndex: number
+  asset: AssetItem | null
+}
+
+// Slide mode configuration
+export interface SlideMode {
+  slides: RemixSlideType[]
+  initialActiveSlideIndex?: number
+}
+
 interface AssetPickerProps {
   open: boolean
   onClose: () => void
-  onSelect: (asset: AssetItem) => void
+  onSelect?: (asset: AssetItem) => void
+  onSelectMultiple?: (assets: AssetItem[]) => void
+  // New: For slide-aware assignment mode
+  onSlideAssignments?: (assignments: SlideAssignment[]) => void
   title?: string
   description?: string
+  multiSelect?: boolean
+  maxSelections?: number
+  // New: Slide mode for draft image assignment
+  slideMode?: SlideMode
 }
 
 export function AssetPicker({
   open,
   onClose,
   onSelect,
+  onSelectMultiple,
+  onSlideAssignments,
   title = 'Choose Background Image',
-  description = 'Select an image from your assets or upload new ones'
+  description = 'Select an image from your assets or upload new ones',
+  multiSelect = false,
+  maxSelections,
+  slideMode
 }: AssetPickerProps) {
   const [folders, setFolders] = useState<AssetFolder[]>([])
   const [assets, setAssets] = useState<AssetItem[]>([])
@@ -84,8 +113,14 @@ export function AssetPicker({
   const [draggedAsset, setDraggedAsset] = useState<string | null>(null)
   const [dropTargetFolder, setDropTargetFolder] = useState<string | null>(null)
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null)
+  // Multi-select: ordered array of selected assets
+  const [selectedAssets, setSelectedAssets] = useState<AssetItem[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Slide mode state: Map of slideIndex -> AssetItem (or null for cleared)
+  const [slideAssignments, setSlideAssignments] = useState<Map<number, AssetItem | null>>(new Map())
+  const [activeSlideIndex, setActiveSlideIndex] = useState<number>(0)
 
   useEffect(() => {
     if (open) {
@@ -93,8 +128,24 @@ export function AssetPicker({
       fetchAssets()
       setSearchQuery('')
       setSelectedAssetId(null)
+      setSelectedAssets([])
+
+      // Initialize slide mode state
+      if (slideMode) {
+        setSlideAssignments(new Map())
+        // Set active slide to initialActiveSlideIndex or first slide without background
+        const initialActive = slideMode.initialActiveSlideIndex ??
+          slideMode.slides.findIndex(slide => {
+            const hasImage = slide.backgroundLayers?.some(
+              layer => layer.type === 'image' && layer.cacheAssetId
+            )
+            return !hasImage
+          })
+        setActiveSlideIndex(initialActive >= 0 ? initialActive : 0)
+      }
     }
-  }, [open, currentFolderId])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, currentFolderId, slideMode?.initialActiveSlideIndex])
 
   // Handle paste from clipboard
   useEffect(() => {
@@ -334,10 +385,231 @@ export function AssetPicker({
   }
 
   const handleSelect = () => {
-    const selected = assets.find(a => a.id === selectedAssetId)
-    if (selected) {
-      onSelect(selected)
-      onClose()
+    // Handle slide mode
+    if (slideMode && onSlideAssignments) {
+      const assignments: SlideAssignment[] = []
+      for (const [slideIndex, asset] of slideAssignments.entries()) {
+        assignments.push({ slideIndex, asset })
+      }
+      if (assignments.length > 0) {
+        onSlideAssignments(assignments)
+        onClose()
+      }
+      return
+    }
+
+    if (multiSelect) {
+      if (selectedAssets.length > 0 && onSelectMultiple) {
+        onSelectMultiple(selectedAssets)
+        onClose()
+      }
+    } else {
+      const selected = assets.find(a => a.id === selectedAssetId)
+      if (selected && onSelect) {
+        onSelect(selected)
+        onClose()
+      }
+    }
+  }
+
+  // Handle clicking on an asset
+  const handleAssetClick = (asset: AssetItem) => {
+    // Slide mode takes priority
+    if (slideMode) {
+      handleSlideAssetClick(asset)
+      return
+    }
+
+    if (multiSelect) {
+      const existingIndex = selectedAssets.findIndex(a => a.id === asset.id)
+      if (existingIndex !== -1) {
+        // Deselect: remove from array
+        setSelectedAssets(selectedAssets.filter(a => a.id !== asset.id))
+      } else {
+        // Select: add to array (if under max limit)
+        if (maxSelections && selectedAssets.length >= maxSelections) {
+          toast.error(`Maximum ${maxSelections} images can be selected`)
+          return
+        }
+        setSelectedAssets([...selectedAssets, asset])
+      }
+    } else {
+      setSelectedAssetId(asset.id)
+    }
+  }
+
+  // Get selection index for multi-select mode (1-based for display)
+  const getSelectionIndex = (assetId: string): number => {
+    return selectedAssets.findIndex(a => a.id === assetId) + 1
+  }
+
+  // Move selected asset up in order
+  const moveSelectionUp = (index: number) => {
+    if (index <= 0) return
+    const newSelected = [...selectedAssets]
+    const temp = newSelected[index - 1]
+    newSelected[index - 1] = newSelected[index]
+    newSelected[index] = temp
+    setSelectedAssets(newSelected)
+  }
+
+  // Move selected asset down in order
+  const moveSelectionDown = (index: number) => {
+    if (index >= selectedAssets.length - 1) return
+    const newSelected = [...selectedAssets]
+    const temp = newSelected[index + 1]
+    newSelected[index + 1] = newSelected[index]
+    newSelected[index] = temp
+    setSelectedAssets(newSelected)
+  }
+
+  // Remove from selection
+  const removeFromSelection = (assetId: string) => {
+    setSelectedAssets(selectedAssets.filter(a => a.id !== assetId))
+  }
+
+  // ========== SLIDE MODE FUNCTIONS ==========
+
+  // Check if a slide has a background image (either existing or pending assignment)
+  const slideHasImage = (slideIndex: number): boolean => {
+    // Check pending assignments first
+    if (slideAssignments.has(slideIndex)) {
+      return slideAssignments.get(slideIndex) !== null
+    }
+    // Check existing background
+    if (slideMode) {
+      const slide = slideMode.slides[slideIndex]
+      return slide?.backgroundLayers?.some(
+        layer => layer.type === 'image' && layer.cacheAssetId
+      ) || false
+    }
+    return false
+  }
+
+  // Get the assigned asset for a slide (pending assignment takes precedence)
+  const getSlideAssignment = (slideIndex: number): AssetItem | null => {
+    if (slideAssignments.has(slideIndex)) {
+      return slideAssignments.get(slideIndex) || null
+    }
+    return null
+  }
+
+  // Get which slide index an asset is assigned to (returns -1 if not assigned)
+  // Checks both pending assignments AND existing slide backgrounds
+  const getAssetSlideIndex = (assetId: string, cacheAssetId?: string): number => {
+    // First check pending assignments
+    for (const [slideIndex, asset] of slideAssignments.entries()) {
+      if (asset?.id === assetId) {
+        return slideIndex
+      }
+    }
+
+    // Then check existing slide backgrounds (if not cleared)
+    if (slideMode && cacheAssetId) {
+      for (let i = 0; i < slideMode.slides.length; i++) {
+        // Skip if this slide has a pending assignment (either new image or cleared)
+        if (slideAssignments.has(i)) continue
+
+        const slide = slideMode.slides[i]
+        const existingImageLayer = slide.backgroundLayers?.find(
+          layer => layer.type === 'image' && layer.cacheAssetId
+        )
+        if (existingImageLayer?.cacheAssetId === cacheAssetId) {
+          return i
+        }
+      }
+    }
+
+    return -1
+  }
+
+  // Find the next empty slide index starting from a given index
+  const findNextEmptySlide = (startIndex: number): number => {
+    if (!slideMode) return 0
+    const slideCount = slideMode.slides.length
+
+    // Search from startIndex to end
+    for (let i = startIndex; i < slideCount; i++) {
+      if (!slideHasImage(i)) return i
+    }
+    // Search from beginning to startIndex
+    for (let i = 0; i < startIndex; i++) {
+      if (!slideHasImage(i)) return i
+    }
+    // All slides have images, return current
+    return startIndex
+  }
+
+  // Assign an asset to a slide
+  const assignAssetToSlide = (asset: AssetItem, slideIndex: number) => {
+    const newAssignments = new Map(slideAssignments)
+
+    // Remove this asset from any other pending assignment first (1:1 mapping)
+    for (const [idx, assignedAsset] of newAssignments.entries()) {
+      if (assignedAsset?.id === asset.id) {
+        newAssignments.delete(idx)
+      }
+    }
+
+    // Also check if this asset is already used in an existing slide background
+    // If so, we need to clear that slide
+    if (slideMode && asset.cacheAssetId) {
+      for (let i = 0; i < slideMode.slides.length; i++) {
+        if (i === slideIndex) continue // Skip the target slide
+        if (newAssignments.has(i)) continue // Already handled by pending assignments
+
+        const slide = slideMode.slides[i]
+        const existingImageLayer = slide.backgroundLayers?.find(
+          layer => layer.type === 'image' && layer.cacheAssetId
+        )
+        if (existingImageLayer?.cacheAssetId === asset.cacheAssetId) {
+          // Clear the existing slide that has this asset
+          newAssignments.set(i, null)
+          break // Asset can only be in one slide
+        }
+      }
+    }
+
+    // Assign to new slide
+    newAssignments.set(slideIndex, asset)
+    setSlideAssignments(newAssignments)
+
+    // Auto-advance to next empty slide
+    const nextEmpty = findNextEmptySlide(slideIndex + 1)
+    setActiveSlideIndex(nextEmpty)
+  }
+
+  // Clear a slide assignment
+  const clearSlideAssignment = (slideIndex: number) => {
+    const newAssignments = new Map(slideAssignments)
+    // Set to null to indicate "clear existing"
+    newAssignments.set(slideIndex, null)
+    setSlideAssignments(newAssignments)
+
+    // Make this slide active since it's now empty
+    setActiveSlideIndex(slideIndex)
+  }
+
+  // Handle asset click in slide mode
+  const handleSlideAssetClick = (asset: AssetItem) => {
+    const existingSlideIndex = getAssetSlideIndex(asset.id, asset.cacheAssetId)
+
+    if (existingSlideIndex !== -1) {
+      // Already assigned - remove it (or clear if it's an existing background)
+      const newAssignments = new Map(slideAssignments)
+      // Check if this is an existing background (not a pending assignment)
+      const isPendingAssignment = slideAssignments.has(existingSlideIndex) && slideAssignments.get(existingSlideIndex)?.id === asset.id
+      if (isPendingAssignment) {
+        // Remove pending assignment
+        newAssignments.delete(existingSlideIndex)
+      } else {
+        // Clear existing background
+        newAssignments.set(existingSlideIndex, null)
+      }
+      setSlideAssignments(newAssignments)
+    } else {
+      // Assign to active slide
+      assignAssetToSlide(asset, activeSlideIndex)
     }
   }
 
@@ -411,6 +683,115 @@ export function AssetPicker({
               className="hidden"
             />
           </div>
+
+          {/* Slide Preview Panel - Only shown in slide mode */}
+          {slideMode && (
+            <div className="px-6 py-3 border-b bg-muted/30 flex-shrink-0">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm font-medium">Slide Assignment</span>
+                <span className="text-xs text-muted-foreground">
+                  (click a slide to target it, then pick an image)
+                </span>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {slideMode.slides.map((slide, index) => {
+                  const isActive = activeSlideIndex === index
+                  const pendingAsset = getSlideAssignment(index)
+
+                  // Find existing image layer and get URL from cacheAssetId
+                  const existingImageLayer = slide.backgroundLayers?.find(
+                    layer => layer.type === 'image' && layer.cacheAssetId
+                  )
+                  const hasExistingImage = !!existingImageLayer
+                  const existingImageUrl = existingImageLayer?.cacheAssetId
+                    ? getProxiedImageUrlById(existingImageLayer.cacheAssetId)
+                    : null
+
+                  const isCleared = slideAssignments.has(index) && slideAssignments.get(index) === null
+
+                  // Determine what to show
+                  let showImage: string | null = null
+
+                  if (pendingAsset) {
+                    // Show pending assignment
+                    showImage = pendingAsset.url
+                  } else if (isCleared) {
+                    // Explicitly cleared - show empty
+                    showImage = null
+                  } else if (hasExistingImage && existingImageUrl) {
+                    // Show existing background
+                    showImage = existingImageUrl
+                  }
+
+                  return (
+                    <div
+                      key={slide.id || index}
+                      className="relative flex-shrink-0 group"
+                    >
+                      <button
+                        onClick={() => setActiveSlideIndex(index)}
+                        className={cn(
+                          "w-12 h-16 rounded-md overflow-hidden border-2 transition-all",
+                          isActive
+                            ? "border-primary ring-2 ring-primary ring-offset-1"
+                            : "border-border hover:border-primary/50"
+                        )}
+                      >
+                        {showImage ? (
+                          <img
+                            src={showImage}
+                            alt={`Slide ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-muted flex items-center justify-center border-2 border-dashed border-border">
+                            <span className="text-[10px] text-muted-foreground">Empty</span>
+                          </div>
+                        )}
+                      </button>
+
+                      {/* Slide number badge */}
+                      <div className={cn(
+                        "absolute -top-1 -left-1 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold",
+                        isActive
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted-foreground/80 text-background"
+                      )}>
+                        {index + 1}
+                      </div>
+
+                      {/* Clear button - show when has image (pending or existing) */}
+                      {(pendingAsset || (hasExistingImage && !isCleared)) && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            clearSlideAssignment(index)
+                          }}
+                          className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+
+                      {/* Pending indicator */}
+                      {pendingAsset && (
+                        <div className="absolute bottom-0 left-0 right-0 bg-primary/90 text-primary-foreground text-[8px] text-center py-0.5">
+                          New
+                        </div>
+                      )}
+
+                      {/* Cleared indicator */}
+                      {isCleared && hasExistingImage && (
+                        <div className="absolute bottom-0 left-0 right-0 bg-destructive/90 text-destructive-foreground text-[8px] text-center py-0.5">
+                          Clear
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Asset Grid - Scrollable */}
           <div
@@ -516,7 +897,17 @@ export function AssetPicker({
 
                 {/* Assets */}
                 {filteredAssets.map((asset) => {
-                  const isSelected = selectedAssetId === asset.id
+                  // Slide mode selection - check both pending assignments and existing backgrounds
+                  const slideIndex = slideMode ? getAssetSlideIndex(asset.id, asset.cacheAssetId) : -1
+                  const isSlideSelected = slideIndex !== -1
+
+                  // Multi-select / single select mode
+                  const isSelected = slideMode
+                    ? isSlideSelected
+                    : multiSelect
+                      ? selectedAssets.some(a => a.id === asset.id)
+                      : selectedAssetId === asset.id
+                  const selectionIndex = multiSelect ? getSelectionIndex(asset.id) : 0
 
                   return (
                     <ContextMenu key={asset.id}>
@@ -530,13 +921,29 @@ export function AssetPicker({
                           draggable
                           onDragStart={() => handleAssetDragStart(asset.id)}
                           onDragEnd={handleAssetDragEnd}
-                          onClick={() => setSelectedAssetId(asset.id)}
+                          onClick={() => handleAssetClick(asset)}
                         >
-                          {isSelected && (
+                          {/* Slide mode: Show slide index badge (S1, S2...) */}
+                          {slideMode && isSlideSelected && (
                             <div className="absolute inset-0 bg-primary/20 flex items-center justify-center z-10">
-                              <div className="bg-primary text-primary-foreground rounded-full p-2">
-                                <Check className="h-5 w-5" />
+                              <div className="bg-primary text-primary-foreground rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
+                                S{slideIndex + 1}
                               </div>
+                            </div>
+                          )}
+
+                          {/* Multi-select / single select mode */}
+                          {!slideMode && isSelected && (
+                            <div className="absolute inset-0 bg-primary/20 flex items-center justify-center z-10">
+                              {multiSelect ? (
+                                <div className="bg-primary text-primary-foreground rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
+                                  {selectionIndex}
+                                </div>
+                              ) : (
+                                <div className="bg-primary text-primary-foreground rounded-full p-2">
+                                  <Check className="h-5 w-5" />
+                                </div>
+                              )}
                             </div>
                           )}
                           <img
@@ -597,6 +1004,68 @@ export function AssetPicker({
             )}
           </div>
 
+          {/* Multi-select Preview Panel */}
+          {multiSelect && selectedAssets.length > 0 && (
+            <div className="px-6 py-3 border-t bg-muted/30 flex-shrink-0">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm font-medium">
+                  Selected: {selectedAssets.length}{maxSelections ? ` / ${maxSelections}` : ''}
+                </span>
+                <span className="text-xs text-muted-foreground">(drag or use arrows to reorder)</span>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {selectedAssets.map((asset, index) => (
+                  <div
+                    key={asset.id}
+                    className="relative flex-shrink-0 w-16 group"
+                  >
+                    <div className="aspect-square rounded-md overflow-hidden border-2 border-primary">
+                      <img
+                        src={asset.url}
+                        alt={asset.name || ''}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    {/* Index badge */}
+                    <div className="absolute -top-1 -left-1 bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
+                      {index + 1}
+                    </div>
+                    {/* Reorder controls */}
+                    <div className="absolute -right-1 top-0 bottom-0 flex flex-col justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => moveSelectionUp(index)}
+                        disabled={index === 0}
+                        className={cn(
+                          "bg-background border rounded p-0.5",
+                          index === 0 ? "opacity-30 cursor-not-allowed" : "hover:bg-accent"
+                        )}
+                      >
+                        <ChevronUp className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={() => moveSelectionDown(index)}
+                        disabled={index === selectedAssets.length - 1}
+                        className={cn(
+                          "bg-background border rounded p-0.5",
+                          index === selectedAssets.length - 1 ? "opacity-30 cursor-not-allowed" : "hover:bg-accent"
+                        )}
+                      >
+                        <ChevronDown className="h-3 w-3" />
+                      </button>
+                    </div>
+                    {/* Remove button */}
+                    <button
+                      onClick={() => removeFromSelection(asset.id)}
+                      className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Footer Actions */}
           <div className="flex items-center justify-between px-6 py-4 border-t bg-background flex-shrink-0">
             <p className="text-sm text-muted-foreground">
@@ -606,8 +1075,21 @@ export function AssetPicker({
               <Button variant="outline" onClick={onClose}>
                 Cancel
               </Button>
-              <Button onClick={handleSelect} disabled={!selectedAssetId}>
-                Select
+              <Button
+                onClick={handleSelect}
+                disabled={
+                  slideMode
+                    ? slideAssignments.size === 0
+                    : multiSelect
+                      ? selectedAssets.length === 0
+                      : !selectedAssetId
+                }
+              >
+                {slideMode
+                  ? `Apply ${slideAssignments.size > 0 ? `(${slideAssignments.size} slide${slideAssignments.size !== 1 ? 's' : ''})` : ''}`
+                  : multiSelect
+                    ? `Apply ${selectedAssets.length > 0 ? `(${selectedAssets.length})` : ''}`
+                    : 'Select'}
               </Button>
             </div>
           </div>
