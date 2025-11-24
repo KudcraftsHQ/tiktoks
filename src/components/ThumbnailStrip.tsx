@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { SlideThumbnail } from './SlideThumbnail'
-import { AssetPicker, AssetItem } from './AssetPicker'
+import { AssetPicker, AssetItem, SlideAssignment } from './AssetPicker'
 import type { RemixSlideType } from '@/lib/validations/remix-schema'
 
 interface ThumbnailStripProps {
@@ -12,7 +12,7 @@ interface ThumbnailStripProps {
   size?: 'sm' | 'md' | 'lg'
   className?: string
   draftId?: string
-  onBackgroundImageSelect?: (slideIndex: number, asset: AssetItem) => void
+  onBulkBackgroundImageSelect?: (assignments: { slideIndex: number; asset: AssetItem | null }[]) => void
 }
 
 export function ThumbnailStrip({
@@ -22,10 +22,10 @@ export function ThumbnailStrip({
   size = 'sm',
   className = '',
   draftId,
-  onBackgroundImageSelect
+  onBulkBackgroundImageSelect
 }: ThumbnailStripProps) {
   const [assetPickerOpen, setAssetPickerOpen] = useState(false)
-  const [selectedSlideIndex, setSelectedSlideIndex] = useState<number | null>(null)
+  const [initialActiveSlide, setInitialActiveSlide] = useState<number>(0)
 
   // Helper to check if slide has a background image
   const hasBackgroundImage = (slide: RemixSlideType): boolean => {
@@ -33,11 +33,9 @@ export function ThumbnailStrip({
   }
 
   const handleThumbnailClick = (slideIndex: number) => {
-    const slide = slides[slideIndex]
-
-    // If no background image and we have draftId, open asset picker
-    if (!hasBackgroundImage(slide) && draftId) {
-      setSelectedSlideIndex(slideIndex)
+    // If we have draftId and bulk handler, open asset picker in slide mode
+    if (draftId && onBulkBackgroundImageSelect) {
+      setInitialActiveSlide(slideIndex)
       setAssetPickerOpen(true)
     } else if (onSlideClick) {
       // Otherwise use the default slide click handler
@@ -45,12 +43,11 @@ export function ThumbnailStrip({
     }
   }
 
-  const handleAssetSelect = (asset: AssetItem) => {
-    if (selectedSlideIndex !== null && onBackgroundImageSelect) {
-      onBackgroundImageSelect(selectedSlideIndex, asset)
+  const handleSlideAssignments = (assignments: SlideAssignment[]) => {
+    if (onBulkBackgroundImageSelect) {
+      onBulkBackgroundImageSelect(assignments)
     }
     setAssetPickerOpen(false)
-    setSelectedSlideIndex(null)
   }
 
   if (!slides || slides.length === 0) {
@@ -65,39 +62,43 @@ export function ThumbnailStrip({
 
   return (
     <>
-      <div className={`flex gap-1 overflow-x-auto scrollbar-hide ${className}`}>
-        {slides.map((slide, index) => {
-          const hasImage = hasBackgroundImage(slide)
+      <div className={`flex items-center gap-2 ${className}`}>
+        <div className="flex gap-1 overflow-x-auto scrollbar-hide">
+          {slides.map((slide, index) => {
+            const hasImage = hasBackgroundImage(slide)
 
-          return (
-            <div key={slide.id} className="flex-shrink-0 relative group">
-              <SlideThumbnail
-                slide={slide}
-                slideIndex={index}
-                loading={loading}
-                size={size}
-                onClick={() => handleThumbnailClick(index)}
-              />
-              {/* Show dashed border when no background image and asset picker is available */}
-              {!hasImage && draftId && (
-                <div className="absolute inset-0 bg-background/60 border-2 border-dashed border-border rounded pointer-events-none" />
-              )}
-            </div>
-          )
-        })}
+            return (
+              <div key={slide.id} className="flex-shrink-0 relative group">
+                <SlideThumbnail
+                  slide={slide}
+                  slideIndex={index}
+                  loading={loading}
+                  size={size}
+                  onClick={() => handleThumbnailClick(index)}
+                />
+                {/* Show dashed border when no background image and asset picker is available */}
+                {!hasImage && draftId && (
+                  <div className="absolute inset-0 bg-background/60 border-2 border-dashed border-border rounded pointer-events-none" />
+                )}
+              </div>
+            )
+          })}
+        </div>
+
       </div>
 
-      {/* Asset Picker Dialog */}
+      {/* Asset Picker Dialog - using slideMode for slide-aware assignment */}
       {draftId && (
         <AssetPicker
           open={assetPickerOpen}
-          onClose={() => {
-            setAssetPickerOpen(false)
-            setSelectedSlideIndex(null)
+          onClose={() => setAssetPickerOpen(false)}
+          onSlideAssignments={handleSlideAssignments}
+          title="Select Background Images"
+          description="Click a slide to target it, then pick an image. Click images to assign/unassign."
+          slideMode={{
+            slides,
+            initialActiveSlideIndex: initialActiveSlide
           }}
-          onSelect={handleAssetSelect}
-          title="Choose Background Image"
-          description="Select an image from your assets or upload new ones"
         />
       )}
     </>

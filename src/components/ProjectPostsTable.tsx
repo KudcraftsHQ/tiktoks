@@ -1186,6 +1186,122 @@ export function ProjectPostsTable({
     }
   }, [displayRows, getSlidesArray, rows])
 
+  // Handler to set multiple slide backgrounds at once
+  // cacheAssetId can be null to clear the background
+  const handleSetMultipleSlideBackgrounds = useCallback(async (
+    draftId: string,
+    assignments: { slideIndex: number; cacheAssetId: string | null }[]
+  ) => {
+    // Find the draft in current rows
+    const draftIndex = displayRows.findIndex(row => row.id === draftId && row._rowType === 'draft')
+    if (draftIndex === -1) return
+
+    const draft = displayRows[draftIndex] as RemixPost & { _rowType: 'draft' }
+
+    // Parse existing slides
+    let existingSlides = getSlidesArray(draft.slides)
+
+    // Build batch updates for API
+    const updates: { slideIndex: number; backgroundLayers: any[] }[] = []
+    const updatedSlides = [...existingSlides]
+
+    for (const { slideIndex, cacheAssetId } of assignments) {
+      if (slideIndex >= existingSlides.length) continue
+
+      const currentSlide = existingSlides[slideIndex]
+      const backgroundLayers = currentSlide.backgroundLayers || []
+      const imageLayerIndex = backgroundLayers.findIndex((layer: any) => layer.type === 'image')
+
+      let updatedBackgroundLayers
+
+      if (cacheAssetId === null) {
+        // Clear: Remove the image layer
+        if (imageLayerIndex !== -1) {
+          updatedBackgroundLayers = backgroundLayers.filter((_: any, idx: number) => idx !== imageLayerIndex)
+        } else {
+          // No image layer to remove, skip this update
+          continue
+        }
+      } else if (imageLayerIndex !== -1) {
+        // Update existing image layer
+        updatedBackgroundLayers = [...backgroundLayers]
+        updatedBackgroundLayers[imageLayerIndex] = {
+          ...updatedBackgroundLayers[imageLayerIndex],
+          cacheAssetId: cacheAssetId
+        }
+      } else {
+        // Add new image layer
+        const newImageLayer = {
+          id: `bg_${Date.now()}_${slideIndex}_image`,
+          type: 'image' as const,
+          cacheAssetId: cacheAssetId,
+          x: 0,
+          y: 0,
+          width: 1,
+          height: 1,
+          rotation: 0,
+          fitMode: 'cover' as const,
+          opacity: 1,
+          blendMode: 'normal' as const,
+          zIndex: 1
+        }
+        updatedBackgroundLayers = [newImageLayer, ...backgroundLayers]
+      }
+
+      // Add to batch updates
+      updates.push({
+        slideIndex,
+        backgroundLayers: updatedBackgroundLayers
+      })
+
+      // Update local slide for optimistic update
+      updatedSlides[slideIndex] = {
+        ...currentSlide,
+        backgroundLayers: updatedBackgroundLayers
+      }
+    }
+
+    // Optimistically update the UI
+    const updatedDraft = {
+      ...draft,
+      slides: updatedSlides
+    }
+
+    const updatedRows = [...displayRows]
+    updatedRows[draftIndex] = updatedDraft
+    setOptimisticRows(updatedRows)
+
+    // Invalidate thumbnail cache for all updated slides
+    for (const { slideIndex } of assignments) {
+      if (slideIndex < updatedSlides.length) {
+        invalidateSlideThumbnail(updatedSlides[slideIndex])
+      }
+    }
+
+    try {
+      const response = await fetch(`/api/remixes/${draftId}/slides/batch`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ updates })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update slide backgrounds')
+      }
+
+      toast.success(`Updated ${assignments.length} slide backgrounds`)
+    } catch (error) {
+      console.error('Failed to update slide backgrounds:', error)
+      toast.error('Failed to update background images')
+
+      // Revert optimistic update
+      setOptimisticRows(rows)
+      throw error
+    }
+  }, [displayRows, getSlidesArray, rows])
+
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return
 
@@ -1317,7 +1433,7 @@ export function ProjectPostsTable({
     // Content mode: Match post row structure exactly
     if (viewMode === 'content') {
       return (
-        <div className="flex flex-col items-start gap-2.5 w-full py-1">
+        <div className="flex flex-col items-start gap-2.5 py-1 overflow-visible">
           {/* Row 1: Draft Name */}
           <div className="flex flex-col gap-0.5 w-full" onClick={(e) => e.stopPropagation()}>
             <DraftNameEditor
@@ -1327,14 +1443,20 @@ export function ProjectPostsTable({
             />
           </div>
 
-          {/* Row 2: Thumbnail Strip */}
-          <div className="flex items-center">
+          {/* Row 2: Thumbnail Strip - visually spans across author and metrics columns */}
+          <div className="flex items-center w-[350px] overflow-x-auto scrollbar-thin">
             <ThumbnailStrip
               slides={slides}
               size="sm"
               draftId={draft.id}
-              onBackgroundImageSelect={async (slideIndex, asset) => {
-                await handleSetSlideBackground(draft.id, slideIndex, asset.cacheAssetId)
+              onBulkBackgroundImageSelect={async (assignments) => {
+                await handleSetMultipleSlideBackgrounds(
+                  draft.id,
+                  assignments.map(a => ({
+                    slideIndex: a.slideIndex,
+                    cacheAssetId: a.asset?.cacheAssetId ?? null
+                  }))
+                )
               }}
             />
           </div>
@@ -1363,7 +1485,7 @@ export function ProjectPostsTable({
         />
       </div>
     )
-  }, [viewMode, getSlidesArray, handleSaveDraftName, handleSetSlideBackground, formatDateTime, formatRelativeTime])
+  }, [viewMode, getSlidesArray, handleSaveDraftName, handleSetMultipleSlideBackgrounds, formatDateTime, formatRelativeTime])
 
   const renderDraftContentColumn = useCallback((draft: RemixPost) => {
     const slides = getSlidesArray(draft.slides)
@@ -1662,8 +1784,6 @@ export function ProjectPostsTable({
               return renderDraftContentColumn(draft)
             case 'description':
               return renderDraftDescriptionColumn(draft)
-            case 'metrics':
-              return <div className="text-sm text-muted-foreground">{getSlidesArray(draft.slides).length} slides</div>
             case 'publishedAt':
               return <div className="text-sm text-muted-foreground">{formatDate(draft.createdAt)}</div>
             case 'actions':
