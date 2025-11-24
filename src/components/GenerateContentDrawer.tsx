@@ -139,7 +139,6 @@ export function GenerateContentDrawer({
   // Reset form when drawer opens
   useEffect(() => {
     if (isOpen) {
-      setSelectedProductId('')
       setGenerationStrategy('remix')
       setLanguageStyle('follow the reference content language style')
       setContentIdeas('')
@@ -147,8 +146,16 @@ export function GenerateContentDrawer({
       setMinSlides(defaultMinSlides ?? '')
       setMaxSlides(defaultMaxSlides ?? '')
       // Note: selectedConceptIds is set in fetchConcepts to select all by default
+      // Note: selectedProductId is set in a separate effect when productContexts are loaded
     }
   }, [isOpen, defaultVariationCount, defaultMinSlides, defaultMaxSlides])
+
+  // Auto-select first product context when loaded
+  useEffect(() => {
+    if (productContexts.length > 0 && selectedProductId === '') {
+      setSelectedProductId(productContexts[0].id)
+    }
+  }, [productContexts, selectedProductId])
 
   const fetchPostPreviews = async () => {
     setIsLoadingPosts(true)
@@ -565,7 +572,7 @@ export function GenerateContentDrawer({
             <div className="space-y-4">
               {/* Product Context */}
               <div>
-                <Label htmlFor="productContext">Product Context (Optional)</Label>
+                <Label htmlFor="productContext">Product Context</Label>
                 <select
                   id="productContext"
                   value={selectedProductId}
@@ -573,7 +580,6 @@ export function GenerateContentDrawer({
                   className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   disabled={isLoadingProducts}
                 >
-                  <option value="">None</option>
                   {productContexts.map((pc) => (
                     <option key={pc.id} value={pc.id}>
                       {pc.title}
