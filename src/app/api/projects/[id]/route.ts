@@ -83,9 +83,10 @@ export async function GET(
               }
             }
           },
-          orderBy: {
-            createdAt: 'desc'
-          }
+          orderBy: [
+            { createdAt: 'asc' },  // Oldest first for consistent ordering
+            { id: 'asc' }          // Secondary sort by id for stability
+          ]
         },
         _count: {
           select: {
