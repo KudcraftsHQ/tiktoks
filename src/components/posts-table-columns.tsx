@@ -516,9 +516,9 @@ export const createPostsTableColumns = ({
     accessorKey: 'authorHandle',
     header: 'Author',
     enableSorting: false,
-    size: 250,
-    minSize: 250,
-    maxSize: 250,
+    size: 350,
+    minSize: 350,
+    maxSize: 350,
     meta: {
       pinned: 'left'
     },
@@ -537,159 +537,153 @@ export const createPostsTableColumns = ({
       const images = post._proxiedImages || []
 
       return (
-        <div className="flex flex-col items-start gap-3 w-full ">
-          {/* Row 1: Author Info */}
-          <div
-            className="flex items-center space-x-2 cursor-pointer hover:bg-muted/50 -mx-2 px-2 py-1 rounded-md transition-colors"
-            onClick={handleClick}
-          >
-            {post._proxiedAuthorAvatar ? (
-              <img
-                src={post._proxiedAuthorAvatar}
-                alt={post.authorHandle}
-                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-              />
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                <span className="text-xs font-semibold">{post.authorHandle?.[0]?.toUpperCase()}</span>
+        <div className="flex gap-4 w-full">
+          {/* Left: Author info, thumbnails, date */}
+          <div className="flex flex-col items-start gap-3 flex-1 min-w-0">
+            {/* Row 1: Author Info */}
+            <div
+              className="flex items-center space-x-2 cursor-pointer hover:bg-muted/50 -mx-2 px-2 py-1 rounded-md transition-colors"
+              onClick={handleClick}
+            >
+              {post._proxiedAuthorAvatar ? (
+                <img
+                  src={post._proxiedAuthorAvatar}
+                  alt={post.authorHandle}
+                  className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs font-semibold">{post.authorHandle?.[0]?.toUpperCase()}</span>
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm truncate">
+                  <HighlightedText
+                    text={post.authorNickname || post.authorHandle || ''}
+                    searchTerms={searchTerms}
+                  />
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  @<HighlightedText
+                    text={post.authorHandle || ''}
+                    searchTerms={searchTerms}
+                  />
+                </p>
               </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-sm truncate">
-                <HighlightedText
-                  text={post.authorNickname || post.authorHandle || ''}
-                  searchTerms={searchTerms}
-                />
-              </p>
-              <p className="text-xs text-muted-foreground truncate">
-                @<HighlightedText
-                  text={post.authorHandle || ''}
-                  searchTerms={searchTerms}
-                />
-              </p>
             </div>
-          </div>
 
-          {/* Row 2: Slides Content (compact thumbnails) */}
-          {post.contentType === 'photo' && images.length > 0 && (
-            <div className="flex items-center space-x-2">
-              <div className="flex space-x-1">
-                {images.slice(0, 5).map((image: any, index: number) => {
-                  const isLast = index === images.slice(0, 5).length - 1
-                  const remainingCount = images.length - 5
+            {/* Row 2: Slides Content (compact thumbnails) */}
+            {post.contentType === 'photo' && images.length > 0 && (
+              <div className="flex items-center space-x-2">
+                <div className="flex space-x-1">
+                  {images.slice(0, 5).map((image: any, index: number) => {
+                    const isLast = index === images.slice(0, 5).length - 1
+                    const remainingCount = images.length - 5
 
-                  return (
-                    <div key={index} className="relative">
-                      <img
-                        src={image._proxiedUrl}
-                        alt={`Photo ${index + 1}`}
-                        className="w-10 aspect-[9/16] rounded object-cover cursor-pointer hover:opacity-80 border"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onOpenImageGallery?.(images.map((img: any) => ({ url: img._proxiedUrl || img.url, width: img.width, height: img.height })), index)
-                        }}
-                      />
-                      {isLast && remainingCount > 0 && (
-                        <div
-                          className="absolute inset-0 bg-black/70 rounded flex items-center justify-center cursor-pointer hover:bg-black/80 transition-colors"
+                    return (
+                      <div key={index} className="relative">
+                        <img
+                          src={image._proxiedUrl}
+                          alt={`Photo ${index + 1}`}
+                          className="w-10 aspect-[9/16] rounded object-cover cursor-pointer hover:opacity-80 border"
                           onClick={(e) => {
                             e.stopPropagation()
                             onOpenImageGallery?.(images.map((img: any) => ({ url: img._proxiedUrl || img.url, width: img.width, height: img.height })), index)
                           }}
-                        >
-                          <span className="text-white text-xs font-bold">
-                            +{remainingCount}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
+                        />
+                        {isLast && remainingCount > 0 && (
+                          <div
+                            className="absolute inset-0 bg-black/70 rounded flex items-center justify-center cursor-pointer hover:bg-black/80 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onOpenImageGallery?.(images.map((img: any) => ({ url: img._proxiedUrl || img.url, width: img.width, height: img.height })), index)
+                            }}
+                          >
+                            <span className="text-white text-xs font-bold">
+                              +{remainingCount}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Row 2.5: Music Info */}
+            {post.musicTitle && post.musicAuthor && post.musicUrl && (
+              <a
+                href={post.musicUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                </svg>
+                <span className="truncate">
+                  <span className="font-medium">{post.musicTitle}</span>
+                  {post.musicAuthor && <span className="ml-1">· {post.musicAuthor}</span>}
+                </span>
+                <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+              </a>
+            )}
+
+            {/* Row 3: Published and Updated date */}
+            <div className="text-xs flex flex-col gap-0.5">
+              <div>
+                <span>{date}</span>
+                <span className="ml-1 text-muted-foreground">{time}</span>
+              </div>
+              <div className="text-muted-foreground">
+                Updated {relativeUpdated}
               </div>
             </div>
-          )}
-
-          {/* Row 2.5: Music Info */}
-          {post.musicTitle && post.musicAuthor && post.musicUrl && (
-            <a
-              href={post.musicUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-              </svg>
-              <span className="truncate">
-                <span className="font-medium">{post.musicTitle}</span>
-                {post.musicAuthor && <span className="ml-1">· {post.musicAuthor}</span>}
-              </span>
-              <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-            </a>
-          )}
-
-          {/* Row 3: Published and Updated date */}
-          <div className="text-xs flex flex-col gap-0.5">
-            <div>
-              <span>{date}</span>
-              <span className="ml-1 text-muted-foreground">{time}</span>
-            </div>
-            <div className="text-muted-foreground">
-              Updated {relativeUpdated}
-            </div>
-          </div>
-        </div>
-      )
-    }
-  },
-  {
-    id: 'metrics',
-    header: 'Metrics',
-    size: 100,
-    cell: ({ row }) => {
-      const post = row.original
-
-      return (
-        <div className="flex flex-col gap-2">
-          {/* Views */}
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-              <Eye className="w-3.5 h-3.5 text-blue-500" />
-            </div>
-            <span className="text-sm font-mono">{formatNumber(post.viewCount)}</span>
           </div>
 
-          {/* Likes */}
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-red-500/10 flex items-center justify-center flex-shrink-0">
-              <Heart className="w-3.5 h-3.5 text-red-500" />
+          {/* Right: Metrics */}
+          <div className="flex flex-col gap-2 flex-shrink-0">
+            {/* Views */}
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                <Eye className="w-3.5 h-3.5 text-blue-500" />
+              </div>
+              <span className="text-sm font-mono">{formatNumber(post.viewCount)}</span>
             </div>
-            <span className="text-sm font-mono">{formatNumber(post.likeCount)}</span>
-          </div>
 
-          {/* Comments */}
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-orange-500/10 flex items-center justify-center flex-shrink-0">
-              <MessageCircle className="w-3.5 h-3.5 text-orange-500" />
+            {/* Likes */}
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-red-500/10 flex items-center justify-center flex-shrink-0">
+                <Heart className="w-3.5 h-3.5 text-red-500" />
+              </div>
+              <span className="text-sm font-mono">{formatNumber(post.likeCount)}</span>
             </div>
-            <span className="text-sm font-mono">{formatNumber(post.commentCount)}</span>
-          </div>
 
-          {/* Shares */}
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-green-500/10 flex items-center justify-center flex-shrink-0">
-              <Share className="w-3.5 h-3.5 text-green-500" />
+            {/* Comments */}
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                <MessageCircle className="w-3.5 h-3.5 text-orange-500" />
+              </div>
+              <span className="text-sm font-mono">{formatNumber(post.commentCount)}</span>
             </div>
-            <span className="text-sm font-mono">{formatNumber(post.shareCount)}</span>
-          </div>
 
-          {/* Saves */}
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-yellow-500/10 flex items-center justify-center flex-shrink-0">
-              <Bookmark className="w-3.5 h-3.5 text-yellow-500" />
+            {/* Shares */}
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-green-500/10 flex items-center justify-center flex-shrink-0">
+                <Share className="w-3.5 h-3.5 text-green-500" />
+              </div>
+              <span className="text-sm font-mono">{formatNumber(post.shareCount)}</span>
             </div>
-            <span className="text-sm font-mono">{formatNumber(post.saveCount)}</span>
+
+            {/* Saves */}
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-yellow-500/10 flex items-center justify-center flex-shrink-0">
+                <Bookmark className="w-3.5 h-3.5 text-yellow-500" />
+              </div>
+              <span className="text-sm font-mono">{formatNumber(post.saveCount)}</span>
+            </div>
           </div>
         </div>
       )

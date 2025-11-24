@@ -675,11 +675,15 @@ export default function ProjectDetailPage() {
     const refPosts = project.posts || []
     const drafts = project.remixes || []
 
-    // Sort drafts by createdAt (oldest first)
+    // Sort drafts by createdAt (oldest first), with id as secondary sort for stability
     const sortedDrafts = [...drafts].sort((a, b) => {
       const dateA = new Date(a.createdAt).getTime()
       const dateB = new Date(b.createdAt).getTime()
-      return dateA - dateB // Oldest first
+      if (dateA !== dateB) {
+        return dateA - dateB // Oldest first
+      }
+      // Secondary sort by id for stable ordering when timestamps are equal
+      return a.id.localeCompare(b.id)
     })
 
     return [
