@@ -1,18 +1,16 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import { MobileHeader } from '@/components/mobile/MobileHeader';
 import { SlideCard } from '@/components/mobile/SlideCard';
 import { ShareButton } from '@/components/mobile/ShareButton';
 import { toast } from 'sonner';
 import type { RemixSlide } from '@/types/remix';
 
-interface PageProps {
-  params: Promise<{ id: string }>;
-}
-
-export default function MobileDraftDetailPage({ params }: PageProps) {
-  const { id } = use(params);
+export default function MobileDraftDetailPage() {
+  const params = useParams();
+  const id = params.id as string;
   const [draft, setDraft] = useState<any>(null);
   const [slides, setSlides] = useState<RemixSlide[]>([]);
   const [slideUrls, setSlideUrls] = useState<string[]>([]);
@@ -116,9 +114,8 @@ export default function MobileDraftDetailPage({ params }: PageProps) {
 
   return (
     <div
-      className="flex h-[100dvh] flex-col"
+      className="flex min-h-screen flex-col"
       style={{
-        height: '100dvh',
         minHeight: '-webkit-fill-available',
       }}
     >
