@@ -27,18 +27,34 @@ export default function MobileProjectDetailPage() {
 
   const [project, setProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchProject() {
       try {
-        const response = await fetch(`/api/mobile/projects/${id}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        const response = await fetch(`/api/mobile/projects/${id}`, {
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
         if (!response.ok) {
-          throw new Error('Failed to fetch project');
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `HTTP ${response.status}`);
         }
+
         const data = await response.json();
         setProject(data);
       } catch (error) {
         console.error('Error fetching project:', error);
+        if (error instanceof Error && error.name === 'AbortError') {
+          setError('Request timed out. Please check your network connection.');
+        } else {
+          setError(error instanceof Error ? error.message : 'Failed to load project');
+        }
       } finally {
         setIsLoading(false);
       }
@@ -61,12 +77,25 @@ export default function MobileProjectDetailPage() {
     );
   }
 
-  if (!project) {
+  if (error || !project) {
     return (
       <>
-        <MobileHeader title="Not Found" showBack />
-        <main className="flex flex-1 items-center justify-center">
-          <p className="text-muted-foreground">Project not found</p>
+        <MobileHeader title={error ? 'Error' : 'Not Found'} showBack />
+        <main className="flex flex-1 items-center justify-center p-4">
+          {error ? (
+            <div className="w-full max-w-md rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
+              <h2 className="mb-2 text-lg font-semibold text-destructive">Error</h2>
+              <p className="text-sm text-destructive/90">{error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <p className="text-muted-foreground">Project not found</p>
+          )}
         </main>
       </>
     );

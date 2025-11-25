@@ -17,13 +17,23 @@ export default function MobileDraftDetailPage({ params }: PageProps) {
   const [slides, setSlides] = useState<RemixSlide[]>([]);
   const [slideUrls, setSlideUrls] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchDraft() {
       try {
-        const response = await fetch(`/api/mobile/drafts/${id}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        const response = await fetch(`/api/mobile/drafts/${id}`, {
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
         if (!response.ok) {
-          throw new Error('Failed to fetch draft');
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `HTTP ${response.status}`);
         }
 
         const data = await response.json();
@@ -55,6 +65,11 @@ export default function MobileDraftDetailPage({ params }: PageProps) {
         }
       } catch (error) {
         console.error('Error fetching draft:', error);
+        if (error instanceof Error && error.name === 'AbortError') {
+          setError('Request timed out. Please check your network connection.');
+        } else {
+          setError(error instanceof Error ? error.message : 'Failed to load draft');
+        }
         toast.error('Failed to load draft');
       } finally {
         setIsLoading(false);
@@ -75,12 +90,25 @@ export default function MobileDraftDetailPage({ params }: PageProps) {
     );
   }
 
-  if (!draft) {
+  if (error || !draft) {
     return (
       <>
-        <MobileHeader title="Not Found" showBack />
-        <main className="flex flex-1 items-center justify-center">
-          <p className="text-muted-foreground">Draft not found</p>
+        <MobileHeader title={error ? 'Error' : 'Not Found'} showBack />
+        <main className="flex flex-1 items-center justify-center p-4">
+          {error ? (
+            <div className="w-full max-w-md rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
+              <h2 className="mb-2 text-lg font-semibold text-destructive">Error</h2>
+              <p className="text-sm text-destructive/90">{error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <p className="text-muted-foreground">Draft not found</p>
+          )}
         </main>
       </>
     );
