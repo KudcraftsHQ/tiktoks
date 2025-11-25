@@ -21,7 +21,7 @@ export default function MobileDraftDetailPage({ params }: PageProps) {
   useEffect(() => {
     async function fetchDraft() {
       try {
-        const response = await fetch(`/api/remixes/${id}`);
+        const response = await fetch(`/api/mobile/drafts/${id}`);
         if (!response.ok) {
           throw new Error('Failed to fetch draft');
         }
@@ -87,7 +87,13 @@ export default function MobileDraftDetailPage({ params }: PageProps) {
   }
 
   return (
-    <div className="flex h-[100dvh] flex-col">
+    <div
+      className="flex h-[100dvh] flex-col"
+      style={{
+        height: '100dvh',
+        minHeight: '-webkit-fill-available',
+      }}
+    >
       <MobileHeader title={draft.name} showBack />
       <main className="flex-1 overflow-auto">
         {draft.description && (

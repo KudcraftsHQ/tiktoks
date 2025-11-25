@@ -31,7 +31,7 @@ export default function MobileProjectDetailPage() {
   useEffect(() => {
     async function fetchProject() {
       try {
-        const response = await fetch(`/api/projects/${id}`);
+        const response = await fetch(`/api/mobile/projects/${id}`);
         if (!response.ok) {
           throw new Error('Failed to fetch project');
         }

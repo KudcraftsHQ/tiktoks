@@ -22,7 +22,7 @@ export default function MobileProjectsPage() {
   useEffect(() => {
     async function fetchProjects() {
       try {
-        const response = await fetch('/api/projects?limit=100');
+        const response = await fetch('/api/mobile/projects?limit=100');
         if (!response.ok) throw new Error('Failed to fetch projects');
         const data = await response.json();
         setProjects(data.projects || []);
