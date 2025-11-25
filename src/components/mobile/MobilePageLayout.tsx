@@ -21,7 +21,13 @@ export function MobilePageLayout({
   description,
 }: MobilePageLayoutProps) {
   return (
-    <div className="flex h-[100dvh] flex-col">
+    <div
+      className="flex h-[100dvh] flex-col"
+      style={{
+        height: '100dvh',
+        minHeight: '-webkit-fill-available',
+      }}
+    >
       <MobileHeader title={title} showBack={showBack} onBack={onBack} />
       <main className="flex-1 overflow-auto">
         {description && (
