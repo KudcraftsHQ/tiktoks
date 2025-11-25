@@ -18,16 +18,34 @@ interface Project {
 export default function MobileProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchProjects() {
       try {
-        const response = await fetch('/api/mobile/projects?limit=100');
-        if (!response.ok) throw new Error('Failed to fetch projects');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+        const response = await fetch('/api/mobile/projects?limit=100', {
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        }
+
         const data = await response.json();
         setProjects(data.projects || []);
       } catch (error) {
         console.error('Error fetching projects:', error);
+        if (error instanceof Error && error.name === 'AbortError') {
+          setError('Request timed out after 10 seconds. Please check your network connection.');
+        } else {
+          setError(error instanceof Error ? error.message : 'Failed to load projects');
+        }
       } finally {
         setIsLoading(false);
       }
@@ -60,7 +78,20 @@ export default function MobileProjectsPage() {
     <>
       <MobileHeader title="Projects" />
       <main className="flex-1 overflow-auto p-4">
-        {projectsWithDrafts.length === 0 ? (
+        {error ? (
+          <div className="flex min-h-[60vh] flex-col items-center justify-center p-4 text-center">
+            <div className="w-full max-w-md rounded-lg border border-destructive/50 bg-destructive/10 p-6">
+              <h2 className="mb-2 text-lg font-semibold text-destructive">Error Loading Projects</h2>
+              <p className="text-sm text-destructive/90">{error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        ) : projectsWithDrafts.length === 0 ? (
           <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
             <FolderOpen className="mb-4 h-16 w-16 text-muted-foreground" />
             <h2 className="mb-2 text-lg font-semibold">No Projects Found</h2>
