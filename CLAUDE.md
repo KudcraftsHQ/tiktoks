@@ -48,6 +48,7 @@ src/
 │   ├── posts/             # Posts explorer
 │   ├── remix/             # Remix editor pages
 │   ├── projects/          # Project management
+│   ├── mobile/            # Mobile-only sharing interface (read-only)
 │   ├── globals.css        # Global styles
 │   ├── layout.tsx         # Root layout
 │   └── page.tsx           # Home page (Posts table)
@@ -243,6 +244,63 @@ const result = await processImagesWithOCR(imageUrls)
 - `R2_SECRET_ACCESS_KEY`: R2 secret key for authentication
 - `R2_BUCKET_NAME`: R2 bucket name for asset storage
 - `REDIS_URL`: Redis connection string for queue management
+- `MOBILE_PIN_CODE`: 6-digit PIN for mobile sharing interface authentication
+- `MOBILE_PIN_SECRET`: Secret key for token generation (change to invalidate all sessions)
+
+## Mobile Sharing Feature
+
+### Overview
+The `/mobile/*` routes provide a read-only, mobile-optimized interface for sharing carousel drafts to TikTok via the Web Share API.
+
+### Automatic Mobile Detection
+- **Client-side redirection**: Mobile devices are automatically redirected from `/` to `/mobile`
+- **Dual detection**: Checks both screen width (≤768px) AND user agent (iOS, Android, iPad, etc.)
+- **Responsive**: Works for both mobile devices and desktop browsers with narrow windows
+- **Seamless experience**: Mobile users land directly on the mobile-optimized interface
+
+### Routes
+- `/mobile` - Projects list (only projects with drafts)
+- `/mobile/projects/[id]` - Project detail with drafts list
+- `/mobile/drafts/[id]` - Draft detail with slide preview and sharing
+
+### Authentication
+- **PIN-based authentication**: Users enter a 6-digit PIN to access mobile routes
+- **Local storage**: Auth token stored in localStorage, validated against server
+- **Server-side invalidation**: Change `MOBILE_PIN_SECRET` to invalidate all active sessions
+- **PinGate component**: Wraps all mobile routes and handles auth flow
+
+### Sharing Flow
+1. User navigates to draft detail page
+2. Views all slides with background images and text
+3. Can copy text from individual slides to clipboard
+4. Clicks "Share to TikTok" button
+5. System fetches presigned URLs for all slide images
+6. Downloads images as blobs and converts to File objects
+7. Calls `navigator.share({ files })` to trigger native share sheet
+8. User selects TikTok app from share options
+9. TikTok app opens with images as a slideshow draft
+10. User adds text/music in TikTok's native editor
+
+### Technical Details
+- **Web Share API**: Uses `navigator.share()` with files array
+- **iOS Compatibility**: Only passes `files` property (no title/text) to avoid iOS bug
+- **Image Requirements**: 2-35 images for TikTok slideshow
+- **Presigned URLs**: Uses CacheAssetService to get R2 presigned URLs
+- **Blob Download**: Fetches images as blobs before sharing
+
+### API Endpoints
+- `POST /api/mobile/auth` - Validate PIN and return auth token
+- `POST /api/mobile/auth/validate` - Validate existing token
+- `POST /api/mobile/get-slide-urls` - Get presigned URLs for slide images
+
+### Components
+- `MobileHeader` - Simple header with back button
+- `PinGate` - Authentication wrapper with PIN input
+- `SlideCard` - Individual slide display with copy button
+- `ShareButton` - Web Share API integration with TikTok
+
+### Cloudflare Zero Trust
+The `/mobile/*` routes should be excluded from Cloudflare Zero Trust protection in your Cloudflare dashboard. PIN authentication provides security for these routes instead.
 
 ## Important Notes
 - **Package Manager**: Always use `bun` (not npm/yarn/pnpm)
