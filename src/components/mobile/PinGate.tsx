@@ -37,13 +37,19 @@ export function PinGate({ children }: PinGateProps) {
       return;
     }
 
-    // Validate token with server
+    // Validate token with server with timeout
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
       const response = await fetch('/api/mobile/auth/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       const data = await response.json();
 
@@ -56,6 +62,9 @@ export function PinGate({ children }: PinGateProps) {
       }
     } catch (error) {
       console.error('Token validation error:', error);
+      // On error (including timeout), clear token and show PIN screen
+      localStorage.removeItem(MOBILE_AUTH_STORAGE_KEY);
+      localStorage.removeItem(MOBILE_AUTH_EXPIRES_KEY);
     } finally {
       setIsValidating(false);
     }
@@ -76,11 +85,17 @@ export function PinGate({ children }: PinGateProps) {
     setIsSubmitting(true);
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
       const response = await fetch('/api/mobile/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       const data = await response.json();
 
@@ -98,7 +113,12 @@ export function PinGate({ children }: PinGateProps) {
       toast.success('Authenticated successfully');
     } catch (error) {
       console.error('Auth error:', error);
-      toast.error('Authentication failed');
+      if (error instanceof Error && error.name === 'AbortError') {
+        toast.error('Request timed out. Please try again.');
+      } else {
+        toast.error('Authentication failed. Please check your connection.');
+      }
+      setPin('');
     } finally {
       setIsSubmitting(false);
     }
