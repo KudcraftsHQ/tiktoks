@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import '../../globals.css';
-import { PinGate } from '@/components/mobile/PinGate';
 import { Toaster } from '@/components/ui/sonner';
 
 const geistSans = Geist({
@@ -51,7 +50,6 @@ export default function MobileLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased dark theme-mono touch-pan-x touch-pan-y min-h-screen bg-background`}
       >
-        {/* PinGate temporarily disabled for testing */}
         <div className="flex min-h-screen flex-col">{children}</div>
         <Toaster />
       </body>
