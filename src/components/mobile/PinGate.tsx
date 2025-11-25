@@ -17,6 +17,7 @@ interface PinGateProps {
 export function PinGate({ children }: PinGateProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isValidating, setIsValidating] = useState(true);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [pin, setPin] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -62,9 +63,15 @@ export function PinGate({ children }: PinGateProps) {
       }
     } catch (error) {
       console.error('Token validation error:', error);
-      // On error (including timeout), clear token and show PIN screen
+      // On error (including timeout), clear token and show error
       localStorage.removeItem(MOBILE_AUTH_STORAGE_KEY);
       localStorage.removeItem(MOBILE_AUTH_EXPIRES_KEY);
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        setValidationError('Validation timed out after 10 seconds. This may be a network or configuration issue.');
+      } else {
+        setValidationError(`Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
     } finally {
       setIsValidating(false);
     }
@@ -146,6 +153,17 @@ export function PinGate({ children }: PinGateProps) {
               Enter your 6-digit PIN to access mobile sharing
             </p>
           </div>
+
+          {validationError && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-left">
+              <p className="text-sm font-semibold text-destructive">Validation Error</p>
+              <p className="mt-1 text-xs text-destructive/90">{validationError}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Please check your network connection and try entering your PIN below.
+              </p>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
               type="tel"

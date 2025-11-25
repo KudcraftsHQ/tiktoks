@@ -51,9 +51,8 @@ export default function MobileLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased dark theme-mono touch-pan-x touch-pan-y min-h-screen bg-background`}
       >
-        <PinGate>
-          <div className="flex min-h-screen flex-col">{children}</div>
-        </PinGate>
+        {/* PinGate temporarily disabled for testing */}
+        <div className="flex min-h-screen flex-col">{children}</div>
         <Toaster />
       </body>
     </html>
