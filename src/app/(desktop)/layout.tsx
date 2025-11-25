@@ -6,7 +6,6 @@ import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/s
 import { AppSidebar } from "@/components/AppSidebar";
 import { Toaster } from "@/components/ui/sonner";
 import NextTopLoader from 'nextjs-toploader';
-import { MobileRedirect } from "@/components/MobileRedirect";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -54,7 +53,6 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased dark theme-mono`}
       >
-          <MobileRedirect />
           <NextTopLoader
             color="#FFFFFF"
             height={2}
