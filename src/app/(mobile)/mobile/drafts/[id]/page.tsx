@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { MobileHeader } from '@/components/mobile/MobileHeader';
 import { SlideCard } from '@/components/mobile/SlideCard';
 import { ShareButton } from '@/components/mobile/ShareButton';
+import { ImagePositionEditor } from '@/components/mobile/ImagePositionEditor';
 import { toast } from 'sonner';
 import type { RemixSlide } from '@/types/remix';
 
@@ -16,6 +17,8 @@ export default function MobileDraftDetailPage() {
   const [slideUrls, setSlideUrls] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [imagePositions, setImagePositions] = useState<Map<string, number>>(new Map());
+  const [editingSlideId, setEditingSlideId] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchDraft() {
@@ -77,6 +80,24 @@ export default function MobileDraftDetailPage() {
     fetchDraft();
   }, [id]);
 
+  const handleEditPosition = (slideId: string) => {
+    setEditingSlideId(slideId);
+  };
+
+  const handleSavePosition = (slideId: string, offsetY: number) => {
+    setImagePositions(prev => new Map(prev).set(slideId, offsetY));
+    setEditingSlideId(null);
+    toast.success('Position saved');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingSlideId(null);
+  };
+
+  const editingSlide = slides.find(s => s.id === editingSlideId);
+  const editingSlideIndex = slides.findIndex(s => s.id === editingSlideId);
+  const editingImageUrl = editingSlideIndex >= 0 ? slideUrls[editingSlideIndex] : '';
+
   if (isLoading) {
     return (
       <>
@@ -134,11 +155,27 @@ export default function MobileDraftDetailPage() {
               slide={slide}
               imageUrl={slideUrls[index] || ''}
               index={index}
+              hasCustomPosition={imagePositions.has(slide.id)}
+              onEditPosition={() => handleEditPosition(slide.id)}
             />
           ))}
         </div>
       </main>
-      <ShareButton slides={slides} draftName={draft.name} />
+      <ShareButton
+        slides={slides}
+        draftName={draft.name}
+        imagePositions={imagePositions}
+      />
+
+      {/* Image Position Editor */}
+      {editingSlide && editingImageUrl && (
+        <ImagePositionEditor
+          imageUrl={editingImageUrl}
+          currentOffsetY={imagePositions.get(editingSlide.id) ?? 0.5}
+          onSave={(offsetY) => handleSavePosition(editingSlide.id, offsetY)}
+          onCancel={handleCancelEdit}
+        />
+      )}
     </div>
   );
 }
