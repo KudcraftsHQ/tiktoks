@@ -93,6 +93,14 @@ export async function GET(
       );
     }
 
+    // Check if the draft is bookmarked
+    if (!remix.bookmarked) {
+      return NextResponse.json(
+        { error: 'Draft not found' },
+        { status: 404 }
+      );
+    }
+
     // Normalize slides data with proper bootstrapping and defaults
     const normalizedSlides = normalizeSlides(remix.slides);
 

@@ -18,7 +18,16 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
 
     // Build where clause
-    const where: any = {};
+    const where: any = {
+      // Only show projects that have at least one bookmarked draft
+      remixes: {
+        some: {
+          isDraft: true,
+          bookmarked: true,
+        },
+      },
+    };
+
     if (search) {
       where.OR = [
         {
@@ -43,7 +52,12 @@ export async function GET(request: NextRequest) {
           _count: {
             select: {
               posts: true,
-              remixes: true,
+              remixes: {
+                where: {
+                  isDraft: true,
+                  bookmarked: true,
+                },
+              },
             },
           },
         },

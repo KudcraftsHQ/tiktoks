@@ -61,6 +61,7 @@ export async function GET(
         remixes: {
           where: {
             isDraft: true,
+            bookmarked: true,
           },
           select: {
             id: true,
