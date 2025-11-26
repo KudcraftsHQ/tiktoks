@@ -7,7 +7,7 @@ import { InlineEditableText } from '@/components/InlineEditableText'
 import { Textarea } from '@/components/ui/textarea'
 import { ConceptTypeDropdown } from '@/components/ConceptTypeDropdown'
 import { ImageGallery } from '@/components/ImageGallery'
-import { Trash2, ToggleLeft, ToggleRight, Sparkles, Pencil, Loader2 } from 'lucide-react'
+import { Trash2, ToggleLeft, ToggleRight, Sparkles, Pencil, Loader2, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Tooltip,
@@ -315,9 +315,94 @@ const ActionsCell = ({
   onDelete: (id: string) => Promise<void>
   isDeleting: boolean
 }) => {
+  const [isCopying, setIsCopying] = useState(false)
+
+  const handleCopyToClipboard = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIsCopying(true)
+
+    try {
+      const sections: string[] = []
+
+      // Concept header as H1
+      sections.push(`# ${concept.title}`)
+      sections.push('')
+
+      // Core message as blockquote
+      if (concept.coreMessage) {
+        sections.push(`> ${concept.coreMessage}`)
+        sections.push('')
+      }
+
+      // Type badge
+      sections.push(`**Type:** ${concept.type}`)
+      sections.push('')
+
+      // Examples section
+      if (concept.examples && concept.examples.length > 0) {
+        sections.push('## Examples')
+        sections.push('')
+
+        concept.examples.forEach((example, index) => {
+          // Example header with slide number and view count if available
+          let exampleHeader = `### Example ${index + 1}`
+
+          if (example.sourcePost?.viewCount) {
+            exampleHeader += ` (${formatViewCount(example.sourcePost.viewCount)} views)`
+          }
+
+          sections.push(exampleHeader)
+          sections.push('')
+          sections.push(example.text)
+          sections.push('')
+        })
+      } else {
+        sections.push('_No examples yet_')
+        sections.push('')
+      }
+
+      const markdownContent = sections.join('\n')
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(markdownContent)
+
+      // Show success toast
+      toast.success('Copied to clipboard', {
+        description: `${concept.examples.length} example${concept.examples.length !== 1 ? 's' : ''} ready to paste`
+      })
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error)
+      toast.error('Failed to copy to clipboard', {
+        description: 'Please try again'
+      })
+    } finally {
+      setIsCopying(false)
+    }
+  }
+
   return (
     <TooltipProvider>
       <div className="flex flex-col gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleCopyToClipboard}
+              disabled={isCopying}
+              className="h-8 w-8"
+            >
+              {isCopying ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left">
+            <p>Copy All Examples</p>
+          </TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
