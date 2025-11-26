@@ -1941,7 +1941,7 @@ export function ProjectPostsTable({
           onRowSelectionChange={onRowSelectionChange}
           enableSorting={true}
           enablePagination={false}
-          leftStickyColumnsCount={3}
+          leftStickyColumnsCount={2}
           rightStickyColumnsCount={1}
           fullWidth={true}
           isLoading={isLoading}
