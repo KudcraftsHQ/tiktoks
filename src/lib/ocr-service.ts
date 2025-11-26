@@ -42,7 +42,7 @@ const OCR_RESPONSE_SCHEMA = {
           slideType: {
             type: Type.STRING,
             enum: ['hook', 'content', 'cta'],
-            description: "Classify each slide: 'hook' = first slide that grabs attention with bold claims, questions, or curiosity gaps. 'content' = middle slides that teach, explain, share tips, or provide value WITHOUT promoting anything. 'cta' = slides that promote a tool/product/service, ask users to take action (follow, comment, try something), mention specific apps/tools to use, or contain soft-selling like 'use this tool', 'try this app', 'check out X'. If a slide mentions a specific tool, product, or asks the viewer to do something, it's CTA even if it appears early in the carousel."
+            description: "Classify each slide: 'hook' = first slide that grabs attention with bold claims, questions, or curiosity gaps. 'content' = middle slides that teach, explain, share tips, or provide value WITHOUT promoting anything. 'cta' = slides that promote a tool/product/service, ask users to take action (follow, comment, try something), mention specific apps/tools to use, or contain soft-selling like 'use this tool', 'try this app', 'check out X'. **CRITICAL RULE: Slide index 0 (first slide) can NEVER be classified as 'cta' - it must be 'hook' or 'content' only.** If a slide mentions a specific tool, product, or asks the viewer to do something, it's CTA even if it appears early in the carousel, UNLESS it's slide 0."
           },
           ocrText: {
             type: Type.STRING,
@@ -277,6 +277,22 @@ Follow the schema definitions for all fields. Return the structured JSON respons
       isNewCategory: ocrData.postCategory.isNewCategory,
       slidesProcessed: ocrData.slides.length
     })
+
+    // CRITICAL: Enforce slide 1 rule - validate and correct any violations
+    const validatedSlides = ocrData.slides.map((slide: any) => {
+      if (slide.imageIndex === 0 && slide.slideType === 'cta') {
+        console.warn(`⚠️ [OCR] Slide 0 was classified as CTA, correcting to HOOK`)
+        return {
+          ...slide,
+          slideType: 'hook' as const,
+          confidence: Math.max(0.5, slide.confidence * 0.8) // Reduce confidence for overridden classification
+        }
+      }
+      return slide
+    })
+
+    // Use validated slides for further processing
+    ocrData.slides = validatedSlides
 
     // Handle category - create if new
     let postCategoryId: string | null = null

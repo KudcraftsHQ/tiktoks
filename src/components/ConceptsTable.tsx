@@ -308,12 +308,16 @@ const ActionsCell = ({
   concept,
   onToggleActive,
   onDelete,
-  isDeleting
+  onReclassify,
+  isDeleting,
+  isReclassifying
 }: {
   concept: Concept
   onToggleActive: (concept: Concept) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  onReclassify: (conceptId: string) => Promise<void>
   isDeleting: boolean
+  isReclassifying: boolean
 }) => {
   const [isCopying, setIsCopying] = useState(false)
 
@@ -388,6 +392,26 @@ const ActionsCell = ({
             <Button
               variant="ghost"
               size="icon"
+              onClick={() => onReclassify(concept.id)}
+              disabled={isReclassifying || concept.examples.length === 0}
+              className="h-8 w-8"
+            >
+              {isReclassifying ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4 text-purple-500" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left">
+            <p>Reclassify Examples</p>
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={handleCopyToClipboard}
               disabled={isCopying}
               className="h-8 w-8"
@@ -452,6 +476,7 @@ function ConceptsTableInner({
   isLoading
 }: ConceptsTableProps) {
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
+  const [isReclassifying, setIsReclassifying] = useState<string | null>(null)
   const [showMoveDialog, setShowMoveDialog] = useState(false)
   const [showNewConceptDialog, setShowNewConceptDialog] = useState(false)
 
@@ -559,6 +584,50 @@ function ConceptsTableInner({
       toast.error('Failed to delete concept')
     } finally {
       setIsDeleting(null)
+    }
+  }, [onRefresh])
+
+  const handleReclassify = useCallback(async (conceptId: string) => {
+    setIsReclassifying(conceptId)
+
+    try {
+      const response = await fetch(`/api/concepts/${conceptId}/reclassify`, {
+        method: 'POST'
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to reclassify')
+      }
+
+      const result = await response.json()
+
+      // Show toast based on results
+      if (result.summary.examplesMoved > 0) {
+        toast.success('Reclassification complete', {
+          description: `Moved ${result.summary.examplesMoved} example${result.summary.examplesMoved > 1 ? 's' : ''} to ${result.summary.conceptsAffected.length} concept${result.summary.conceptsAffected.length > 1 ? 's' : ''}. ${result.summary.examplesKept} kept in current concept.`
+        })
+      } else {
+        toast.success('Reclassification complete', {
+          description: 'All examples remain in current concept (best fit).'
+        })
+      }
+
+      // Show warning if concept is now empty
+      if (result.warnings?.includes('empty')) {
+        toast.warning('Concept is now empty', {
+          description: 'All examples were moved. Consider deleting or adding new examples.'
+        })
+      }
+
+      // Refresh table
+      onRefresh()
+    } catch (err) {
+      toast.error('Failed to reclassify', {
+        description: err instanceof Error ? err.message : 'Please try again'
+      })
+    } finally {
+      setIsReclassifying(null)
     }
   }, [onRefresh])
 
@@ -695,7 +764,9 @@ function ConceptsTableInner({
                   concept={concept}
                   onToggleActive={handleToggleActive}
                   onDelete={handleDelete}
+                  onReclassify={handleReclassify}
                   isDeleting={isDeleting === concept.id}
+                  isReclassifying={isReclassifying === concept.id}
                 />
               </div>
             </div>

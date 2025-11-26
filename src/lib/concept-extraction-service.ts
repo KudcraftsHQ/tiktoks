@@ -238,6 +238,10 @@ async function extractConceptsWithAI(
 
 The slides have ALREADY been classified into types (HOOK, CONTENT, CTA). Use this classification to determine the concept type.
 
+**CRITICAL RULE: Slide index 0 (first slide) can NEVER be a CTA concept.**
+- If you see a slide from index 0, it MUST be classified as HOOK or CONTENT, never CTA.
+- This is a hard constraint that overrides all other classification logic.
+
 For each unique concept found, provide:
 1. A short title (2-5 words) that names the pattern
 2. A one-sentence core message explaining the lesson
@@ -305,6 +309,12 @@ IMPORTANT RULES:
 
         // Skip if slide has no type and AI didn't provide one
         if (!conceptType) continue
+
+        // CRITICAL: Enforce slide 1 rule - skip CTA classification for slide 0
+        if (slide.slideIndex === 0 && conceptType === 'CTA') {
+          console.warn(`⚠️ [Concept Extraction] Slide 0 from post ${slide.postId} was classified as CTA, skipping CTA classification`)
+          continue  // Skip this slide, it should be picked up as HOOK or CONTENT
+        }
 
         processedSlideIndices.add(slideIdx)
 
