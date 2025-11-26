@@ -22,7 +22,7 @@ import { PageLayout } from '@/components/PageLayout'
 import { toast } from 'sonner'
 import { SortingState } from '@tanstack/react-table'
 import { ContentAnalysisSidebar } from '@/components/ContentAnalysisSidebar'
-import { DateRange } from '@/components/DateRangeFilter'
+import { DateRange, DatePreset, getDateRangeFromPreset, DateRangeFilter } from '@/components/DateRangeFilter'
 import { PostingTimeChart, PostingTimeChartData, PostingTimeChartBestTime } from '@/components/PostingTimeChart'
 import { PostingActivityHeatmap } from '@/components/PostingActivityHeatmap'
 import { SearchInput } from '@/components/SearchInput'
@@ -127,12 +127,24 @@ export function PostsPageContent({
     initialSorting = [{ id: oldSortBy, desc: oldSortOrder === 'desc' }]
   }
 
-  // Parse date range from URL
+  // Parse date range from URL - check for preset first, then custom dates
+  const datePresetParam = searchParams.get('datePreset') as DatePreset | null
   const dateFromParam = searchParams.get('dateFrom')
   const dateToParam = searchParams.get('dateTo')
-  const initialDateRange: DateRange = {
-    from: dateFromParam ? new Date(dateFromParam) : undefined,
-    to: dateToParam ? new Date(dateToParam) : undefined
+
+  let initialDateRange: DateRange
+  if (datePresetParam) {
+    // Use preset if available
+    initialDateRange = getDateRangeFromPreset(datePresetParam)
+  } else if (dateFromParam || dateToParam) {
+    // Otherwise use custom dates
+    initialDateRange = {
+      from: dateFromParam ? new Date(dateFromParam) : undefined,
+      to: dateToParam ? new Date(dateToParam) : undefined
+    }
+  } else {
+    // No date filter
+    initialDateRange = { from: undefined, to: undefined }
   }
 
   // Parse category from URL
@@ -161,6 +173,7 @@ export function PostsPageContent({
   const [sorting, setSorting] = useState<SortingState>(initialSorting)
   const [categoryFilter, setCategoryFilter] = useState<string>(initialCategory)
   const [dateRange, setDateRange] = useState<DateRange>(initialDateRange)
+  const [datePreset, setDatePreset] = useState<DatePreset | undefined>(datePresetParam || undefined)
   const [searchQuery, setSearchQuery] = useState<string>(initialSearch)
   const [isSearching, setIsSearching] = useState(false)
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFiltersValue>(initialAdvancedFilters)
@@ -217,7 +230,7 @@ export function PostsPageContent({
   }, [selectedPostsForMetrics, firstPostDate])
 
   // Update URL with current state
-  const updateURL = useCallback((page: number, sort: SortingState, dateFilter: DateRange, category: string, search: string, filters: AdvancedFiltersValue) => {
+  const updateURL = useCallback((page: number, sort: SortingState, dateFilter: DateRange, preset: DatePreset | undefined, category: string, search: string, filters: AdvancedFiltersValue) => {
     const params = new URLSearchParams()
 
     if (page > 1) {
@@ -231,12 +244,16 @@ export function PostsPageContent({
       params.set('sort', sortParam)
     }
 
-    // Add date range params
-    if (dateFilter.from) {
-      params.set('dateFrom', dateFilter.from.toISOString())
-    }
-    if (dateFilter.to) {
-      params.set('dateTo', dateFilter.to.toISOString())
+    // Add date range params - use preset if available, otherwise use custom dates
+    if (preset) {
+      params.set('datePreset', preset)
+    } else if (dateFilter.from || dateFilter.to) {
+      if (dateFilter.from) {
+        params.set('dateFrom', dateFilter.from.toISOString())
+      }
+      if (dateFilter.to) {
+        params.set('dateTo', dateFilter.to.toISOString())
+      }
     }
 
     // Add category filter
@@ -380,10 +397,10 @@ export function PostsPageContent({
 
     // Update URL and fetch in a separate effect to avoid render issues
     setTimeout(() => {
-      updateURL(currentPage, newSorting, dateRange, categoryFilter, searchQuery, advancedFilters)
+      updateURL(currentPage, newSorting, dateRange, datePreset, categoryFilter, searchQuery, advancedFilters)
       fetchPosts(currentPage, pageSize, newSorting, dateRange, categoryFilter, searchQuery, advancedFilters)
     }, 0)
-  }, [currentPage, pageSize, sorting, categoryFilter, dateRange, searchQuery, advancedFilters, updateURL, fetchPosts])
+  }, [currentPage, pageSize, sorting, categoryFilter, dateRange, datePreset, searchQuery, advancedFilters, updateURL, fetchPosts])
 
   // Handle page change with URL update
   const handlePageChange = useCallback((pageIndex: number, newPageSize: number) => {
@@ -392,20 +409,21 @@ export function PostsPageContent({
     setPageSize(newPageSize)
 
     setSorting(currentSorting => {
-      updateURL(newPage, currentSorting, dateRange, categoryFilter, searchQuery, advancedFilters)
+      updateURL(newPage, currentSorting, dateRange, datePreset, categoryFilter, searchQuery, advancedFilters)
       fetchPosts(newPage, newPageSize, currentSorting, dateRange, categoryFilter, searchQuery, advancedFilters)
       return currentSorting
     })
-  }, [categoryFilter, dateRange, searchQuery, advancedFilters, updateURL, fetchPosts])
+  }, [categoryFilter, dateRange, datePreset, searchQuery, advancedFilters, updateURL, fetchPosts])
 
   // Handle date range change with URL update
-  const handleDateRangeChange = useCallback((newDateRange: DateRange) => {
+  const handleDateRangeChange = useCallback((newDateRange: DateRange, preset?: DatePreset) => {
     setDateRange(newDateRange)
+    setDatePreset(preset)
     setCurrentPage(1) // Reset to first page when filter changes
 
     // Update URL and fetch
     setTimeout(() => {
-      updateURL(1, sorting, newDateRange, categoryFilter, searchQuery, advancedFilters)
+      updateURL(1, sorting, newDateRange, preset, categoryFilter, searchQuery, advancedFilters)
       fetchPosts(1, pageSize, sorting, newDateRange, categoryFilter, searchQuery, advancedFilters)
     }, 0)
   }, [pageSize, sorting, categoryFilter, searchQuery, advancedFilters, updateURL, fetchPosts])
@@ -417,10 +435,10 @@ export function PostsPageContent({
 
     // Update URL and fetch
     setTimeout(() => {
-      updateURL(1, sorting, dateRange, newCategory, searchQuery, advancedFilters)
+      updateURL(1, sorting, dateRange, datePreset, newCategory, searchQuery, advancedFilters)
       fetchPosts(1, pageSize, sorting, dateRange, newCategory, searchQuery, advancedFilters)
     }, 0)
-  }, [pageSize, sorting, dateRange, searchQuery, advancedFilters, updateURL, fetchPosts])
+  }, [pageSize, sorting, dateRange, datePreset, searchQuery, advancedFilters, updateURL, fetchPosts])
 
   // Handle search query change with URL update
   const handleSearchChange = useCallback((newSearch: string) => {
@@ -430,12 +448,12 @@ export function PostsPageContent({
 
     // Update URL and fetch
     setTimeout(() => {
-      updateURL(1, sorting, dateRange, categoryFilter, newSearch, advancedFilters)
+      updateURL(1, sorting, dateRange, datePreset, categoryFilter, newSearch, advancedFilters)
       fetchPosts(1, pageSize, sorting, dateRange, categoryFilter, newSearch, advancedFilters).finally(() => {
         setIsSearching(false) // End search loading
       })
     }, 0)
-  }, [pageSize, sorting, dateRange, categoryFilter, advancedFilters, updateURL, fetchPosts])
+  }, [pageSize, sorting, dateRange, datePreset, categoryFilter, advancedFilters, updateURL, fetchPosts])
 
   // Handle advanced filters change with URL update
   const handleAdvancedFiltersChange = useCallback((newFilters: AdvancedFiltersValue) => {
@@ -444,10 +462,10 @@ export function PostsPageContent({
 
     // Update URL and fetch
     setTimeout(() => {
-      updateURL(1, sorting, dateRange, categoryFilter, searchQuery, newFilters)
+      updateURL(1, sorting, dateRange, datePreset, categoryFilter, searchQuery, newFilters)
       fetchPosts(1, pageSize, sorting, dateRange, categoryFilter, searchQuery, newFilters)
     }, 0)
-  }, [pageSize, sorting, dateRange, categoryFilter, searchQuery, updateURL, fetchPosts])
+  }, [pageSize, sorting, dateRange, datePreset, categoryFilter, searchQuery, updateURL, fetchPosts])
 
   // Handle refetch (e.g., after updating slide classification)
   const handleRefetchPosts = useCallback(() => {
@@ -460,6 +478,7 @@ export function PostsPageContent({
     const sortParam = searchParams.get('sort')
     const oldSortBy = searchParams.get('sortBy')
     const oldSortOrder = searchParams.get('sortOrder')
+    const datePresetParam = searchParams.get('datePreset') as DatePreset | null
     const dateFromParam = searchParams.get('dateFrom')
     const dateToParam = searchParams.get('dateTo')
     const categoryParam = searchParams.get('category') || 'all'
@@ -480,9 +499,23 @@ export function PostsPageContent({
       urlSorting = [{ id: oldSortBy, desc: oldSortOrder === 'desc' }]
     }
 
-    const urlDateRange: DateRange = {
-      from: dateFromParam ? new Date(dateFromParam) : undefined,
-      to: dateToParam ? new Date(dateToParam) : undefined
+    let urlDateRange: DateRange
+    let urlDatePreset: DatePreset | undefined
+    if (datePresetParam) {
+      // Use preset if available
+      urlDateRange = getDateRangeFromPreset(datePresetParam)
+      urlDatePreset = datePresetParam
+    } else if (dateFromParam || dateToParam) {
+      // Otherwise use custom dates
+      urlDateRange = {
+        from: dateFromParam ? new Date(dateFromParam) : undefined,
+        to: dateToParam ? new Date(dateToParam) : undefined
+      }
+      urlDatePreset = undefined
+    } else {
+      // No date filter
+      urlDateRange = { from: undefined, to: undefined }
+      urlDatePreset = undefined
     }
 
     const ocrStatusParam = searchParams.get('ocrStatus')
@@ -498,19 +531,21 @@ export function PostsPageContent({
     // Check if URL state is different from current state
     const sortingDifferent = JSON.stringify(urlSorting) !== JSON.stringify(sorting)
     const dateDifferent = JSON.stringify(urlDateRange) !== JSON.stringify(dateRange)
+    const presetDifferent = urlDatePreset !== datePreset
     const categoryDifferent = categoryParam !== categoryFilter
     const searchDifferent = searchParam !== searchQuery
     const filtersDifferent = JSON.stringify(urlAdvancedFilters) !== JSON.stringify(advancedFilters)
 
-    if (sortingDifferent || dateDifferent || categoryDifferent || searchDifferent || filtersDifferent) {
+    if (sortingDifferent || dateDifferent || presetDifferent || categoryDifferent || searchDifferent || filtersDifferent) {
       if (sortingDifferent) setSorting(urlSorting)
       if (dateDifferent) setDateRange(urlDateRange)
+      if (presetDifferent) setDatePreset(urlDatePreset)
       if (categoryDifferent) setCategoryFilter(categoryParam)
       if (searchDifferent) setSearchQuery(searchParam)
       if (filtersDifferent) setAdvancedFilters(urlAdvancedFilters)
       fetchPosts(currentPage, pageSize, urlSorting, urlDateRange, categoryParam, searchParam, urlAdvancedFilters)
     }
-  }, [searchParams, sorting, dateRange, categoryFilter, searchQuery, advancedFilters, currentPage, pageSize, fetchPosts])
+  }, [searchParams, sorting, dateRange, datePreset, categoryFilter, searchQuery, advancedFilters, currentPage, pageSize, fetchPosts])
 
   // Initial fetch
   useEffect(() => {
@@ -878,6 +913,10 @@ export function PostsPageContent({
                     isLoading={isSearching}
                   />
                 )}
+                <DateRangeFilter
+                  value={dateRange}
+                  onChange={handleDateRangeChange}
+                />
                 <AdvancedFilters
                   value={advancedFilters}
                   onChange={handleAdvancedFiltersChange}
@@ -1123,10 +1162,6 @@ export function PostsPageContent({
             categoryFilter={{
               value: categoryFilter,
               onChange: handleCategoryChange
-            }}
-            dateRangeFilter={{
-              value: dateRange,
-              onChange: handleDateRangeChange
             }}
             onPageChange={handlePageChange}
             onSortingChange={handleSortingChange}

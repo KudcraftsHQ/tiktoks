@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { Calendar as CalendarIcon, X } from 'lucide-react'
-import { format, startOfDay, endOfDay, subDays, subMonths, subYears } from 'date-fns'
+import { format, startOfDay, endOfDay, subDays, subMonths, subYears, startOfMonth, endOfMonth } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
@@ -17,14 +17,21 @@ export interface DateRange {
   to: Date | undefined
 }
 
+export type DatePreset = 'today' | 'yesterday' | 'last7days' | 'thisMonth' | 'last30days' | 'last3months' | 'last90days' | 'lastYear'
+
 interface DateRangeFilterProps {
   value: DateRange
-  onChange: (range: DateRange) => void
+  onChange: (range: DateRange, preset?: DatePreset) => void
   className?: string
 }
 
-const DATE_PRESETS = [
+const DATE_PRESETS: Array<{
+  id: DatePreset
+  label: string
+  getValue: () => DateRange
+}> = [
   {
+    id: 'today',
     label: 'Today',
     getValue: () => ({
       from: startOfDay(new Date()),
@@ -32,6 +39,7 @@ const DATE_PRESETS = [
     })
   },
   {
+    id: 'yesterday',
     label: 'Yesterday',
     getValue: () => ({
       from: startOfDay(subDays(new Date(), 1)),
@@ -39,6 +47,7 @@ const DATE_PRESETS = [
     })
   },
   {
+    id: 'last7days',
     label: 'Last 7 days',
     getValue: () => ({
       from: startOfDay(subDays(new Date(), 7)),
@@ -46,6 +55,15 @@ const DATE_PRESETS = [
     })
   },
   {
+    id: 'thisMonth',
+    label: 'This month',
+    getValue: () => ({
+      from: startOfMonth(new Date()),
+      to: endOfDay(new Date())
+    })
+  },
+  {
+    id: 'last30days',
     label: 'Last 30 days',
     getValue: () => ({
       from: startOfDay(subDays(new Date(), 30)),
@@ -53,6 +71,15 @@ const DATE_PRESETS = [
     })
   },
   {
+    id: 'last3months',
+    label: 'Last 3 months',
+    getValue: () => ({
+      from: startOfDay(subMonths(new Date(), 3)),
+      to: endOfDay(new Date())
+    })
+  },
+  {
+    id: 'last90days',
     label: 'Last 90 days',
     getValue: () => ({
       from: startOfDay(subDays(new Date(), 90)),
@@ -60,6 +87,7 @@ const DATE_PRESETS = [
     })
   },
   {
+    id: 'lastYear',
     label: 'Last year',
     getValue: () => ({
       from: startOfDay(subYears(new Date(), 1)),
@@ -67,6 +95,15 @@ const DATE_PRESETS = [
     })
   }
 ]
+
+// Helper function to get date range from preset ID
+export function getDateRangeFromPreset(presetId: DatePreset): DateRange {
+  const preset = DATE_PRESETS.find(p => p.id === presetId)
+  if (!preset) {
+    return { from: undefined, to: undefined }
+  }
+  return preset.getValue()
+}
 
 export function DateRangeFilter({ value, onChange, className }: DateRangeFilterProps) {
   const [isOpen, setIsOpen] = React.useState(false)
@@ -80,7 +117,7 @@ export function DateRangeFilter({ value, onChange, className }: DateRangeFilterP
   const handlePresetClick = (preset: typeof DATE_PRESETS[0]) => {
     const range = preset.getValue()
     setTempRange(range)
-    onChange(range)
+    onChange(range, preset.id)
     setIsOpen(false)
   }
 
@@ -153,13 +190,11 @@ export function DateRangeFilter({ value, onChange, className }: DateRangeFilterP
         <PopoverTrigger asChild>
           <Button
             variant={hasActiveFilter ? 'default' : 'outline'}
-            className={cn(
-              'justify-start text-left font-normal h-8 text-xs px-3',
-              !hasActiveFilter && 'text-muted-foreground'
-            )}
+            size="icon"
+            className="h-8 w-8 text-xs"
+            title={getDisplayText()}
           >
-            <CalendarIcon className="mr-1.5 h-3 w-3" />
-            {getDisplayText()}
+            <CalendarIcon className="h-3 w-3" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
@@ -211,17 +246,6 @@ export function DateRangeFilter({ value, onChange, className }: DateRangeFilterP
           </div>
         </PopoverContent>
       </Popover>
-
-      {/* Clear filter button when active */}
-      {hasActiveFilter && (
-        <Button
-          variant="ghost"
-          className="h-8 px-2"
-          onClick={handleClear}
-        >
-          <X className="h-3 w-3" />
-        </Button>
-      )}
     </div>
   )
 }
