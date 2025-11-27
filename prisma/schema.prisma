@@ -378,6 +378,8 @@ model Asset {
   height          Int?
   sourceType      String?  // 'pinterest' | 'instagram' | null for manual uploads
   sourceUrl       String?  // Pinterest pin URL or Instagram post URL for deduplication
+  hasFace         Boolean? // null = not analyzed, true = has face, false = no face
+  faceAnalyzedAt  DateTime? // When face detection was run
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -387,6 +389,7 @@ model Asset {
   @@index([folderId])
   @@index([cacheAssetId])
   @@index([sourceUrl])
+  @@index([hasFace])
 }
 
 // Product Context for storing product information and prompts

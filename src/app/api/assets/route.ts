@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const folderId = searchParams.get('folderId')
+    const hasFace = searchParams.get('hasFace')
 
     const where: any = {}
 
@@ -18,6 +19,14 @@ export async function GET(request: NextRequest) {
       // Specific folder
       where.folderId = folderId
     }
+
+    // Filter by face detection result
+    if (hasFace === 'true') {
+      where.hasFace = true
+    } else if (hasFace === 'false') {
+      where.hasFace = false
+    }
+    // If hasFace is not specified or any other value, show all assets
 
     const assets = await prisma.asset.findMany({
       where,

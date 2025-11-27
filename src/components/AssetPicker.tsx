@@ -53,7 +53,10 @@ export interface AssetItem {
   height: number | null
   url: string
   folderId: string | null
+  hasFace?: boolean | null
 }
+
+export type FaceFilter = 'all' | 'with-face' | 'no-face'
 
 interface AssetFolder {
   id: string
@@ -116,17 +119,18 @@ export function AssetPicker({
   // Multi-select: ordered array of selected assets
   const [selectedAssets, setSelectedAssets] = useState<AssetItem[]>([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [faceFilter, setFaceFilter] = useState<FaceFilter>('all')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Slide mode state: Map of slideIndex -> AssetItem (or null for cleared)
   const [slideAssignments, setSlideAssignments] = useState<Map<number, AssetItem | null>>(new Map())
   const [activeSlideIndex, setActiveSlideIndex] = useState<number>(0)
 
+  // Reset state when dialog opens
   useEffect(() => {
     if (open) {
-      fetchFolders()
-      fetchAssets()
       setSearchQuery('')
+      setFaceFilter('all')
       setSelectedAssetId(null)
       setSelectedAssets([])
 
@@ -145,7 +149,16 @@ export function AssetPicker({
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, currentFolderId, slideMode?.initialActiveSlideIndex])
+  }, [open, slideMode?.initialActiveSlideIndex])
+
+  // Fetch assets when folder or face filter changes
+  useEffect(() => {
+    if (open) {
+      fetchFolders()
+      fetchAssets()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, currentFolderId, faceFilter])
 
   // Handle paste from clipboard
   useEffect(() => {
@@ -195,6 +208,13 @@ export function AssetPicker({
         params.append('folderId', currentFolderId)
       } else {
         params.append('folderId', 'null')
+      }
+
+      // Add face filter if not 'all'
+      if (faceFilter === 'with-face') {
+        params.append('hasFace', 'true')
+      } else if (faceFilter === 'no-face') {
+        params.append('hasFace', 'false')
       }
 
       const response = await fetch(`/api/assets?${params}`)
@@ -656,6 +676,42 @@ export function AssetPicker({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
               />
+            </div>
+            {/* Face Filter */}
+            <div className="flex items-center border rounded-md">
+              <button
+                onClick={() => setFaceFilter('all')}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium transition-colors",
+                  faceFilter === 'all'
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                )}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setFaceFilter('with-face')}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium transition-colors border-l",
+                  faceFilter === 'with-face'
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                )}
+              >
+                With Face
+              </button>
+              <button
+                onClick={() => setFaceFilter('no-face')}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium transition-colors border-l",
+                  faceFilter === 'no-face'
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                )}
+              >
+                No Face
+              </button>
             </div>
             <Button
               onClick={() => fileInputRef.current?.click()}

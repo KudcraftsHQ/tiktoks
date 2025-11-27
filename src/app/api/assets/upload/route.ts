@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid'
 import sharp from 'sharp'
 import heicConvert from 'heic-convert'
 import { analyzeFileBuffer } from '@/lib/file-type-detector'
+import { detectFace } from '@/lib/face-detection-service'
 
 const prisma = new PrismaClient()
 
@@ -94,8 +95,28 @@ export async function POST(request: NextRequest) {
         }
       })
 
+      // Auto-detect face in the uploaded image
+      let hasFace: boolean | null = null
+      let faceAnalyzedAt: Date | null = null
+      try {
+        const faceResult = await detectFace(cacheAsset.id)
+        hasFace = faceResult.hasFace
+        faceAnalyzedAt = new Date()
+
+        // Update asset with face detection result
+        await prisma.asset.update({
+          where: { id: asset.id },
+          data: { hasFace, faceAnalyzedAt }
+        })
+      } catch (faceError) {
+        console.warn('Face detection failed for asset:', asset.id, faceError)
+        // Continue without face detection - don't fail the upload
+      }
+
       uploadedAssets.push({
         ...asset,
+        hasFace,
+        faceAnalyzedAt,
         url
       })
     }

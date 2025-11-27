@@ -30,7 +30,10 @@ import {
   ArrowLeft,
   Check,
   X,
-  Loader2
+  Loader2,
+  User,
+  UserX,
+  ScanFace
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -49,6 +52,8 @@ interface Asset {
   url: string
   width: number | null
   height: number | null
+  hasFace: boolean | null
+  faceAnalyzedAt: string | null
 }
 
 export default function AssetsPage() {
@@ -65,6 +70,7 @@ export default function AssetsPage() {
   const [draggedAsset, setDraggedAsset] = useState<string | null>(null)
   const [dropTargetFolder, setDropTargetFolder] = useState<string | null>(null)
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set())
+  const [isAnalyzingFaces, setIsAnalyzingFaces] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -338,7 +344,72 @@ export default function AssetsPage() {
     setSelectedAssets(newSelected)
   }
 
+  const handleAnalyzeSelectedFaces = async () => {
+    if (selectedAssets.size === 0) return
+
+    setIsAnalyzingFaces(true)
+    try {
+      const response = await fetch('/api/assets/bulk-analyze-face', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assetIds: Array.from(selectedAssets) })
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        // Update assets with new face detection results
+        setAssets(assets.map(a => {
+          const updated = result.assets.find((ua: Asset) => ua.id === a.id)
+          return updated || a
+        }))
+        toast.success(`Analyzed ${result.processed} asset(s)`)
+      } else {
+        throw new Error('Failed to analyze faces')
+      }
+    } catch (error) {
+      console.error('Failed to analyze faces:', error)
+      toast.error('Failed to analyze faces')
+    } finally {
+      setIsAnalyzingFaces(false)
+    }
+  }
+
+  const handleAnalyzeAllUnanalyzed = async () => {
+    const unanalyzedAssets = assets.filter(a => a.hasFace === null)
+    if (unanalyzedAssets.length === 0) {
+      toast.info('All assets have been analyzed')
+      return
+    }
+
+    setIsAnalyzingFaces(true)
+    try {
+      const response = await fetch('/api/assets/bulk-analyze-face', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assetIds: unanalyzedAssets.map(a => a.id) })
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        // Update assets with new face detection results
+        setAssets(assets.map(a => {
+          const updated = result.assets.find((ua: Asset) => ua.id === a.id)
+          return updated || a
+        }))
+        toast.success(`Analyzed ${result.processed} asset(s)`)
+      } else {
+        throw new Error('Failed to analyze faces')
+      }
+    } catch (error) {
+      console.error('Failed to analyze faces:', error)
+      toast.error('Failed to analyze faces')
+    } finally {
+      setIsAnalyzingFaces(false)
+    }
+  }
+
   const currentFolder = folders.find(f => f.id === currentFolderId)
+  const unanalyzedCount = assets.filter(a => a.hasFace === null).length
 
   return (
     <div className="min-h-screen bg-background">
@@ -372,6 +443,25 @@ export default function AssetsPage() {
                 )}
               </div>
             </div>
+            {unanalyzedCount > 0 && (
+              <Button
+                onClick={handleAnalyzeAllUnanalyzed}
+                disabled={isAnalyzingFaces}
+                variant="outline"
+              >
+                {isAnalyzingFaces ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <ScanFace className="h-4 w-4 mr-2" />
+                    Analyze All ({unanalyzedCount})
+                  </>
+                )}
+              </Button>
+            )}
             <Button
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
@@ -414,6 +504,24 @@ export default function AssetsPage() {
         {selectedAssets.size > 0 && (
           <div className="mb-4 p-4 bg-muted rounded-lg flex items-center gap-2">
             <span className="text-sm">{selectedAssets.size} selected</span>
+            <Button
+              onClick={handleAnalyzeSelectedFaces}
+              disabled={isAnalyzingFaces}
+              variant="secondary"
+              size="sm"
+            >
+              {isAnalyzingFaces ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <ScanFace className="h-4 w-4 mr-1" />
+                  Analyze Faces
+                </>
+              )}
+            </Button>
             <Button onClick={handleDeleteSelected} variant="destructive" size="sm">
               <Trash2 className="h-4 w-4 mr-1" />
               Delete Selected
@@ -535,6 +643,23 @@ export default function AssetsPage() {
                     <div className="absolute top-2 left-2 z-10">
                       <div className="w-6 h-6 rounded bg-primary border-2 border-primary flex items-center justify-center">
                         <Check className="h-4 w-4 text-primary-foreground" />
+                      </div>
+                    </div>
+                  )}
+                  {/* Face detection indicator */}
+                  {asset.hasFace !== null && (
+                    <div className="absolute top-2 right-2 z-10">
+                      <div className={cn(
+                        "w-5 h-5 rounded-full flex items-center justify-center",
+                        asset.hasFace
+                          ? "bg-green-500/90"
+                          : "bg-gray-500/90"
+                      )}>
+                        {asset.hasFace ? (
+                          <User className="h-3 w-3 text-white" />
+                        ) : (
+                          <UserX className="h-3 w-3 text-white" />
+                        )}
                       </div>
                     </div>
                   )}
