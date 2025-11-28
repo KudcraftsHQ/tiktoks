@@ -2,12 +2,13 @@
 
 import { useState, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { InlineEditableTitle } from '@/components/InlineEditableTitle'
 import { InlineEditableText } from '@/components/InlineEditableText'
 import { Textarea } from '@/components/ui/textarea'
 import { ConceptTypeDropdown } from '@/components/ConceptTypeDropdown'
 import { ImageGallery } from '@/components/ImageGallery'
-import { Trash2, ToggleLeft, ToggleRight, Sparkles, Pencil, Loader2, Copy } from 'lucide-react'
+import { Trash2, ToggleLeft, ToggleRight, Sparkles, Pencil, Loader2, Copy, GitBranch } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Tooltip,
@@ -33,7 +34,8 @@ import {
   SelectableExampleCard,
   FloatingSelectionBar,
   MoveToConceptDialog,
-  NewConceptFromExamplesDialog
+  NewConceptFromExamplesDialog,
+  SplitConceptDialog
 } from '@/components/concepts'
 import { cn } from '@/lib/utils'
 
@@ -74,6 +76,8 @@ interface ConceptsTableProps {
   onExamplesAdded?: (conceptId: string, examples: ConceptExample[]) => void
   onExampleDeleted?: (conceptId: string, exampleId: string) => void
   isLoading?: boolean
+  selectedConceptIds?: Set<string>
+  onSelectionChange?: (selectedIds: Set<string>) => void
 }
 
 // Helper to format view count
@@ -185,7 +189,7 @@ const ExamplesCell = ({
 
   return (
     <TooltipProvider>
-      <div className="flex flex-wrap gap-3 pb-2 py-2 max-w-[1100px]">
+      <div className="flex flex-wrap gap-3 pb-2 py-2">
         {/* Existing examples with selection support */}
         {concept.examples.map((example) => (
           <SelectableExampleCard
@@ -309,6 +313,7 @@ const ActionsCell = ({
   onToggleActive,
   onDelete,
   onReclassify,
+  onSplit,
   isDeleting,
   isReclassifying
 }: {
@@ -316,6 +321,7 @@ const ActionsCell = ({
   onToggleActive: (concept: Concept) => Promise<void>
   onDelete: (id: string) => Promise<void>
   onReclassify: (conceptId: string) => Promise<void>
+  onSplit: (conceptId: string) => void
   isDeleting: boolean
   isReclassifying: boolean
 }) => {
@@ -412,6 +418,26 @@ const ActionsCell = ({
             <Button
               variant="ghost"
               size="icon"
+              onClick={() => onSplit(concept.id)}
+              disabled={concept.examples.length < 4}
+              className="h-8 w-8"
+            >
+              <GitBranch className="h-4 w-4 text-blue-500" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left">
+            <p>
+              {concept.examples.length < 4
+                ? "Need at least 4 examples to split"
+                : "Split into Sub-Concepts"}
+            </p>
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={handleCopyToClipboard}
               disabled={isCopying}
               className="h-8 w-8"
@@ -473,14 +499,42 @@ function ConceptsTableInner({
   onRefresh,
   onExamplesAdded,
   onExampleDeleted,
-  isLoading
+  isLoading,
+  selectedConceptIds = new Set(),
+  onSelectionChange
 }: ConceptsTableProps) {
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const [isReclassifying, setIsReclassifying] = useState<string | null>(null)
   const [showMoveDialog, setShowMoveDialog] = useState(false)
   const [showNewConceptDialog, setShowNewConceptDialog] = useState(false)
+  const [splitConceptId, setSplitConceptId] = useState<string | null>(null)
 
   const { selectedExamples, clearSelection } = useExampleSelection()
+
+  // Concept selection handlers
+  const handleToggleConceptSelection = useCallback((conceptId: string) => {
+    if (!onSelectionChange) return
+
+    const newSelection = new Set(selectedConceptIds)
+    if (newSelection.has(conceptId)) {
+      newSelection.delete(conceptId)
+    } else {
+      newSelection.add(conceptId)
+    }
+    onSelectionChange(newSelection)
+  }, [selectedConceptIds, onSelectionChange])
+
+  const handleToggleAllConcepts = useCallback(() => {
+    if (!onSelectionChange) return
+
+    if (selectedConceptIds.size === concepts.length) {
+      // Deselect all
+      onSelectionChange(new Set())
+    } else {
+      // Select all
+      onSelectionChange(new Set(concepts.map(c => c.id)))
+    }
+  }, [selectedConceptIds, concepts, onSelectionChange])
 
   // Image gallery state
   const [galleryImages, setGalleryImages] = useState<Array<{ url: string; width: number; height: number }>>([])
@@ -707,7 +761,19 @@ function ConceptsTableInner({
       <div className="h-full flex flex-col min-h-0 min-w-0">
         {/* Table Header - Fixed */}
         <div className="flex items-center border-b bg-muted/50 flex-shrink-0">
-          <div className="w-[250px] flex-shrink-0 px-4 py-3 text-sm font-medium text-muted-foreground">
+          {onSelectionChange && (
+            <div className="w-[50px] flex-shrink-0 px-4 py-3 flex items-center justify-center sticky left-0 z-[10] bg-muted/50">
+              <Checkbox
+                checked={concepts.length > 0 && selectedConceptIds.size === concepts.length}
+                onCheckedChange={handleToggleAllConcepts}
+                aria-label="Select all concepts"
+              />
+            </div>
+          )}
+          <div className={cn(
+            "w-[250px] flex-shrink-0 px-4 py-3 text-sm font-medium text-muted-foreground",
+            onSelectionChange && "sticky left-[50px] z-[10] bg-muted/50"
+          )}>
             CONCEPT
           </div>
           <div className="w-[100px] flex-shrink-0 px-4 py-3 text-sm font-medium text-muted-foreground">
@@ -730,8 +796,21 @@ function ConceptsTableInner({
                 !concept.isActive && 'opacity-50'
               )}
             >
+              {/* Checkbox column */}
+              {onSelectionChange && (
+                <div className="w-[50px] flex-shrink-0 flex items-center justify-center sticky left-0 z-[5] bg-background border-r">
+                  <Checkbox
+                    checked={selectedConceptIds.has(concept.id)}
+                    onCheckedChange={() => handleToggleConceptSelection(concept.id)}
+                    aria-label={`Select ${concept.title}`}
+                  />
+                </div>
+              )}
               {/* Title column */}
-              <div className="w-[250px] flex-shrink-0 border-r bg-background sticky left-0 z-[5]">
+              <div className={cn(
+                "w-[250px] flex-shrink-0 border-r bg-background pr-4",
+                onSelectionChange ? "sticky left-[50px] z-[5]" : "sticky left-0 z-[5]"
+              )}>
                 <ConceptTitleCell
                   concept={concept}
                   onSave={(field, value) => handleSaveField(concept.id, field, value)}
@@ -765,6 +844,7 @@ function ConceptsTableInner({
                   onToggleActive={handleToggleActive}
                   onDelete={handleDelete}
                   onReclassify={handleReclassify}
+                  onSplit={(id) => setSplitConceptId(id)}
                   isDeleting={isDeleting === concept.id}
                   isReclassifying={isReclassifying === concept.id}
                 />
@@ -820,6 +900,17 @@ function ConceptsTableInner({
         defaultType={defaultType}
         onConfirm={handleCreateNewConcept}
       />
+
+      {/* Split Concept Dialog */}
+      <SplitConceptDialog
+        open={!!splitConceptId}
+        onOpenChange={(open) => !open && setSplitConceptId(null)}
+        concept={splitConceptId ? concepts.find(c => c.id === splitConceptId) || null : null}
+        onSplitComplete={() => {
+          setSplitConceptId(null)
+          onRefresh()
+        }}
+      />
     </>
   )
 }
@@ -829,7 +920,9 @@ export function ConceptsTable({
   onRefresh,
   onExamplesAdded,
   onExampleDeleted,
-  isLoading
+  isLoading,
+  selectedConceptIds,
+  onSelectionChange
 }: ConceptsTableProps) {
   return (
     <ExampleSelectionProvider>
@@ -839,6 +932,8 @@ export function ConceptsTable({
         onExamplesAdded={onExamplesAdded}
         onExampleDeleted={onExampleDeleted}
         isLoading={isLoading}
+        selectedConceptIds={selectedConceptIds}
+        onSelectionChange={onSelectionChange}
       />
     </ExampleSelectionProvider>
   )
