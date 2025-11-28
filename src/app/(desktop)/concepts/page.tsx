@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { ConceptsTable, Concept, ConceptExample } from '@/components/ConceptsTable'
 import { Button } from '@/components/ui/button'
-import { RefreshCw, Plus, Filter } from 'lucide-react'
+import { RefreshCw, Plus, Filter, Copy, Check } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PageLayout } from '@/components/PageLayout'
 import { toast } from 'sonner'
@@ -56,6 +56,9 @@ export default function ConceptsPage() {
   // Multi-select type filter
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set(['HOOK', 'CONTENT', 'CTA']))
   const [searchQuery, setSearchQuery] = useState('')
+
+  // Concept selection state
+  const [selectedConceptIds, setSelectedConceptIds] = useState<Set<string>>(new Set())
 
   const toggleType = (type: string) => {
     const newSelected = new Set(selectedTypes)
@@ -198,6 +201,100 @@ export default function ConceptsPage() {
   // Filter concepts by selected types for display
   const filteredConcepts = concepts.filter(c => selectedTypes.has(c.type))
 
+  // Helper to format view count
+  const formatViewCount = (count: number | null | undefined): string => {
+    if (!count) return '0'
+    if (count >= 1000000) {
+      return `${(count / 1000000).toFixed(1)}M`
+    } else if (count >= 1000) {
+      return `${(count / 1000).toFixed(1)}K`
+    }
+    return count.toString()
+  }
+
+  // Copy selected concepts to clipboard
+  const [isCopying, setIsCopying] = useState(false)
+  const handleCopySelectedToClipboard = useCallback(async () => {
+    if (selectedConceptIds.size === 0) return
+
+    setIsCopying(true)
+    try {
+      const selectedConcepts = concepts.filter(c => selectedConceptIds.has(c.id))
+      const sections: string[] = []
+
+      selectedConcepts.forEach((concept, index) => {
+        if (index > 0) {
+          sections.push('\n---\n')
+        }
+
+        // Concept header as H1
+        sections.push(`# ${concept.title}`)
+        sections.push('')
+
+        // Core message as blockquote
+        if (concept.coreMessage) {
+          sections.push(`> ${concept.coreMessage}`)
+          sections.push('')
+        }
+
+        // Type badge
+        sections.push(`**Type:** ${concept.type}`)
+        sections.push('')
+
+        // Top 5 examples section
+        const topExamples = concept.examples
+          .sort((a, b) => {
+            const viewsA = a.sourcePost?.viewCount || 0
+            const viewsB = b.sourcePost?.viewCount || 0
+            return viewsB - viewsA
+          })
+          .slice(0, 5)
+
+        if (topExamples.length > 0) {
+          sections.push('## Top Examples')
+          sections.push('')
+
+          topExamples.forEach((example, exampleIndex) => {
+            // Example header with view count if available
+            let exampleHeader = `### Example ${exampleIndex + 1}`
+
+            if (example.sourcePost?.viewCount) {
+              exampleHeader += ` (${formatViewCount(example.sourcePost.viewCount)} views)`
+            }
+
+            sections.push(exampleHeader)
+            sections.push('')
+            sections.push(example.text)
+            sections.push('')
+          })
+        } else {
+          sections.push('_No examples yet_')
+          sections.push('')
+        }
+      })
+
+      const markdownContent = sections.join('\n')
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(markdownContent)
+
+      // Show success toast
+      toast.success('Copied to clipboard', {
+        description: `${selectedConceptIds.size} concept${selectedConceptIds.size !== 1 ? 's' : ''} with top 5 examples each`
+      })
+
+      // Clear selection after copy
+      setSelectedConceptIds(new Set())
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error)
+      toast.error('Failed to copy to clipboard', {
+        description: 'Please try again'
+      })
+    } finally {
+      setIsCopying(false)
+    }
+  }, [concepts, selectedConceptIds])
+
   return (
     <PageLayout
       title={
@@ -213,6 +310,24 @@ export default function ConceptsPage() {
       }
       headerActions={
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto items-center">
+          {/* Copy Selected Concepts Button */}
+          {selectedConceptIds.size > 0 && (
+            <Button
+              onClick={handleCopySelectedToClipboard}
+              disabled={isCopying}
+              variant="default"
+              size="sm"
+              className="w-full sm:w-auto h-8 px-3 text-xs"
+            >
+              {isCopying ? (
+                <Check className="h-3 w-3 mr-1.5" />
+              ) : (
+                <Copy className="h-3 w-3 mr-1.5" />
+              )}
+              Copy {selectedConceptIds.size} Concept{selectedConceptIds.size !== 1 ? 's' : ''}
+            </Button>
+          )}
+
           {/* Type Multi-Select Filter */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -344,6 +459,8 @@ export default function ConceptsPage() {
           onExamplesAdded={handleExamplesAdded}
           onExampleDeleted={handleExampleDeleted}
           isLoading={loading}
+          selectedConceptIds={selectedConceptIds}
+          onSelectionChange={setSelectedConceptIds}
         />
       )}
 
