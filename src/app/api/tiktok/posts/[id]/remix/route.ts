@@ -106,6 +106,27 @@ export async function POST(
       textBoxes: [] // Start with empty text boxes, user can add more
     }))
 
+    // Extract slide classifications from original post's OCR data
+    let slideClassifications: Array<{ slideIndex: number; type: string; categoryName: string }> = []
+    try {
+      if (originalPost.ocrData) {
+        const ocrData = typeof originalPost.ocrData === 'string'
+          ? JSON.parse(originalPost.ocrData)
+          : originalPost.ocrData
+
+        if (ocrData && Array.isArray(ocrData.slides)) {
+          slideClassifications = ocrData.slides.map((slide: any, index: number) => ({
+            slideIndex: index,
+            type: (slide.slideType || 'content').toUpperCase(),
+            categoryName: slide.slideType ? slide.slideType.charAt(0).toUpperCase() + slide.slideType.slice(1) : 'Content'
+          }))
+          console.log(`📋 [API] Copied ${slideClassifications.length} slide classifications from original post`)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to parse slide classifications from OCR data:', error)
+    }
+
     // Create the remix with new JSON structure
     console.log(`🏗️ [API] Creating remix with ${slides.length} slides...`)
     const createdRemix = await prisma.remixPost.create({
@@ -116,7 +137,8 @@ export async function POST(
         name,
         description,
         generationType: 'ai_paraphrase',
-        slides: JSON.stringify(slides)
+        slides: JSON.stringify(slides),
+        slideClassifications: slideClassifications
       },
       include: {
         originalPost: {

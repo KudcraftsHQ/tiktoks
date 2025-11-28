@@ -20,6 +20,9 @@ interface InlineEditableTextProps {
   fixedHeight?: boolean
   heightClass?: string
   searchTerms?: string[]
+  // Empty state button props
+  emptyStateButton?: React.ReactNode
+  onEmptyStateClick?: () => void
 }
 
 export function InlineEditableText({
@@ -33,7 +36,9 @@ export function InlineEditableText({
   disabledMessage = 'Editing is disabled',
   fixedHeight = false,
   heightClass = 'h-40',
-  searchTerms = []
+  searchTerms = [],
+  emptyStateButton,
+  onEmptyStateClick
 }: InlineEditableTextProps) {
   const [localValue, setLocalValue] = useState(value)
   const [isSaving, setIsSaving] = useState(false)
@@ -77,9 +82,25 @@ export function InlineEditableText({
       toast.error('Failed to copy to clipboard')
     }
   }
+  // Show empty state button when value is empty and button is provided
+  const showEmptyState = !localValue && emptyStateButton
+
   return (
     <div className={cn('relative group', fixedHeight && 'h-full')}>
-      {showHighlightedView ? (
+      {showEmptyState ? (
+        // Empty state with centered button
+        <div
+          className={cn(
+            'px-3 py-2 border rounded-md bg-background flex items-center justify-center',
+            fixedHeight && 'h-full',
+            !fixedHeight && `min-h-[${rows * 1.5}rem]`,
+            className
+          )}
+          onClick={onEmptyStateClick}
+        >
+          {emptyStateButton}
+        </div>
+      ) : showHighlightedView ? (
         // Highlighted view when searching
         <div
           className={cn(

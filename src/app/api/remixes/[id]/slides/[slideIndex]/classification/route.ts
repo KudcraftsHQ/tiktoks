@@ -70,15 +70,15 @@ export async function PATCH(
       // Update existing classification
       slideClassifications[existingIndex] = {
         ...slideClassifications[existingIndex],
-        type: slideType.toLowerCase(),
-        categoryName: slideClassifications[existingIndex].categoryName || slideType
+        type: slideType.toUpperCase(),
+        categoryName: slideClassifications[existingIndex].categoryName || slideType.toUpperCase()
       }
     } else {
       // Add new classification
       slideClassifications.push({
         slideIndex,
-        type: slideType.toLowerCase(),
-        categoryName: slideType
+        type: slideType.toUpperCase(),
+        categoryName: slideType.toUpperCase()
       })
     }
 

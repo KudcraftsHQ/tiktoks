@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { ImageIcon } from 'lucide-react'
 import type { RemixSlideType } from '@/lib/validations/remix-schema'
 import { renderSlideToDataURL, getSlideCacheKey, THUMBNAIL_SIZES, type ThumbnailDimensions } from '@/lib/slide-renderer'
+import { getProxiedImageUrlById } from '@/lib/image-proxy'
 
 interface SlideThumbnailProps {
   slide: RemixSlideType
@@ -17,6 +18,12 @@ interface SlideThumbnailProps {
 // Helper to check if slide has a background image
 const hasBackgroundImage = (slide: RemixSlideType): boolean => {
   return slide.backgroundLayers?.some(layer => layer.type === 'image' && layer.cacheAssetId) || false
+}
+
+// Helper to get background image cache asset ID
+const getBackgroundImageId = (slide: RemixSlideType): string | null => {
+  const imageLayer = slide.backgroundLayers?.find(layer => layer.type === 'image' && layer.cacheAssetId)
+  return imageLayer?.cacheAssetId || null
 }
 
 // Global thumbnail cache to avoid re-rendering
@@ -41,33 +48,22 @@ export function SlideThumbnail({
     let isCancelled = false
 
     const generateThumbnail = async () => {
-      // Check cache first
-      if (thumbnailCache.has(cacheKey)) {
+      // If slide has a background image, just use the image directly
+      const backgroundImageId = getBackgroundImageId(slide)
+      if (backgroundImageId) {
         if (!isCancelled) {
-          setThumbnailUrl(thumbnailCache.get(cacheKey)!)
+          // Get the proxied image URL
+          const imageUrl = getProxiedImageUrlById(backgroundImageId)
+          setThumbnailUrl(imageUrl)
+          setIsGenerating(false)
         }
         return
       }
 
-      setIsGenerating(true)
-      setError(false)
-
-      try {
-        const dataUrl = await renderSlideToDataURL(slide, dimensions)
-
-        if (!isCancelled) {
-          thumbnailCache.set(cacheKey, dataUrl)
-          setThumbnailUrl(dataUrl)
-        }
-      } catch (err) {
-        console.error('Failed to generate thumbnail:', err)
-        if (!isCancelled) {
-          setError(true)
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsGenerating(false)
-        }
+      // No background image, show placeholder
+      if (!isCancelled) {
+        setThumbnailUrl(null)
+        setIsGenerating(false)
       }
     }
 
@@ -76,7 +72,7 @@ export function SlideThumbnail({
     return () => {
       isCancelled = true
     }
-  }, [cacheKey, slide, dimensions])
+  }, [slide])
 
   const isLoading = loading || isGenerating
   const hasImage = hasBackgroundImage(slide)

@@ -349,17 +349,28 @@ export default function ProjectDetailPage() {
   const handleCreateNewDraft = async () => {
     setIsCreatingDraft(true)
     try {
+      // Use reference post structure if available
+      const requestBody: any = {
+        name: `${project?.name || 'Project'} Draft`,
+        description: '',
+        bookmarked: false,
+        slideCount: referencePostStructure?.slideCount || 5,
+        projectId: projectId // Associate draft with current project
+      }
+
+      // Add reference structure if available
+      if (referencePostStructure?.slideClassifications) {
+        requestBody.referenceStructure = {
+          slideClassifications: referencePostStructure.slideClassifications
+        }
+      }
+
       const response = await fetch('/api/remixes', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          name: `${project?.name || 'Project'} Draft`,
-          description: '',
-          bookmarked: false,
-          slideCount: 5
-        })
+        body: JSON.stringify(requestBody)
       })
 
       if (!response.ok) {

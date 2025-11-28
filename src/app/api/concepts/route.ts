@@ -16,8 +16,9 @@ export async function GET(request: Request) {
 
     const where: any = {}
 
-    if (type) {
-      where.type = type
+    // Only filter by type if it's a valid enum value (not "all")
+    if (type && type.toUpperCase() !== 'ALL') {
+      where.type = type.toUpperCase()
     }
 
     if (isActive !== null && isActive !== undefined) {

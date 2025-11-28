@@ -31,11 +31,11 @@ const RemixTextBoxSchema = z.object({
   fontSize: z.number().min(8).max(200),
   fontFamily: z.string().min(1).max(100),
   fontWeight: z.enum(['normal', 'bold', 'bolder', 'lighter', '100', '200', '300', '400', '500', '600', '700', '800', '900']),
-  fontStyle: z.enum(['normal', 'italic', 'oblique']),
-  textDecoration: z.enum(['none', 'underline', 'overline', 'line-through']),
+  fontStyle: z.enum(['normal', 'italic', 'oblique']).default('normal'),
+  textDecoration: z.enum(['none', 'underline', 'overline', 'line-through']).default('none'),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
   textAlign: z.enum(['left', 'center', 'right', 'justify']),
-  zIndex: z.number().min(1).max(10000),
+  zIndex: z.number().min(1).max(10000).default(1),
 
   // Text wrapping behavior
   textWrap: z.enum(['none', 'wrap', 'ellipsis']).default('wrap'),

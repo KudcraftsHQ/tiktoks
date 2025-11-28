@@ -416,7 +416,7 @@ export function PostsTable({
           enableSelection={true}
           onRowSelectionChange={handleRowSelectionChange}
           pageSize={10}
-          leftStickyColumnsCount={3}
+          leftStickyColumnsCount={1}
           rightStickyColumnsCount={1}
           fullWidth={true}
           isLoading={isLoading}

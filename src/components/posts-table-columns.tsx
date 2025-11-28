@@ -514,7 +514,7 @@ export const createPostsTableColumns = ({
 }: PostsTableColumnsProps): ColumnDef<TikTokPost>[] => [
   {
     accessorKey: 'authorHandle',
-    header: 'Author',
+    header: 'Posts',
     enableSorting: false,
     size: 350,
     minSize: 350,
@@ -684,41 +684,6 @@ export const createPostsTableColumns = ({
               </div>
               <span className="text-sm font-mono">{formatNumber(post.saveCount)}</span>
             </div>
-          </div>
-        </div>
-      )
-    }
-  },
-  {
-    accessorKey: 'description',
-    header: 'Description',
-    enableSorting: false,
-    size: 224,
-    cell: ({ row }) => {
-      const post = row.original
-      const description = post.description || ''
-
-      return (
-        <div className="flex-shrink-0 w-52 flex flex-col" onClick={(e) => e.stopPropagation()}>
-          <div className="mb-2">
-            <InlineCategorySelector
-              postId={post.id}
-              currentCategory={post.postCategory}
-              onUpdate={onRefetchPosts}
-            />
-          </div>
-          <div className="overflow-y-auto h-48">
-            <InlineEditableText
-              value={description || ''}
-              onSave={async () => {}} // No-op save
-              placeholder="No description"
-              fixedHeight={true}
-              heightClass="h-full"
-              disabled={false}
-              className="text-[12px]"
-              rows={8}
-              searchTerms={searchTerms}
-            />
           </div>
         </div>
       )

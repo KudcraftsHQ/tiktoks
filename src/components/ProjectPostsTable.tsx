@@ -18,9 +18,12 @@ import { PostAnalyticsSheet } from '@/components/PostAnalyticsSheet'
 import { ThumbnailStrip } from '@/components/ThumbnailStrip'
 import { invalidateSlideThumbnail } from '@/components/SlideThumbnail'
 import { DraftSettingsDialog } from '@/components/DraftSettingsDialog'
+import { ConceptSelectorPopover } from '@/components/ConceptSelectorPopover'
+import { ConceptQuickSelector } from '@/components/ConceptQuickSelector'
+import { FixCoherenceDialog } from '@/components/FixCoherenceDialog'
 import type { RemixSlideType } from '@/lib/validations/remix-schema'
 import { SortingState, RowSelectionState } from '@tanstack/react-table'
-import { FileText, Loader2, Sparkles, Edit, ExternalLink, Trash2, Copy, Plus, GripVertical, Settings, Download, Pencil, Send, Lightbulb } from 'lucide-react'
+import { FileText, Loader2, Sparkles, Edit, ExternalLink, Trash2, Copy, Plus, GripVertical, Settings, Download, Pencil, Send, Lightbulb, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { DateRange } from '@/components/DateRangeFilter'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
@@ -127,6 +130,14 @@ function DraftNameEditor({ draftId, draftName, onSave }: DraftNameEditorProps) {
   )
 }
 
+// Slide concept state for cycling
+interface SlideConceptState {
+  conceptId: string
+  conceptTitle: string
+  exampleIndex: number
+  exampleIds: string[]
+}
+
 // Sortable Slide Component for drag-and-drop
 interface SortableSlideProps {
   id: string
@@ -137,8 +148,15 @@ interface SortableSlideProps {
   searchTerms: string[]
   onSaveText: (draftId: string, slideIndex: number, newText: string) => Promise<void>
   onRemoveSlide: (draftId: string, slideIndex: number) => Promise<void>
+  onApplyExample: (draftId: string, slideIndex: number, text: string, conceptId: string, exampleId: string, mode: 'copy' | 'paraphrase', intensity?: 'minimal' | 'medium' | 'high') => Promise<void>
+  onApplyConceptWithState: (draftId: string, slideIndex: number, text: string, conceptId: string, conceptTitle: string, exampleId: string, exampleIds: string[], isHookSlide?: boolean) => Promise<void>
+  onCycleExample: (draftId: string, slideIndex: number) => Promise<void>
+  onAutoFill: (draftId: string) => Promise<void>
   onRefetchData?: () => void
   totalSlides: number
+  isApplyingConcept?: boolean
+  isDraftLoading?: boolean
+  conceptState?: SlideConceptState
 }
 
 function SortableSlide({
@@ -150,8 +168,15 @@ function SortableSlide({
   searchTerms,
   onSaveText,
   onRemoveSlide,
+  onApplyExample,
+  onApplyConceptWithState,
+  onCycleExample,
+  onAutoFill,
   onRefetchData,
-  totalSlides
+  totalSlides,
+  isApplyingConcept = false,
+  isDraftLoading = false,
+  conceptState
 }: SortableSlideProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
@@ -186,7 +211,7 @@ function SortableSlide({
           isDragging && 'z-50'
         )}
       >
-        {/* Slide header with drag handle, number badge, type, concept indicator, and remove button */}
+        {/* Slide header with drag handle, number badge, type, and remove button */}
         <div className="flex items-center gap-1.5 mb-2">
           <div
             {...attributes}
@@ -203,21 +228,9 @@ function SortableSlide({
               remixId={draftId}
               slideIndex={slideIndex}
               currentType={classification?.type as 'hook' | 'content' | 'cta' | null}
+              onUpdate={onRefetchData}
             />
           </div>
-          {/* Concept indicator - shows if slide was generated from a concept */}
-          {classification?.conceptTitle && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center gap-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 text-[10px] font-medium px-1.5 py-0.5 rounded cursor-default">
-                  <Lightbulb className="h-2.5 w-2.5" />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                <p className="font-medium">Concept: {classification.conceptTitle}</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
           {totalSlides > 1 && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -240,20 +253,70 @@ function SortableSlide({
           )}
         </div>
         {/* Slide text - fixed height with scroll */}
-        <div className="h-48 overflow-y-auto">
-          <InlineEditableText
-            value={slide.paraphrasedText || ''}
-            onSave={async (newValue) => {
-              await onSaveText(draftId, slideIndex, newValue)
-            }}
-            placeholder="No text"
-            fixedHeight={true}
-            heightClass="h-48"
-            disabled={false}
-            className="text-[12px]"
-            rows={8}
-            searchTerms={searchTerms}
-          />
+        <div className="space-y-2">
+          <div className="h-48 overflow-y-auto">
+            <InlineEditableText
+              value={slide.paraphrasedText || ''}
+              onSave={async (newValue) => {
+                await onSaveText(draftId, slideIndex, newValue)
+              }}
+              placeholder="No text"
+              fixedHeight={true}
+              heightClass="h-48"
+              disabled={isApplyingConcept || isDraftLoading}
+              disabledMessage={isDraftLoading ? "Preparing auto-fill..." : "Applying concept..."}
+              className="text-[12px]"
+              rows={8}
+              searchTerms={searchTerms}
+              emptyStateButton={
+                <ConceptQuickSelector
+                  slideType={classification?.type as 'HOOK' | 'CONTENT' | 'CTA' | null}
+                  slideIndex={slideIndex}
+                  onApply={async (text, conceptId, conceptTitle, exampleId, exampleIds) => {
+                    const isHookSlide = classification?.type?.toUpperCase() === 'HOOK' && slideIndex === 0
+                    await onApplyConceptWithState(draftId, slideIndex, text, conceptId, conceptTitle, exampleId, exampleIds, isHookSlide)
+                  }}
+                  onAutoFill={() => onAutoFill(draftId)}
+                  currentConceptId={conceptState?.conceptId}
+                  currentExampleIndex={conceptState?.exampleIndex}
+                  currentExampleIds={conceptState?.exampleIds}
+                  onCycle={() => onCycleExample(draftId, slideIndex)}
+                  isApplying={isApplyingConcept || isDraftLoading}
+                />
+              }
+            />
+          </div>
+
+          {/* Concept info row - always show */}
+          <div className="flex items-center gap-2 px-2 py-1.5 bg-muted/50 rounded-md text-xs">
+            <ConceptSelectorPopover
+              slideType={classification?.type as 'HOOK' | 'CONTENT' | 'CTA' | null}
+              currentConceptTitle={classification?.conceptTitle}
+              currentConceptId={classification?.conceptId}
+              onApply={async (text, conceptId, exampleId, mode, intensity) => {
+                await onApplyExample(draftId, slideIndex, text, conceptId, exampleId, mode, intensity)
+              }}
+              trigger={
+                <span className="flex-1 truncate text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                  {conceptState?.conceptTitle || 'Manual'}
+                </span>
+              }
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 flex-shrink-0"
+              onClick={() => onCycleExample(draftId, slideIndex)}
+              disabled={isApplyingConcept || !conceptState?.conceptTitle || !conceptState?.exampleIds || conceptState.exampleIds.length <= 1}
+              title={
+                conceptState?.conceptTitle && conceptState?.exampleIds && conceptState.exampleIds.length > 1
+                  ? `Next example (${conceptState.exampleIndex + 1}/${conceptState.exampleIds.length})`
+                  : 'No other examples available'
+              }
+            >
+              <RefreshCw className="h-3 w-3" />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -343,6 +406,52 @@ export function ProjectPostsTable({
   const [itemToDelete, setItemToDelete] = useState<{ id: string; type: 'post' | 'draft'; name: string } | null>(null)
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
   const [selectedDraftForSettings, setSelectedDraftForSettings] = useState<{ id: string; canvasSize?: { width: number; height: number } } | null>(null)
+  const [coherenceDialogOpen, setCoherenceDialogOpen] = useState(false)
+  const [selectedDraftForCoherence, setSelectedDraftForCoherence] = useState<string | null>(null)
+
+  // Track loading state for individual slides during concept application
+  const [applyingConceptSlides, setApplyingConceptSlides] = useState<Set<string>>(new Set())
+
+  // Track drafts waiting for auto-fill (used to disable editing during the delay)
+  const [draftsWaitingForAutoFill, setDraftsWaitingForAutoFill] = useState<Set<string>>(new Set())
+
+  // Track concept state for cycling per slide
+  const [slideConceptStates, setSlideConceptStates] = useState<Map<string, SlideConceptState>>(new Map())
+
+  // Helper to create slide key for loading state tracking
+  const getSlideKey = (draftId: string, slideIndex: number) => `${draftId}:${slideIndex}`
+
+  // Initialize concept states from loaded drafts' slideClassifications
+  useEffect(() => {
+    if (!rows || rows.length === 0) return
+
+    const newConceptStates = new Map<string, SlideConceptState>()
+
+    // Filter for drafts only
+    const drafts = rows.filter(row => row._rowType === 'draft')
+
+    drafts.forEach(draft => {
+      const classifications = Array.isArray(draft.slideClassifications)
+        ? draft.slideClassifications
+        : []
+
+      classifications.forEach((classification: any) => {
+        if (classification.conceptId && classification.conceptTitle) {
+          const slideKey = getSlideKey(draft.id, classification.slideIndex)
+          // We don't have exampleIds in the classification, so we'll fetch them on demand
+          // For now, just set the concept info without example cycling capability
+          newConceptStates.set(slideKey, {
+            conceptId: classification.conceptId,
+            conceptTitle: classification.conceptTitle,
+            exampleIndex: 0,
+            exampleIds: [] // Will be populated when user cycles examples
+          })
+        }
+      })
+    })
+
+    setSlideConceptStates(newConceptStates)
+  }, [rows])
 
   // Parse search terms from search query
   const searchTerms = useMemo(() => {
@@ -582,6 +691,65 @@ export function ProjectPostsTable({
       return []
     }
   }, [])
+
+  // Handler to open coherence fix dialog
+  const handleFixCoherenceClick = useCallback((draft: RemixPost) => {
+    setSelectedDraftForCoherence(draft.id)
+    setCoherenceDialogOpen(true)
+  }, [])
+
+  // Handler to apply coherence fixes optimistically
+  const handleApplyCoherenceOptimistically = useCallback(async (
+    draftId: string,
+    fixes: Array<{ slideIndex: number; fixedText: string }>
+  ): Promise<{ rollback: () => void }> => {
+    // Find the draft in current rows
+    const draftIndex = optimisticRows.findIndex(row => row.id === draftId && row._rowType === 'draft')
+    if (draftIndex === -1) {
+      return { rollback: () => {} }
+    }
+
+    const draft = optimisticRows[draftIndex] as RemixPost & { _rowType: 'draft' }
+    const originalSlides = getSlidesArray(draft.slides)
+
+    // Apply fixes to slides
+    const updatedSlides = originalSlides.map((slide, index) => {
+      const fix = fixes.find(f => f.slideIndex === index)
+      if (fix) {
+        return {
+          ...slide,
+          paraphrasedText: fix.fixedText
+        }
+      }
+      return slide
+    })
+
+    // Update optimistic rows
+    const updatedDraft = {
+      ...draft,
+      slides: updatedSlides
+    }
+
+    const updatedRows = [...optimisticRows]
+    updatedRows[draftIndex] = updatedDraft
+    setOptimisticRows(updatedRows)
+
+    // Return rollback function
+    return {
+      rollback: () => {
+        const currentRows = [...optimisticRows]
+        const currentDraftIndex = currentRows.findIndex(row => row.id === draftId && row._rowType === 'draft')
+        if (currentDraftIndex !== -1) {
+          const originalDraft = {
+            ...(currentRows[currentDraftIndex] as RemixPost & { _rowType: 'draft' }),
+            slides: originalSlides
+          }
+          currentRows[currentDraftIndex] = originalDraft
+          setOptimisticRows(currentRows)
+        }
+      }
+    }
+  }, [optimisticRows, getSlidesArray])
 
   // Handler to download draft as ZIP
   const handleDownloadDraft = useCallback(async (draft: RemixPost) => {
@@ -850,6 +1018,470 @@ export function ProjectPostsTable({
       throw error
     }
   }, [displayRows, getSlidesArray, rows])
+
+  // Handler to apply concept example to a slide
+  const handleApplyConceptExample = useCallback(async (
+    draftId: string,
+    slideIndex: number,
+    text: string,
+    conceptId: string,
+    exampleId: string,
+    mode: 'copy' | 'paraphrase',
+    intensity?: 'minimal' | 'medium' | 'high'
+  ) => {
+    const slideKey = getSlideKey(draftId, slideIndex)
+
+    // Mark slide as loading
+    setApplyingConceptSlides(prev => new Set(prev).add(slideKey))
+
+    // Find the draft in current rows
+    const draftIndex = optimisticRows.findIndex(row => row.id === draftId && row._rowType === 'draft')
+    if (draftIndex === -1) {
+      setApplyingConceptSlides(prev => {
+        const next = new Set(prev)
+        next.delete(slideKey)
+        return next
+      })
+      return
+    }
+
+    const draft = optimisticRows[draftIndex] as RemixPost & { _rowType: 'draft' }
+    const slides = getSlidesArray(draft.slides)
+
+    // Store original slide for rollback
+    const originalSlide = slides[slideIndex]
+
+    try {
+      // Optimistic update: immediately update the slide text in copy mode
+      if (mode === 'copy') {
+        const updatedSlides = [...slides]
+        updatedSlides[slideIndex] = {
+          ...updatedSlides[slideIndex],
+          paraphrasedText: text
+        }
+
+        const updatedDraft = {
+          ...draft,
+          slides: updatedSlides
+        }
+
+        const updatedRows = [...optimisticRows]
+        updatedRows[draftIndex] = updatedDraft
+        setOptimisticRows(updatedRows)
+      }
+
+      const response = await fetch(`/api/remixes/${draftId}/slides/${slideIndex}/apply-example`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          exampleText: text,
+          mode,
+          paraphraseIntensity: intensity,
+          conceptId,
+          exampleId
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to apply example')
+      }
+
+      const result = await response.json()
+
+      // Update with actual paraphrased text from server
+      const updatedSlides = [...slides]
+      updatedSlides[slideIndex] = {
+        ...updatedSlides[slideIndex],
+        paraphrasedText: result.paraphrasedText
+      }
+
+      const updatedDraft = {
+        ...draft,
+        slides: updatedSlides
+      }
+
+      const updatedRows = [...optimisticRows]
+      updatedRows[draftIndex] = updatedDraft
+      setOptimisticRows(updatedRows)
+
+      toast.success(mode === 'copy' ? 'Example copied' : 'Example paraphrased')
+    } catch (error) {
+      console.error('Failed to apply example:', error)
+      toast.error('Failed to apply example')
+
+      // Rollback optimistic update
+      const updatedSlides = [...slides]
+      updatedSlides[slideIndex] = originalSlide
+
+      const updatedDraft = {
+        ...draft,
+        slides: updatedSlides
+      }
+
+      const updatedRows = [...optimisticRows]
+      updatedRows[draftIndex] = updatedDraft
+      setOptimisticRows(updatedRows)
+
+      throw error
+    } finally {
+      // Remove loading state
+      setApplyingConceptSlides(prev => {
+        const next = new Set(prev)
+        next.delete(slideKey)
+        return next
+      })
+    }
+  }, [optimisticRows, onRefetchData])
+
+  // Handler to apply concept example with state tracking for cycling
+  const handleApplyConceptWithState = useCallback(async (
+    draftId: string,
+    slideIndex: number,
+    text: string,
+    conceptId: string,
+    conceptTitle: string,
+    exampleId: string,
+    exampleIds: string[],
+    isHookSlide: boolean = false
+  ) => {
+    const slideKey = getSlideKey(draftId, slideIndex)
+
+    // Mark slide as loading
+    setApplyingConceptSlides(prev => new Set(prev).add(slideKey))
+
+    // If this is a HOOK slide, mark the entire draft as waiting for auto-fill
+    if (isHookSlide) {
+      setDraftsWaitingForAutoFill(prev => new Set(prev).add(draftId))
+    }
+
+    // Find the draft in current rows
+    const draftIndex = optimisticRows.findIndex(row => row.id === draftId && row._rowType === 'draft')
+    if (draftIndex === -1) {
+      setApplyingConceptSlides(prev => {
+        const next = new Set(prev)
+        next.delete(slideKey)
+        return next
+      })
+      return
+    }
+
+    const draft = optimisticRows[draftIndex] as RemixPost & { _rowType: 'draft' }
+    const slides = getSlidesArray(draft.slides)
+
+    // Store original slide for rollback
+    const originalSlide = slides[slideIndex]
+
+    try {
+      // Optimistic update: immediately update the slide text
+      const updatedSlides = [...slides]
+      updatedSlides[slideIndex] = {
+        ...updatedSlides[slideIndex],
+        paraphrasedText: text
+      }
+
+      // Also update slideClassifications with concept info
+      const classifications = Array.isArray(draft.slideClassifications)
+        ? draft.slideClassifications as any[]
+        : []
+      const updatedClassifications = classifications.map((c: any) =>
+        c.slideIndex === slideIndex
+          ? { ...c, conceptId, conceptTitle }
+          : c
+      )
+
+      const updatedDraft = {
+        ...draft,
+        slides: updatedSlides,
+        slideClassifications: updatedClassifications
+      }
+
+      const updatedRows = [...optimisticRows]
+      updatedRows[draftIndex] = updatedDraft
+      setOptimisticRows(updatedRows)
+
+      // Update concept state for cycling
+      const exampleIndex = exampleIds.indexOf(exampleId)
+      setSlideConceptStates(prev => {
+        const next = new Map(prev)
+        next.set(slideKey, {
+          conceptId,
+          conceptTitle,
+          exampleIndex: exampleIndex >= 0 ? exampleIndex : 0,
+          exampleIds
+        })
+        return next
+      })
+
+      // Call API to actually apply the example
+      const response = await fetch(`/api/remixes/${draftId}/slides/${slideIndex}/apply-example`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          exampleText: text,
+          mode: 'copy',
+          conceptId,
+          exampleId
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to apply example')
+      }
+
+      toast.success('Example applied')
+    } catch (error) {
+      console.error('Failed to apply example:', error)
+      toast.error('Failed to apply example')
+
+      // Rollback optimistic update
+      const updatedSlides = [...slides]
+      updatedSlides[slideIndex] = originalSlide
+
+      const updatedDraft = {
+        ...draft,
+        slides: updatedSlides
+      }
+
+      const updatedRows = [...optimisticRows]
+      updatedRows[draftIndex] = updatedDraft
+      setOptimisticRows(updatedRows)
+
+      // Clear concept state on error
+      setSlideConceptStates(prev => {
+        const next = new Map(prev)
+        next.delete(slideKey)
+        return next
+      })
+
+      throw error
+    } finally {
+      // Remove loading state
+      setApplyingConceptSlides(prev => {
+        const next = new Set(prev)
+        next.delete(slideKey)
+        return next
+      })
+    }
+  }, [optimisticRows, getSlidesArray])
+
+  // Handler to cycle to the next example for a slide
+  const handleCycleExample = useCallback(async (draftId: string, slideIndex: number) => {
+    const slideKey = getSlideKey(draftId, slideIndex)
+    const conceptState = slideConceptStates.get(slideKey)
+
+    if (!conceptState || conceptState.exampleIds.length <= 1) {
+      return // Can't cycle if no state or only one example
+    }
+
+    // Mark slide as loading
+    setApplyingConceptSlides(prev => new Set(prev).add(slideKey))
+
+    // Calculate next example index
+    const nextExampleIndex = (conceptState.exampleIndex + 1) % conceptState.exampleIds.length
+    const nextExampleId = conceptState.exampleIds[nextExampleIndex]
+
+    try {
+      // Fetch the example text from API
+      const conceptsResponse = await fetch(`/api/concepts?type=all`)
+      if (!conceptsResponse.ok) {
+        throw new Error('Failed to fetch concepts')
+      }
+      const conceptsData = await conceptsResponse.json()
+
+      // Find the example text
+      let exampleText = ''
+      for (const concept of conceptsData.concepts || []) {
+        if (concept.id === conceptState.conceptId) {
+          const example = concept.examples?.find((e: any) => e.id === nextExampleId)
+          if (example) {
+            exampleText = example.text
+            break
+          }
+        }
+      }
+
+      if (!exampleText) {
+        throw new Error('Example not found')
+      }
+
+      // Find the draft
+      const draftIndex = optimisticRows.findIndex(row => row.id === draftId && row._rowType === 'draft')
+      if (draftIndex === -1) {
+        throw new Error('Draft not found')
+      }
+
+      const draft = optimisticRows[draftIndex] as RemixPost & { _rowType: 'draft' }
+      const slides = getSlidesArray(draft.slides)
+
+      // Optimistic update: immediately update the slide text
+      const updatedSlides = [...slides]
+      updatedSlides[slideIndex] = {
+        ...updatedSlides[slideIndex],
+        paraphrasedText: exampleText
+      }
+
+      const updatedDraft = {
+        ...draft,
+        slides: updatedSlides
+      }
+
+      const updatedRows = [...optimisticRows]
+      updatedRows[draftIndex] = updatedDraft
+      setOptimisticRows(updatedRows)
+
+      // Update concept state with new index
+      setSlideConceptStates(prev => {
+        const next = new Map(prev)
+        next.set(slideKey, {
+          ...conceptState,
+          exampleIndex: nextExampleIndex
+        })
+        return next
+      })
+
+      // Call API to actually apply the example
+      const response = await fetch(`/api/remixes/${draftId}/slides/${slideIndex}/apply-example`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          exampleText: exampleText,
+          mode: 'copy',
+          conceptId: conceptState.conceptId,
+          exampleId: nextExampleId
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to apply example')
+      }
+
+      toast.success(`Example ${nextExampleIndex + 1}/${conceptState.exampleIds.length}`)
+    } catch (error) {
+      console.error('Failed to cycle example:', error)
+      toast.error('Failed to cycle example')
+    } finally {
+      // Remove loading state
+      setApplyingConceptSlides(prev => {
+        const next = new Set(prev)
+        next.delete(slideKey)
+        return next
+      })
+    }
+  }, [optimisticRows, getSlidesArray, slideConceptStates])
+
+  // Handler to auto-fill empty slides with random concept examples
+  const handleAutoFillSlides = useCallback(async (draftId: string) => {
+    console.log('[ProjectPostsTable] handleAutoFillSlides called for draft:', draftId)
+
+    // Clear the "waiting for auto-fill" loading state since auto-fill is now starting
+    setDraftsWaitingForAutoFill(prev => {
+      const next = new Set(prev)
+      next.delete(draftId)
+      return next
+    })
+
+    // Find the draft in current rows
+    const draftIndex = optimisticRows.findIndex(row => row.id === draftId && row._rowType === 'draft')
+    if (draftIndex === -1) {
+      console.log('[ProjectPostsTable] Draft not found in optimisticRows')
+      return
+    }
+
+    const draft = optimisticRows[draftIndex] as RemixPost & { _rowType: 'draft' }
+    const slides = getSlidesArray(draft.slides)
+
+    console.log('[ProjectPostsTable] Checking for empty slides, total slides:', slides.length)
+
+    // Check if there are empty slides to fill (skip index 0 which is HOOK)
+    const hasEmptySlides = slides.slice(1).some(slide => {
+      const text = slide.paraphrasedText || ''
+      return text.trim().length < 10
+    })
+
+    console.log('[ProjectPostsTable] Has empty slides:', hasEmptySlides)
+
+    if (!hasEmptySlides) {
+      toast.info('No empty slides to fill')
+      return
+    }
+
+    // Show confirmation toast
+    toast.promise(
+      (async () => {
+        const response = await fetch(`/api/remixes/${draftId}/auto-fill-concepts`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to auto-fill slides')
+        }
+
+        const result = await response.json()
+
+        if (result.filledCount > 0) {
+          // Apply optimistic updates
+          // IMPORTANT: Use optimisticRows directly to get the latest state (including the HOOK slide)
+          setOptimisticRows(currentRows => {
+            const currentDraftIndex = currentRows.findIndex(row => row.id === draftId && row._rowType === 'draft')
+            if (currentDraftIndex === -1) return currentRows
+
+            const currentDraft = currentRows[currentDraftIndex] as RemixPost & { _rowType: 'draft' }
+            const currentSlides = getSlidesArray(currentDraft.slides)
+
+            // Update only the slides returned by auto-fill
+            const updatedSlides = [...currentSlides]
+            for (const item of result.results) {
+              updatedSlides[item.slideIndex] = {
+                ...updatedSlides[item.slideIndex],
+                paraphrasedText: item.text
+              }
+            }
+
+            const updatedDraft = {
+              ...currentDraft,
+              slides: updatedSlides
+            }
+
+            const updatedRows = [...currentRows]
+            updatedRows[currentDraftIndex] = updatedDraft
+            return updatedRows
+          })
+
+          // Update concept states for all filled slides
+          setSlideConceptStates(prev => {
+            const next = new Map(prev)
+            for (const item of result.results) {
+              const slideKey = getSlideKey(draftId, item.slideIndex)
+              const exampleIndex = item.exampleIds.indexOf(item.exampleId)
+              next.set(slideKey, {
+                conceptId: item.conceptId,
+                conceptTitle: item.conceptTitle,
+                exampleIndex: exampleIndex >= 0 ? exampleIndex : 0,
+                exampleIds: item.exampleIds
+              })
+            }
+            return next
+          })
+        }
+
+        return result.filledCount
+      })(),
+      {
+        loading: 'Auto-filling slides...',
+        success: (count) => `Filled ${count} slides with concept examples`,
+        error: 'Failed to auto-fill slides'
+      }
+    )
+  }, [optimisticRows, getSlidesArray])
 
   // Handler to add a new slide to a draft
   const handleAddSlide = useCallback(async (draftId: string) => {
@@ -1461,7 +2093,24 @@ export function ProjectPostsTable({
             />
           </div>
 
-          {/* Row 3: Created and Updated date */}
+          {/* Row 3: Description */}
+          <div className="w-full overflow-y-auto h-24" onClick={(e) => e.stopPropagation()}>
+            <InlineEditableText
+              value={draft.description || ''}
+              onSave={async (newValue) => {
+                await handleSaveDraftDescription(draft.id, newValue)
+              }}
+              placeholder="No description"
+              fixedHeight={true}
+              heightClass="h-full"
+              disabled={false}
+              className="text-[12px]"
+              rows={4}
+              searchTerms={searchTerms}
+            />
+          </div>
+
+          {/* Row 4: Created and Updated date */}
           <div className="text-xs flex flex-col gap-0.5">
             <div>
               <span>{date}</span>
@@ -1485,7 +2134,7 @@ export function ProjectPostsTable({
         />
       </div>
     )
-  }, [viewMode, getSlidesArray, handleSaveDraftName, handleSetMultipleSlideBackgrounds, formatDateTime, formatRelativeTime])
+  }, [viewMode, getSlidesArray, handleSaveDraftName, handleSetMultipleSlideBackgrounds, formatDateTime, formatRelativeTime, handleSaveDraftDescription, searchTerms])
 
   const renderDraftContentColumn = useCallback((draft: RemixPost) => {
     const slides = getSlidesArray(draft.slides)
@@ -1538,6 +2187,10 @@ export function ProjectPostsTable({
                 >
                   {sortableItems.map(({ id, slide, index }) => {
                     const classification = draft.slideClassifications?.find(c => c.slideIndex === index)
+                    const slideKey = getSlideKey(draft.id, index)
+                    const isApplyingConcept = applyingConceptSlides.has(slideKey)
+                    const isDraftLoading = draftsWaitingForAutoFill.has(draft.id)
+                    const conceptState = slideConceptStates.get(slideKey)
 
                     return (
                       <SortableSlide
@@ -1550,8 +2203,15 @@ export function ProjectPostsTable({
                         searchTerms={searchTerms}
                         onSaveText={handleSaveDraftSlideText}
                         onRemoveSlide={handleRemoveSlide}
+                        onApplyExample={handleApplyConceptExample}
+                        onApplyConceptWithState={handleApplyConceptWithState}
+                        onCycleExample={handleCycleExample}
+                        onAutoFill={handleAutoFillSlides}
                         onRefetchData={onRefetchData}
                         totalSlides={slides.length}
+                        isApplyingConcept={isApplyingConcept}
+                        isDraftLoading={isDraftLoading}
+                        conceptState={conceptState}
                       />
                     )
                   })}
@@ -1590,34 +2250,8 @@ export function ProjectPostsTable({
         {slides.length} slides
       </div>
     )
-  }, [viewMode, getSlidesArray, searchTerms, handleSaveDraftSlideText, handleRemoveSlide, handleAddSlide, handleReorderSlides, onRefetchData])
+  }, [viewMode, getSlidesArray, searchTerms, handleSaveDraftSlideText, handleRemoveSlide, handleAddSlide, handleReorderSlides, handleApplyConceptExample, handleApplyConceptWithState, handleCycleExample, handleAutoFillSlides, onRefetchData, applyingConceptSlides, draftsWaitingForAutoFill, slideConceptStates])
 
-  const renderDraftDescriptionColumn = useCallback((draft: RemixPost) => {
-    return (
-      <div className="flex-shrink-0 w-52 flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-1.5 mb-2">
-          <div className="bg-primary/10 text-primary text-xs font-medium px-2 py-0.5 rounded">
-            Draft
-          </div>
-        </div>
-        <div className="overflow-y-auto h-48">
-          <InlineEditableText
-            value={draft.description || ''}
-            onSave={async (newValue) => {
-              await handleSaveDraftDescription(draft.id, newValue)
-            }}
-            placeholder="No description"
-            fixedHeight={true}
-            heightClass="h-full"
-            disabled={false}
-            className="text-[12px]"
-            rows={8}
-            searchTerms={searchTerms}
-          />
-        </div>
-      </div>
-    )
-  }, [searchTerms, handleSaveDraftDescription])
 
   const renderDraftActionsColumn = useCallback((draft: RemixPost) => {
     if (viewMode !== 'content') return null
@@ -1690,7 +2324,7 @@ export function ProjectPostsTable({
             </TooltipContent>
           </Tooltip>
 
-          {/* Settings */}
+          {/* Fix Content Coherence */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -1698,15 +2332,15 @@ export function ProjectPostsTable({
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation()
-                  handleSettingsClick(draft)
+                  handleFixCoherenceClick(draft)
                 }}
                 className="h-8 w-8 p-0"
               >
-                <Settings className="h-4 w-4" />
+                <Sparkles className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="left">
-              <p>Draft Settings</p>
+              <p>Fix Content Coherence</p>
             </TooltipContent>
           </Tooltip>
 
@@ -1752,7 +2386,7 @@ export function ProjectPostsTable({
         </div>
       </TooltipProvider>
     )
-  }, [viewMode, handleToggleBookmark, handleCopyDraftToClipboard, handleSendToTelegram, handleSettingsClick, handleDownloadDraft, handleDeleteClick])
+  }, [viewMode, handleToggleBookmark, handleCopyDraftToClipboard, handleSendToTelegram, handleSettingsClick, handleFixCoherenceClick, handleDownloadDraft, handleDeleteClick])
 
   // Create columns - memoized with all necessary dependencies
   const columns = useMemo(() => {
@@ -1782,8 +2416,6 @@ export function ProjectPostsTable({
               return renderDraftAuthorColumn(draft)
             case 'title':
               return renderDraftContentColumn(draft)
-            case 'description':
-              return renderDraftDescriptionColumn(draft)
             case 'publishedAt':
               return <div className="text-sm text-muted-foreground">{formatDate(draft.createdAt)}</div>
             case 'actions':
@@ -1794,75 +2426,13 @@ export function ProjectPostsTable({
         }
 
         // Post row rendering with custom handlers
-        const post = row as TikTokPost
-
-        if (columnId === 'description' && viewMode === 'content') {
-          return (
-            <div className="flex-shrink-0 w-52 flex flex-col" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center gap-1.5 mb-2">
-                <InlineCategorySelector
-                  postId={post.id}
-                  currentCategory={post.postCategory}
-                  onUpdate={onRefetchData}
-                />
-              </div>
-              <div className="overflow-y-auto h-48">
-                <InlineEditableText
-                  value={post.description || ''}
-                  onSave={async (newValue) => {
-                    await handleSavePostDescription(post.id, newValue)
-                  }}
-                  placeholder="No description"
-                  fixedHeight={true}
-                  heightClass="h-full"
-                  disabled={false}
-                  className="text-[12px]"
-                  rows={8}
-                  searchTerms={searchTerms}
-                />
-              </div>
-            </div>
-          )
-        }
-
-        if (columnId === 'actions' && viewMode === 'content') {
-          const originalCell = col.cell(info)
-
-          return (
-            <TooltipProvider>
-              <div className="flex flex-col gap-2">
-                {originalCell}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDeleteClick(post.id, 'post', post.authorNickname || post.authorHandle || 'Post')
-                      }}
-                      className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left">
-                    <p>Remove from Project</p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            </TooltipProvider>
-          )
-        }
-
         return col.cell(info)
       }
     }))
   }, [
     handlePreviewPost, handleOpenImageGallery, handleRemixPost, handleRowClick,
     handleTriggerOCR, handleExtractConcepts, onRefetchData, viewMode, searchTerms, formatDate,
-    handleDeleteClick, handleSavePostDescription, getSlidesArray,
-    renderDraftAuthorColumn, renderDraftContentColumn, renderDraftDescriptionColumn,
+    getSlidesArray, renderDraftAuthorColumn, renderDraftContentColumn,
     renderDraftActionsColumn, formatDateTime
   ])
 
@@ -1941,7 +2511,7 @@ export function ProjectPostsTable({
           onRowSelectionChange={onRowSelectionChange}
           enableSorting={true}
           enablePagination={false}
-          leftStickyColumnsCount={2}
+          leftStickyColumnsCount={1}
           rightStickyColumnsCount={1}
           fullWidth={true}
           isLoading={isLoading}
@@ -2086,6 +2656,22 @@ export function ProjectPostsTable({
             // Refresh the page to reload draft data
             window.location.reload()
           }}
+        />
+      )}
+
+      {/* Fix Coherence Dialog */}
+      {selectedDraftForCoherence && (
+        <FixCoherenceDialog
+          open={coherenceDialogOpen}
+          onClose={() => {
+            setCoherenceDialogOpen(false)
+            setSelectedDraftForCoherence(null)
+          }}
+          draftId={selectedDraftForCoherence}
+          onFixed={() => {
+            // No refetch needed - optimistic update already applied
+          }}
+          onApplyOptimistically={handleApplyCoherenceOptimistically}
         />
       )}
     </>

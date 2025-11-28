@@ -169,28 +169,26 @@ export function DataTable<TData, TValue>({
     const leftShadow = `-2px 0 3px -2px rgba(0,0,0,${0.3 * shadowOpacity.left}) inset`;
     const rightShadow = `2px 0 3px -2px rgba(0,0,0,${0.3 * shadowOpacity.right}) inset`;
 
-    const size = column.getSize()
+    // Only apply positioning styles to pinned columns
+    // Non-pinned columns should not have position/z-index to avoid stacking context issues
+    if (!isPinned) {
+      return {
+        width: column.getSize(),
+      }
+    }
 
     return {
-      // boxSizing: 'border-box',
       boxShadow: isLastLeftPinnedColumn
         ? leftShadow
         : isFirstRightPinnedColumn
           ? rightShadow
           : 'none',
       transition: 'box-shadow 0.1s linear',
-      left: isPinned === 'left' ? `${column.getStart('left')}px` : undefined,
-      right: isPinned === 'right' ? `${column.getStart('right')}px` : undefined,
-      position: isPinned ? 'sticky' : 'relative',
-      width: `${size}px`,
-      minWidth: `${size}px`,
-      maxWidth: `${size}px`,
-      zIndex: isPinned ? 1 : 0,
-      // Remove borders from sticky columns to eliminate gaps
-      ...(isPinned && {
-        borderLeft: 'none',
-        borderRight: 'none',
-      }),
+      left: isPinned === 'left' ? column.getStart('left') : undefined,
+      right: isPinned === 'right' ? column.getStart('right') : undefined,
+      position: 'sticky',
+      width: column.getSize(),
+      zIndex: 1,
     }
   }
 
@@ -437,9 +435,11 @@ export function DataTable<TData, TValue>({
                 key={cell.id}
                 className={cn(
                   cell.column.getIsPinned() && [
+                    'bg-background',
                     rowClassName?.(row.original),
                     'group-data-[state=selected]:bg-gray-900'
-                  ]
+                  ],
+                  (cell.column.columnDef.meta as any)?.cellClassName
                 )}
                 style={getCommonPinningStyles(cell.column)}
               >
