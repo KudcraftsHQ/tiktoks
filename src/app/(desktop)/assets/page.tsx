@@ -37,6 +37,9 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { useUpload } from '@/lib/upload-context'
+import { OptimisticAssetCard } from '@/components/upload/OptimisticAssetCard'
+import { AssetGridSkeleton, FolderSkeleton } from '@/components/assets/AssetSkeleton'
 
 interface AssetFolder {
   id: string
@@ -58,13 +61,15 @@ interface Asset {
 
 export default function AssetsPage() {
   const router = useRouter()
+  const { addFiles, queue, isUploading } = useUpload()
   const [folders, setFolders] = useState<AssetFolder[]>([])
   const [assets, setAssets] = useState<Asset[]>([])
+  const [isLoadingFolders, setIsLoadingFolders] = useState(true)
+  const [isLoadingAssets, setIsLoadingAssets] = useState(true)
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
   const [editingFolderName, setEditingFolderName] = useState('')
   const [isDraggingOver, setIsDraggingOver] = useState(false)
-  const [isUploading, setIsUploading] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [itemToDelete, setItemToDelete] = useState<{ type: 'folder' | 'asset'; id: string } | null>(null)
   const [draggedAsset, setDraggedAsset] = useState<string | null>(null)
@@ -76,6 +81,20 @@ export default function AssetsPage() {
   useEffect(() => {
     fetchFolders()
     fetchAssets()
+  }, [currentFolderId])
+
+  // Listen for completed uploads to update assets list
+  useEffect(() => {
+    const handleAssetUploaded = (e: CustomEvent) => {
+      // Check if the uploaded asset belongs to the current folder
+      if (e.detail.folderId === currentFolderId || (!e.detail.folderId && !currentFolderId)) {
+        setAssets(prev => [e.detail, ...prev])
+      }
+      fetchFolders() // Update folder counts
+    }
+
+    window.addEventListener('asset-uploaded', handleAssetUploaded as EventListener)
+    return () => window.removeEventListener('asset-uploaded', handleAssetUploaded as EventListener)
   }, [currentFolderId])
 
   // Trigger hash backfill for assets without hashes on initial load
@@ -129,6 +148,7 @@ export default function AssetsPage() {
 
   const fetchFolders = async () => {
     try {
+      setIsLoadingFolders(true)
       const response = await fetch('/api/assets/folders')
       if (response.ok) {
         const data = await response.json()
@@ -136,11 +156,14 @@ export default function AssetsPage() {
       }
     } catch (error) {
       console.error('Failed to fetch folders:', error)
+    } finally {
+      setIsLoadingFolders(false)
     }
   }
 
   const fetchAssets = async () => {
     try {
+      setIsLoadingAssets(true)
       const params = new URLSearchParams()
       if (currentFolderId) {
         params.append('folderId', currentFolderId)
@@ -155,6 +178,8 @@ export default function AssetsPage() {
       }
     } catch (error) {
       console.error('Failed to fetch assets:', error)
+    } finally {
+      setIsLoadingAssets(false)
     }
   }
 
@@ -267,34 +292,8 @@ export default function AssetsPage() {
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return
 
-    setIsUploading(true)
-
-    try {
-      const formData = new FormData()
-      Array.from(files).forEach(file => formData.append('files', file))
-      if (currentFolderId) {
-        formData.append('folderId', currentFolderId)
-      }
-
-      const response = await fetch('/api/assets/upload', {
-        method: 'POST',
-        body: formData
-      })
-
-      if (!response.ok) {
-        throw new Error('Upload failed')
-      }
-
-      const result = await response.json()
-      setAssets([...result.assets, ...assets])
-      await fetchFolders()
-      toast.success(`Uploaded ${files.length} file(s)`)
-    } catch (error) {
-      console.error('Failed to upload files:', error)
-      toast.error('Failed to upload files')
-    } finally {
-      setIsUploading(false)
-    }
+    // Use new upload context
+    await addFiles(Array.from(files), currentFolderId)
   }
 
   const handleDrop = useCallback((e: React.DragEvent, targetFolderId?: string) => {
@@ -305,20 +304,37 @@ export default function AssetsPage() {
 
     const files = e.dataTransfer.files
     if (files.length > 0) {
-      handleFileUpload(files)
+      // Check if dragging files (not assets)
+      const hasFiles = Array.from(files).some(file => file.type.startsWith('image/') || file.name.match(/\.(heic|heif)$/i))
+      if (hasFiles) {
+        handleFileUpload(files)
+      }
     }
   }, [currentFolderId])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setIsDraggingOver(true)
-  }, [])
+
+    // Only show drag overlay if dragging files (not assets)
+    const items = e.dataTransfer.items
+    if (items && items.length > 0) {
+      // Check if any item is a file
+      const hasFiles = Array.from(items).some(item => item.kind === 'file')
+      if (hasFiles && !draggedAsset) {
+        setIsDraggingOver(true)
+      }
+    }
+  }, [draggedAsset])
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setIsDraggingOver(false)
+
+    // Only hide if leaving the page container
+    if (e.currentTarget === e.target) {
+      setIsDraggingOver(false)
+    }
   }, [])
 
   const handleAssetDragStart = (assetId: string) => {
@@ -435,9 +451,25 @@ export default function AssetsPage() {
   const unanalyzedCount = assets.filter(a => a.hasFace === null).length
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-full bg-background relative">
+      {/* Full content area drag overlay */}
+      {isDraggingOver && (
+        <div className="fixed inset-0 left-[var(--sidebar-width)] z-50 pointer-events-none">
+          <div className="absolute inset-0 bg-primary/10 backdrop-blur-sm" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="bg-background/95 backdrop-blur-md rounded-2xl p-12 border-2 border-dashed border-primary shadow-2xl">
+              <Upload className="h-16 w-16 mx-auto mb-4 text-primary" />
+              <p className="text-2xl font-semibold text-center mb-2">Drop files to upload</p>
+              <p className="text-muted-foreground text-center">
+                Supports images and HEIC files
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <header className="border-b sticky top-0 z-50 bg-background/95 backdrop-blur">
+      <header className="border-b sticky top-0 z-40 bg-background/95 backdrop-blur">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
             <Button
@@ -561,13 +593,16 @@ export default function AssetsPage() {
 
         {/* Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+          {/* Loading skeletons for folders */}
+          {isLoadingFolders && !currentFolderId && <FolderSkeleton count={3} />}
+
           {/* Show folders only in root view */}
-          {!currentFolderId && folders.map((folder) => (
+          {!isLoadingFolders && !currentFolderId && folders.map((folder) => (
             <ContextMenu key={folder.id}>
               <ContextMenuTrigger>
                 <div
                   className={cn(
-                    "relative aspect-square border-2 rounded-lg p-4 cursor-pointer transition-colors",
+                    "relative aspect-[3/4] border-2 rounded-lg p-4 cursor-pointer transition-colors",
                     "hover:border-primary hover:bg-accent",
                     dropTargetFolder === folder.id && "border-primary bg-primary/5"
                   )}
@@ -647,72 +682,92 @@ export default function AssetsPage() {
             </ContextMenu>
           ))}
 
+          {/* Loading skeletons for assets */}
+          {isLoadingAssets && <AssetGridSkeleton count={12} />}
+
+          {/* Optimistic upload items - show items being uploaded in current folder */}
+          {!isLoadingAssets && queue
+            .filter((item) =>
+              (item.folderId === currentFolderId || (!item.folderId && !currentFolderId)) &&
+              (item.status === 'pending' || item.status === 'uploading' || item.status === 'processing')
+            )
+            .map((item) => (
+              <OptimisticAssetCard key={item.id} item={item} />
+            ))
+          }
+
           {/* Assets */}
-          {assets.map((asset) => (
-            <ContextMenu key={asset.id}>
-              <ContextMenuTrigger>
-                <div
-                  className={cn(
-                    "relative aspect-square border rounded-lg overflow-hidden cursor-pointer transition-all",
-                    "hover:border-primary",
-                    selectedAssets.has(asset.id) && "ring-2 ring-primary"
-                  )}
-                  draggable
-                  onDragStart={() => handleAssetDragStart(asset.id)}
-                  onDragEnd={handleAssetDragEnd}
-                  onClick={() => toggleAssetSelection(asset.id)}
-                >
-                  {selectedAssets.has(asset.id) && (
-                    <div className="absolute top-2 left-2 z-10">
-                      <div className="w-6 h-6 rounded bg-primary border-2 border-primary flex items-center justify-center">
-                        <Check className="h-4 w-4 text-primary-foreground" />
+          {!isLoadingAssets && assets.map((asset) => {
+            // Calculate object-fit based on aspect ratio
+            const isPortrait = asset.height && asset.width && asset.height > asset.width
+            const objectFit = isPortrait ? 'object-contain' : 'object-cover'
+
+            return (
+              <ContextMenu key={asset.id}>
+                <ContextMenuTrigger>
+                  <div
+                    className={cn(
+                      "relative aspect-[3/4] border rounded-lg overflow-hidden cursor-pointer transition-all bg-muted/50",
+                      "hover:border-primary",
+                      selectedAssets.has(asset.id) && "ring-2 ring-primary"
+                    )}
+                    draggable
+                    onDragStart={() => handleAssetDragStart(asset.id)}
+                    onDragEnd={handleAssetDragEnd}
+                    onClick={() => toggleAssetSelection(asset.id)}
+                  >
+                    {selectedAssets.has(asset.id) && (
+                      <div className="absolute top-2 left-2 z-10">
+                        <div className="w-6 h-6 rounded bg-primary border-2 border-primary flex items-center justify-center">
+                          <Check className="h-4 w-4 text-primary-foreground" />
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  {/* Face detection indicator */}
-                  {asset.hasFace !== null && (
-                    <div className="absolute top-2 right-2 z-10">
-                      <div className={cn(
-                        "w-5 h-5 rounded-full flex items-center justify-center",
-                        asset.hasFace
-                          ? "bg-green-500/90"
-                          : "bg-gray-500/90"
-                      )}>
-                        {asset.hasFace ? (
-                          <User className="h-3 w-3 text-white" />
-                        ) : (
-                          <UserX className="h-3 w-3 text-white" />
-                        )}
+                    )}
+                    {/* Face detection indicator */}
+                    {asset.hasFace !== null && (
+                      <div className="absolute top-2 right-2 z-10">
+                        <div className={cn(
+                          "w-5 h-5 rounded-full flex items-center justify-center",
+                          asset.hasFace
+                            ? "bg-green-500/90"
+                            : "bg-gray-500/90"
+                        )}>
+                          {asset.hasFace ? (
+                            <User className="h-3 w-3 text-white" />
+                          ) : (
+                            <UserX className="h-3 w-3 text-white" />
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  <img
-                    src={asset.url}
-                    alt={asset.name || ''}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              </ContextMenuTrigger>
-              <ContextMenuContent>
-                <ContextMenuItem
-                  onClick={() => {
-                    setItemToDelete({ type: 'asset', id: asset.id })
-                    setShowDeleteDialog(true)
-                  }}
-                  className="text-destructive"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </ContextMenuItem>
-              </ContextMenuContent>
-            </ContextMenu>
-          ))}
+                    )}
+                    <img
+                      src={asset.url}
+                      alt={asset.name || ''}
+                      className={cn("w-full h-full", objectFit)}
+                    />
+                  </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem
+                    onClick={() => {
+                      setItemToDelete({ type: 'asset', id: asset.id })
+                      setShowDeleteDialog(true)
+                    }}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
+            )
+          })}
 
           {/* Create Folder Button (only in root) */}
-          {!currentFolderId && (
+          {!isLoadingFolders && !currentFolderId && (
             <button
               onClick={handleCreateFolder}
-              className="aspect-square border-2 border-dashed rounded-lg p-4 hover:border-primary hover:bg-accent transition-colors flex flex-col items-center justify-center"
+              className="aspect-[3/4] border-2 border-dashed rounded-lg p-4 hover:border-primary hover:bg-accent transition-colors flex flex-col items-center justify-center"
             >
               <FolderPlus className="h-12 w-12 mb-2 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">New Folder</p>
@@ -720,8 +775,8 @@ export default function AssetsPage() {
           )}
         </div>
 
-        {/* Empty State */}
-        {assets.length === 0 && folders.length === 0 && !currentFolderId && (
+        {/* Empty State - only show when not loading */}
+        {!isLoadingAssets && !isLoadingFolders && assets.length === 0 && folders.length === 0 && !currentFolderId && (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <ImageIcon className="h-16 w-16 mb-4 text-muted-foreground opacity-50" />
             <h3 className="font-medium mb-2">No assets yet</h3>
@@ -731,7 +786,7 @@ export default function AssetsPage() {
           </div>
         )}
 
-        {assets.length === 0 && currentFolderId && (
+        {!isLoadingAssets && assets.length === 0 && currentFolderId && (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <Folder className="h-16 w-16 mb-4 text-muted-foreground opacity-50" />
             <h3 className="font-medium mb-2">Folder is empty</h3>

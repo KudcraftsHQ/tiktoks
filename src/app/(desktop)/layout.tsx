@@ -6,6 +6,8 @@ import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/s
 import { AppSidebar } from "@/components/AppSidebar";
 import { Toaster } from "@/components/ui/sonner";
 import NextTopLoader from 'nextjs-toploader';
+import { UploadContextProvider } from "@/lib/upload-context";
+import { UploadProgressPanel } from "@/components/upload/UploadProgressPanel";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -53,6 +55,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased dark theme-mono`}
       >
+        <UploadContextProvider>
           <NextTopLoader
             color="#FFFFFF"
             height={2}
@@ -76,6 +79,8 @@ export default function RootLayout({
             </SidebarInset>
           </SidebarProvider>
           <Toaster />
+          <UploadProgressPanel />
+        </UploadContextProvider>
       </body>
     </html>
   );
