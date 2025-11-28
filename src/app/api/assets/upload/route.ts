@@ -6,6 +6,7 @@ import sharp from 'sharp'
 import heicConvert from 'heic-convert'
 import { analyzeFileBuffer } from '@/lib/file-type-detector'
 import { detectFace } from '@/lib/face-detection-service'
+import { computeImageHash, areSimilarImages } from '@/lib/image-hash-service'
 
 const prisma = new PrismaClient()
 
@@ -54,17 +55,54 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Get image dimensions
+      // Get image dimensions and compute hash
       let width: number | null = null
       let height: number | null = null
+      let imageHash: string | null = null
 
       if (contentType.startsWith('image/')) {
         try {
           const metadata = await sharp(buffer).metadata()
           width = metadata.width || null
           height = metadata.height || null
+
+          // Compute perceptual hash for deduplication
+          imageHash = await computeImageHash(buffer)
+          console.log(`🔑 [AssetUpload] Computed hash: ${imageHash}`)
+
+          // Check for duplicate images (within similarity threshold)
+          const existingAssets = await prisma.asset.findMany({
+            where: {
+              imageHash: {
+                not: null
+              }
+            },
+            select: {
+              id: true,
+              imageHash: true,
+              name: true
+            }
+          })
+
+          // Find similar images
+          for (const existing of existingAssets) {
+            if (existing.imageHash && areSimilarImages(imageHash, existing.imageHash)) {
+              console.log(`⚠️ [AssetUpload] Duplicate detected: ${existing.name} (ID: ${existing.id})`)
+              return NextResponse.json(
+                {
+                  error: 'Duplicate image detected',
+                  code: 'DUPLICATE_IMAGE',
+                  existingAssetId: existing.id,
+                  existingAssetName: existing.name,
+                  message: `This image is very similar to "${existing.name}"`
+                },
+                { status: 409 }
+              )
+            }
+          }
         } catch (error) {
-          console.warn('Could not extract image metadata:', error)
+          console.warn('Could not extract image metadata or compute hash:', error)
+          // Continue without hash if computation fails
         }
       }
 
@@ -91,7 +129,8 @@ export async function POST(request: NextRequest) {
           cacheAssetId: cacheAsset.id,
           name: fileName,
           width,
-          height
+          height,
+          imageHash
         }
       })
 

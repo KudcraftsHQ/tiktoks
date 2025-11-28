@@ -9,7 +9,7 @@
  *   bun worker.ts
  *
  * Environment Variables:
- *   QUEUE_NAME - Queue to process: 'all', 'media-cache', 'profile-monitor', 'ocr' (default: 'all')
+ *   QUEUE_NAME - Queue to process: 'all', 'media-cache', 'profile-monitor', 'ocr', 'hash-backfill' (default: 'all')
  *   REDIS_HOST - Redis server host (default: localhost)
  *   REDIS_PORT - Redis server port (default: 6379)
  *   REDIS_PASSWORD - Redis password (optional)
@@ -20,6 +20,7 @@ import { initSentryWorker, flushSentry } from './src/lib/sentry-worker'
 import { mediaCacheWorker } from './src/lib/queue/media-cache-worker'
 import { profileMonitorWorker } from './src/lib/queue/profile-monitor-worker'
 import { ocrWorker } from './src/lib/queue/ocr-worker'
+import { hashBackfillWorker } from './src/lib/queue/hash-backfill-worker'
 import * as Sentry from '@sentry/node'
 
 // Initialize Sentry for error tracking
@@ -55,8 +56,14 @@ if (queueName === 'all' || queueName === 'ocr') {
   console.log('✅ OCR Worker added to active workers')
 }
 
+if (queueName === 'all' || queueName === 'hash-backfill') {
+  console.log('🔑 Starting Hash Backfill Worker...')
+  activeWorkers.push(hashBackfillWorker)
+  console.log('✅ Hash Backfill Worker added to active workers')
+}
+
 if (activeWorkers.length === 0) {
-  console.error(`❌ Invalid QUEUE_NAME: ${queueName}. Valid values: 'all', 'media-cache', 'profile-monitor', 'ocr'`)
+  console.error(`❌ Invalid QUEUE_NAME: ${queueName}. Valid values: 'all', 'media-cache', 'profile-monitor', 'ocr', 'hash-backfill'`)
   process.exit(1)
 }
 

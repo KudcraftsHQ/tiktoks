@@ -78,6 +78,29 @@ export default function AssetsPage() {
     fetchAssets()
   }, [currentFolderId])
 
+  // Trigger hash backfill for assets without hashes on initial load
+  useEffect(() => {
+    const checkAndBackfillHashes = async () => {
+      try {
+        // Check if there are assets without hashes
+        const response = await fetch('/api/assets/backfill-hashes')
+        if (response.ok) {
+          const data = await response.json()
+          if (data.stats.assetsWithoutHash > 0) {
+            console.log(`🔑 Found ${data.stats.assetsWithoutHash} assets without hashes, queuing backfill...`)
+            // Trigger backfill (limit to 50 at a time to avoid overwhelming the queue)
+            await fetch('/api/assets/backfill-hashes?limit=50', { method: 'POST' })
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check/backfill hashes:', error)
+        // Silent fail - don't interrupt user experience
+      }
+    }
+
+    checkAndBackfillHashes()
+  }, []) // Run only once on mount
+
   // Handle paste from clipboard
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {

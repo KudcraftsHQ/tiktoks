@@ -22,6 +22,7 @@ export const QUEUE_NAMES = {
   MEDIA_CACHE: 'media-cache',
   PROFILE_MONITOR: 'profile-monitor',
   OCR: 'ocr',
+  HASH_BACKFILL: 'hash-backfill',
 } as const
 
 // Get default queue options (creates new connection each time)
@@ -90,5 +91,17 @@ export interface OCRJobData {
 export interface OCRJobResult {
   success: boolean
   postId: string
+  error?: string
+}
+
+// Hash backfill job interfaces
+export interface HashBackfillJobData {
+  assetId: string
+}
+
+export interface HashBackfillJobResult {
+  success: boolean
+  assetId: string
+  imageHash?: string
   error?: string
 }

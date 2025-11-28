@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid'
 import sharp from 'sharp'
 import heicConvert from 'heic-convert'
 import { analyzeFileBuffer } from '@/lib/file-type-detector'
+import { computeImageHash, areSimilarImages } from '@/lib/image-hash-service'
 
 const prisma = new PrismaClient()
 
@@ -135,15 +136,61 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Extract image dimensions
+    // Extract image dimensions and compute hash
     let width: number | null = null
     let height: number | null = null
+    let imageHash: string | null = null
     try {
       const metadata = await sharp(imageBuffer).metadata()
       width = metadata.width || null
       height = metadata.height || null
+
+      // Compute perceptual hash for deduplication
+      imageHash = await computeImageHash(imageBuffer)
+      console.log(`🔑 [PinterestAsset] Computed hash: ${imageHash}`)
+
+      // Check for duplicate images (within similarity threshold)
+      const existingAssets = await prisma.asset.findMany({
+        where: {
+          imageHash: {
+            not: null
+          }
+        },
+        select: {
+          id: true,
+          imageHash: true,
+          name: true,
+          sourceUrl: true
+        }
+      })
+
+      // Find similar images
+      for (const existing of existingAssets) {
+        if (existing.imageHash && areSimilarImages(imageHash, existing.imageHash)) {
+          console.log(`⚠️ [PinterestAsset] Duplicate detected: ${existing.name} (ID: ${existing.id})`)
+          return NextResponse.json(
+            {
+              error: 'Duplicate image detected',
+              code: 'DUPLICATE_IMAGE',
+              existingAssetId: existing.id,
+              existingAssetName: existing.name,
+              existingSourceUrl: existing.sourceUrl,
+              message: `This image is very similar to "${existing.name}"`
+            },
+            {
+              status: 409,
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type',
+              }
+            }
+          )
+        }
+      }
     } catch (error) {
-      console.warn('Could not extract image metadata:', error)
+      console.warn('Could not extract image metadata or compute hash:', error)
+      // Continue without hash if computation fails
     }
 
     // Upload to R2 (using Buffer directly)
@@ -171,7 +218,8 @@ export async function POST(request: NextRequest) {
         width,
         height,
         sourceType: 'pinterest',
-        sourceUrl: pinUrl
+        sourceUrl: pinUrl,
+        imageHash
       }
     })
 
