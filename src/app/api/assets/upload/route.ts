@@ -84,21 +84,19 @@ export async function POST(request: NextRequest) {
             }
           })
 
-          // Find similar images
+          // Find similar images - skip upload if duplicate found
+          let isDuplicate = false
           for (const existing of existingAssets) {
             if (existing.imageHash && areSimilarImages(imageHash, existing.imageHash)) {
-              console.log(`⚠️ [AssetUpload] Duplicate detected: ${existing.name} (ID: ${existing.id})`)
-              return NextResponse.json(
-                {
-                  error: 'Duplicate image detected',
-                  code: 'DUPLICATE_IMAGE',
-                  existingAssetId: existing.id,
-                  existingAssetName: existing.name,
-                  message: `This image is very similar to "${existing.name}"`
-                },
-                { status: 409 }
-              )
+              console.log(`⏭️ [AssetUpload] Duplicate detected, skipping: ${fileName} (similar to ${existing.name})`)
+              isDuplicate = true
+              break
             }
+          }
+
+          // Skip this file if it's a duplicate
+          if (isDuplicate) {
+            continue
           }
         } catch (error) {
           console.warn('Could not extract image metadata or compute hash:', error)

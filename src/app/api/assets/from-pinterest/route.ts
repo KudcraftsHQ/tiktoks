@@ -164,29 +164,32 @@ export async function POST(request: NextRequest) {
         }
       })
 
-      // Find similar images
+      // Find similar images - skip upload if duplicate found
+      let isDuplicate = false
       for (const existing of existingAssets) {
         if (existing.imageHash && areSimilarImages(imageHash, existing.imageHash)) {
-          console.log(`⚠️ [PinterestAsset] Duplicate detected: ${existing.name} (ID: ${existing.id})`)
-          return NextResponse.json(
-            {
-              error: 'Duplicate image detected',
-              code: 'DUPLICATE_IMAGE',
-              existingAssetId: existing.id,
-              existingAssetName: existing.name,
-              existingSourceUrl: existing.sourceUrl,
-              message: `This image is very similar to "${existing.name}"`
-            },
-            {
-              status: 409,
-              headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type',
-              }
-            }
-          )
+          console.log(`⏭️ [PinterestAsset] Duplicate detected, skipping: ${pinUrl} (similar to ${existing.name})`)
+          isDuplicate = true
+          break
         }
+      }
+
+      // Skip upload if it's a duplicate
+      if (isDuplicate) {
+        return NextResponse.json(
+          {
+            success: true,
+            skipped: true,
+            message: 'Image already exists, skipped upload'
+          },
+          {
+            headers: {
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Methods': 'POST, OPTIONS',
+              'Access-Control-Allow-Headers': 'Content-Type',
+            }
+          }
+        )
       }
     } catch (error) {
       console.warn('Could not extract image metadata or compute hash:', error)
