@@ -415,7 +415,7 @@ export function PostsTable({
           enablePagination={true}
           enableSelection={true}
           onRowSelectionChange={handleRowSelectionChange}
-          pageSize={10}
+          pageSize={25}
           leftStickyColumnsCount={1}
           rightStickyColumnsCount={1}
           fullWidth={true}
@@ -424,6 +424,9 @@ export function PostsTable({
           sorting={sorting}
           onSortingChange={onSortingChange}
           manualSorting={enableServerSideSorting}
+          totalRows={totalPosts}
+          onPaginationChange={onPageChange}
+          manualPagination={!!onPageChange}
         />
       </div>
 

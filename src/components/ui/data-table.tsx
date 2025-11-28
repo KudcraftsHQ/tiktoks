@@ -67,6 +67,10 @@ interface DataTableProps<TData, TValue> {
   sorting?: SortingState
   onSortingChange?: (updaterOrValue: SortingState | ((old: SortingState) => SortingState)) => void
   manualSorting?: boolean
+  // Server-side pagination props (controlled mode)
+  totalRows?: number
+  onPaginationChange?: (pageIndex: number, pageSize: number) => void
+  manualPagination?: boolean
 }
 
 interface ShadowOpacity {
@@ -98,6 +102,9 @@ export function DataTable<TData, TValue>({
   sorting: externalSorting,
   onSortingChange: externalOnSortingChange,
   manualSorting = false,
+  totalRows,
+  onPaginationChange: externalOnPaginationChange,
+  manualPagination = false,
 }: DataTableProps<TData, TValue>) {
   const [shadowOpacity, setShadowOpacity] = useState<ShadowOpacity>({ left: 0, right: 1 });
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
@@ -311,8 +318,27 @@ export function DataTable<TData, TValue>({
       }),
     }),
     ...(enablePagination && {
-      getPaginationRowModel: getPaginationRowModel(),
-      onPaginationChange: setPagination,
+      // Only use client-side pagination model when NOT in manual/server-side mode
+      ...(!manualPagination && {
+        getPaginationRowModel: getPaginationRowModel(),
+      }),
+      onPaginationChange: (updater) => {
+        const newState = typeof updater === 'function'
+          ? updater({ pageIndex, pageSize: currentPageSize })
+          : updater;
+
+        setPagination(newState);
+
+        // Call external pagination handler for server-side pagination
+        if (manualPagination && externalOnPaginationChange) {
+          externalOnPaginationChange(newState.pageIndex, newState.pageSize);
+        }
+      },
+      // Enable manual pagination for server-side pagination
+      ...(manualPagination && {
+        manualPagination: true,
+        pageCount: totalRows ? Math.ceil(totalRows / currentPageSize) : -1,
+      }),
     }),
   });
 
