@@ -575,13 +575,21 @@ function ConceptsTableInner({
 
       if (!response.ok) throw new Error('Failed to add example')
 
+      const newExample = await response.json()
+
+      // Optimistically update the state with the new example
+      if (onExamplesAdded) {
+        onExamplesAdded(conceptId, [newExample])
+      }
+
       toast.success('Example added')
-      onRefresh()
     } catch (err) {
       toast.error('Failed to add example')
+      // Refresh on error to restore correct state
+      onRefresh()
       throw err
     }
-  }, [onRefresh])
+  }, [onExamplesAdded, onRefresh])
 
   const handleDeleteExample = useCallback(async (conceptId: string, exampleId: string) => {
     // Optimistically update
