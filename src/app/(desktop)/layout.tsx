@@ -22,6 +22,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "TikTok Carousel Library",
   description: "Organize and search your TikTok carousel collection",
+  icons: {
+    icon: '/icon.png',
+  },
 };
 
 export default function RootLayout({

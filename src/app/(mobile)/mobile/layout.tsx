@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Mobile Sharing',
   description: 'Share carousel drafts to TikTok',
+  icons: {
+    icon: '/icon.png',
+  },
 };
 
 export const viewport: Viewport = {
