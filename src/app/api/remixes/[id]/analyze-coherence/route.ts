@@ -19,12 +19,30 @@ export async function POST(
 
     console.log(`🔍 [AnalyzeCoherence] Analyzing draft: ${draftId}`)
 
-    // Fetch the draft with slides and classifications
+    // Fetch the draft with slides, classifications, and product context
     const draft = await prisma.remixPost.findUnique({
       where: { id: draftId },
       select: {
         slides: true,
-        slideClassifications: true
+        slideClassifications: true,
+        productContext: {
+          select: {
+            id: true,
+            title: true,
+            description: true
+          }
+        },
+        project: {
+          select: {
+            productContext: {
+              select: {
+                id: true,
+                title: true,
+                description: true
+              }
+            }
+          }
+        }
       }
     })
 
@@ -34,6 +52,9 @@ export async function POST(
         { status: 404 }
       )
     }
+
+    // Determine which product context to use (draft-level takes priority over project-level)
+    const productContext = draft.productContext || draft.project?.productContext || null
 
     // Parse slides array
     let slides: any[]
@@ -56,10 +77,11 @@ export async function POST(
       })
     }
 
-    // Analyze coherence
+    // Analyze coherence with product context
     const analysis = await analyzeCoherence(
       slides,
-      (draft.slideClassifications as any) || []
+      (draft.slideClassifications as any) || [],
+      productContext
     )
 
     console.log(`✅ [AnalyzeCoherence] Analysis complete: ${analysis.issues.length} issues found`)

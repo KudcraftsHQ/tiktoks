@@ -99,13 +99,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Auto-select product context if only one exists
+    const productContexts = await prisma.productContext.findMany()
+    const productContextId = productContexts.length === 1 ? productContexts[0].id : null
+
     const project = await prisma.project.create({
       data: {
         name: validatedData.name,
         description: validatedData.description,
-        color: validatedData.color
+        color: validatedData.color,
+        productContextId
       },
       include: {
+        productContext: {
+          select: {
+            id: true,
+            title: true,
+            description: true
+          }
+        },
         _count: {
           select: {
             posts: true,

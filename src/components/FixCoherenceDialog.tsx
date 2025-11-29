@@ -40,10 +40,12 @@ function highlightDiff(before: string, after: string): React.ReactNode {
 }
 
 interface CoherenceIssue {
-  type: 'pov_inconsistency' | 'voice_mismatch' | 'tone_jump'
+  type: 'pov_inconsistency' | 'voice_mismatch' | 'tone_jump' | 'product_mismatch'
   slideIndices: number[]
   description: string
   severity: 'high' | 'medium' | 'low'
+  currentValue?: string
+  suggestedValue?: string
 }
 
 interface CoherenceAnalysis {
@@ -69,6 +71,8 @@ const getIssueTypeLabel = (type: string): string => {
       return 'Voice Mismatch'
     case 'tone_jump':
       return 'Tone Jump'
+    case 'product_mismatch':
+      return 'Product Mismatch'
     default:
       return type
   }
@@ -85,6 +89,22 @@ const getSeverityColor = (severity: string): string => {
       return 'secondary'
     default:
       return 'default'
+  }
+}
+
+// Helper to get issue type color (for badge background)
+const getIssueTypeColor = (type: string): string => {
+  switch (type) {
+    case 'pov_inconsistency':
+      return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+    case 'voice_mismatch':
+      return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+    case 'tone_jump':
+      return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+    case 'product_mismatch':
+      return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+    default:
+      return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
   }
 }
 
