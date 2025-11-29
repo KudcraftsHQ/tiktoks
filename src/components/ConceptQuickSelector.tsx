@@ -223,10 +223,15 @@ export function ConceptQuickSelector({
                 </CommandEmpty>
               ) : (
                 <CommandGroup>
-                  {concepts.map(concept => (
+                  {concepts.map(concept => {
+                    // Build searchable value: title + coreMessage + all example texts
+                    const exampleTexts = concept.examples.map(e => e.text).join(' ')
+                    const searchValue = `${concept.title} ${concept.coreMessage} ${exampleTexts}`
+
+                    return (
                     <div key={concept.id} className="border-b last:border-0">
                       <CommandItem
-                        value={concept.title}
+                        value={searchValue}
                         onSelect={() => handleToggleConcept(concept.id)}
                         className="flex items-start gap-2 py-2 cursor-pointer"
                       >
@@ -277,7 +282,8 @@ export function ConceptQuickSelector({
                         </div>
                       )}
                     </div>
-                  ))}
+                    )
+                  })}
                 </CommandGroup>
               )}
             </CommandList>
