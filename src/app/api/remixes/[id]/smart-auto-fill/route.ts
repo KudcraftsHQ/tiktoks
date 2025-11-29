@@ -324,9 +324,10 @@ export async function POST(
     }
 
     // STEP 1: Select relevant concepts for CONTENT slides
+    // Only count slides that are explicitly classified as CONTENT (or have no classification)
     const numContentSlides = emptySlideIndices.filter(i => {
       const type = getSlideType(i)
-      return type !== 'CTA' && i !== slides.length - 1
+      return type === 'CONTENT' || type === undefined
     }).length
 
     let selectedConcepts: SelectedConcept[] = []
@@ -347,17 +348,21 @@ export async function POST(
 
     for (const slideIndex of emptySlideIndices) {
       const slideType = getSlideType(slideIndex)
-      const isLastSlide = slideIndex === slides.length - 1
-      const isCTA = slideType === 'CTA' || isLastSlide
+      // Only use CTA if explicitly classified as CTA, not based on position
+      const isCTA = slideType === 'CTA'
+      const isContent = slideType === 'CONTENT' || slideType === undefined
+
+      console.log(`[SmartAutoFill] Slide ${slideIndex}: type=${slideType}, isCTA=${isCTA}, isContent=${isContent}`)
 
       let selectedConceptId: string
       let selectedConcept: typeof contentConcepts[0] | undefined
       let relevanceScore = 0.8
 
       if (isCTA && ctaConcepts.length > 0) {
-        // Use CTA concept for last slide
+        // Use CTA concept only for slides explicitly classified as CTA
         selectedConcept = ctaConcepts[0]
         selectedConceptId = selectedConcept.id
+        console.log(`[SmartAutoFill] Using CTA concept for slide ${slideIndex}`)
       } else if (selectedConcepts[conceptIndex]) {
         // Use AI-selected concept
         selectedConceptId = selectedConcepts[conceptIndex].conceptId

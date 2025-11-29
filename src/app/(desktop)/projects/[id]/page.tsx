@@ -12,6 +12,7 @@ import { TikTokPost } from '@/components/posts-table-columns'
 import { Input } from '@/components/ui/input'
 import { RemixPost } from '@/types/remix'
 import { RowSelectionState } from '@tanstack/react-table'
+import { ProductContextSelector } from '@/components/ProductContextSelector'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,10 +24,18 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
+interface ProductContext {
+  id: string
+  title: string
+  description?: string
+}
+
 interface Project {
   id: string
   name: string
   description: string | null
+  productContextId: string | null
+  productContext: ProductContext | null
   posts: Array<{
     id: string
     post: TikTokPost
@@ -247,6 +256,36 @@ export default function ProjectDetailPage() {
     } finally {
       setIsSavingTitle(false)
       setIsEditingTitle(false)
+    }
+  }
+
+  const handleProductContextChange = async (productContextId: string | null) => {
+    if (!project) return
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ productContextId })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update product context')
+      }
+
+      const updatedProject = await response.json()
+      setProject(prev => prev ? {
+        ...prev,
+        productContextId: updatedProject.productContextId,
+        productContext: updatedProject.productContext
+      } : null)
+
+      toast.success('Product context updated')
+    } catch (error) {
+      console.error('Error updating product context:', error)
+      toast.error('Failed to update product context')
     }
   }
 
@@ -750,36 +789,42 @@ export default function ProjectDetailPage() {
       <div className="flex-1 flex flex-col min-w-0">
         <PageLayout
           title={
-            isEditingTitle ? (
-              <div className="flex items-center gap-2">
-                <input
-                  ref={titleInputRef}
-                  type="text"
-                  value={editedTitle}
-                  onChange={(e) => setEditedTitle(e.target.value)}
-                  onBlur={handleSaveTitle}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleSaveTitle()
-                    } else if (e.key === 'Escape') {
-                      setEditedTitle(project.name)
-                      setIsEditingTitle(false)
-                    }
-                  }}
-                  disabled={isSavingTitle}
-                  className="text-lg font-semibold p-0 m-0 border-none shadow-none outline-none bg-transparent w-auto min-w-0"
-                  maxLength={100}
-                />
-              </div>
-            ) : (
-              <div
-                className="flex items-center gap-2 cursor-pointer group"
-                onClick={() => setIsEditingTitle(true)}
-              >
-                <span className="text-lg font-semibold">{project.name}</span>
-                <Pencil className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-            )
+            <div className="flex items-center gap-3">
+              {isEditingTitle ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={titleInputRef}
+                    type="text"
+                    value={editedTitle}
+                    onChange={(e) => setEditedTitle(e.target.value)}
+                    onBlur={handleSaveTitle}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSaveTitle()
+                      } else if (e.key === 'Escape') {
+                        setEditedTitle(project.name)
+                        setIsEditingTitle(false)
+                      }
+                    }}
+                    disabled={isSavingTitle}
+                    className="text-lg font-semibold p-0 m-0 border-none shadow-none outline-none bg-transparent w-auto min-w-0"
+                    maxLength={100}
+                  />
+                </div>
+              ) : (
+                <div
+                  className="flex items-center gap-2 cursor-pointer group"
+                  onClick={() => setIsEditingTitle(true)}
+                >
+                  <span className="text-lg font-semibold">{project.name}</span>
+                  <Pencil className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              )}
+              <ProductContextSelector
+                value={project.productContextId}
+                onChange={handleProductContextChange}
+              />
+            </div>
           }
           headerActions={
             <div className="flex gap-2">
@@ -881,6 +926,7 @@ export default function ProjectDetailPage() {
         defaultMinSlides={defaultMinSlides}
         defaultMaxSlides={defaultMaxSlides}
         referencePostStructure={referencePostStructure}
+        defaultProductContext={project?.productContext}
       />
 
       {/* Remove Confirmation Dialog */}

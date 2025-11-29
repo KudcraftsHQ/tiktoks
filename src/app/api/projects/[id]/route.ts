@@ -7,7 +7,8 @@ const prisma = new PrismaClient()
 const UpdateProjectSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().optional(),
-  color: z.string().regex(/^#[0-9A-F]{6}$/i).optional()
+  color: z.string().regex(/^#[0-9A-F]{6}$/i).optional(),
+  productContextId: z.string().nullable().optional()
 })
 
 // Helper function to convert BigInt and Date values for JSON serialization
@@ -52,6 +53,13 @@ export async function GET(
     const project = await prisma.project.findUnique({
       where: { id },
       include: {
+        productContext: {
+          select: {
+            id: true,
+            title: true,
+            description: true
+          }
+        },
         posts: {
           include: {
             post: true
@@ -186,6 +194,13 @@ export async function PUT(
       where: { id },
       data: validatedData,
       include: {
+        productContext: {
+          select: {
+            id: true,
+            title: true,
+            description: true
+          }
+        },
         _count: {
           select: {
             posts: true
@@ -205,6 +220,55 @@ export async function PUT(
     }
 
     console.error('Failed to update project:', error)
+    return NextResponse.json(
+      { error: 'Failed to update project' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const body = await request.json()
+
+    // Validate productContextId if provided
+    if (body.productContextId !== undefined && body.productContextId !== null) {
+      const contextExists = await prisma.productContext.findUnique({
+        where: { id: body.productContextId }
+      })
+
+      if (!contextExists) {
+        return NextResponse.json(
+          { error: 'Product context not found' },
+          { status: 404 }
+        )
+      }
+    }
+
+    const updatedProject = await prisma.project.update({
+      where: { id },
+      data: {
+        productContextId: body.productContextId === null ? null : body.productContextId
+      },
+      include: {
+        productContext: {
+          select: {
+            id: true,
+            title: true,
+            description: true
+          }
+        }
+      }
+    })
+
+    const serializedProject = serializeBigInt(updatedProject)
+    return NextResponse.json(serializedProject)
+  } catch (error) {
+    console.error('Error updating project:', error)
     return NextResponse.json(
       { error: 'Failed to update project' },
       { status: 500 }

@@ -9,10 +9,12 @@ import { GoogleGenAI, Type } from '@google/genai'
 import { z } from 'zod'
 
 export interface CoherenceIssue {
-  type: 'pov_inconsistency' | 'voice_mismatch' | 'tone_jump'
+  type: 'pov_inconsistency' | 'voice_mismatch' | 'tone_jump' | 'product_mismatch'
   slideIndices: number[]
   description: string
   severity: 'high' | 'medium' | 'low'
+  currentValue?: string
+  suggestedValue?: string
 }
 
 export interface CoherenceAnalysis {
@@ -34,10 +36,12 @@ interface SlideClassification {
 // Zod schema for AI response validation
 const CoherenceAnalysisSchema = z.object({
   issues: z.array(z.object({
-    type: z.enum(['pov_inconsistency', 'voice_mismatch', 'tone_jump']),
+    type: z.enum(['pov_inconsistency', 'voice_mismatch', 'tone_jump', 'product_mismatch']),
     slideIndices: z.array(z.number()),
     description: z.string(),
-    severity: z.enum(['high', 'medium', 'low'])
+    severity: z.enum(['high', 'medium', 'low']),
+    currentValue: z.string().optional(),
+    suggestedValue: z.string().optional()
   })),
   affectedSlideCount: z.number(),
   recommendation: z.string()
@@ -45,15 +49,17 @@ const CoherenceAnalysisSchema = z.object({
 
 /**
  * Analyze carousel slides for POV/voice/tone coherence issues
- * Only analyzes CONTENT slides against HOOK and CTA references
+ * Also checks CTA slides for correct product mentions
  *
  * @param slides - All slides in the carousel
  * @param classifications - Slide type classifications
+ * @param productContext - Optional product context for CTA validation
  * @returns Coherence analysis with issues found
  */
 export async function analyzeCoherence(
   slides: Array<{ paraphrasedText: string }>,
-  classifications: SlideClassification[]
+  classifications: SlideClassification[],
+  productContext?: { title: string; description: string } | null
 ): Promise<CoherenceAnalysis> {
   try {
     console.log(`🔍 [CoherenceAnalysis] Analyzing ${slides.length} slides`)
@@ -143,6 +149,20 @@ export async function analyzeCoherence(
 
     const analysis = validation.data
 
+    // Add product context validation for CTA slides if product context is provided
+    if (productContext) {
+      const productIssues = analyzeCTAProductContext(slides, classifications, productContext)
+      analysis.issues.push(...productIssues)
+      if (productIssues.length > 0) {
+        // Update affected slide count
+        const allAffectedIndices = new Set<number>()
+        analysis.issues.forEach(issue => {
+          issue.slideIndices.forEach(idx => allAffectedIndices.add(idx))
+        })
+        analysis.affectedSlideCount = allAffectedIndices.size
+      }
+    }
+
     console.log(`✅ [CoherenceAnalysis] Found ${analysis.issues.length} issues affecting ${analysis.affectedSlideCount} slides`)
 
     return analysis
@@ -193,4 +213,81 @@ Respond with JSON only:
   "affectedSlideCount": number of slides with issues,
   "recommendation": "brief summary of what needs fixing"
 }`.trim()
+}
+
+/**
+ * Analyze CTA slides for product context mismatches
+ *
+ * @param slides - All slides in the carousel
+ * @param classifications - Slide type classifications
+ * @param productContext - Product context to validate against
+ * @returns Array of product mismatch issues
+ */
+function analyzeCTAProductContext(
+  slides: Array<{ paraphrasedText: string }>,
+  classifications: SlideClassification[],
+  productContext: { title: string; description: string }
+): CoherenceIssue[] {
+  const issues: CoherenceIssue[] = []
+
+  // Find CTA slides
+  const ctaSlides = classifications
+    .filter(c => c.type === 'CTA')
+    .map(c => ({ index: c.slideIndex, slide: slides[c.slideIndex] }))
+
+  for (const { index, slide } of ctaSlides) {
+    if (!slide) continue
+
+    const text = slide.paraphrasedText
+    const textLower = text.toLowerCase()
+
+    // Check if CTA mentions a product
+    const productMentionPatterns = [
+      /there'?s?\s+this\s+(?:app|tool|website|platform)\s+called\s+([^.!?\n]+)/i,
+      /(?:app|tool|website|platform)\s+called\s+([^.!?\n]+)/i,
+      /check\s+out\s+([^.!?\n]+)/i,
+      /try\s+(?:using\s+)?([^.!?\n]+)/i,
+      /i\s+use\s+([^.!?\n]+)/i,
+      /called\s+([^.!?\n]+)\s+that/i
+    ]
+
+    let mentionedProduct: string | null = null
+    for (const pattern of productMentionPatterns) {
+      const match = text.match(pattern)
+      if (match && match[1]) {
+        mentionedProduct = match[1].trim()
+        // Remove trailing punctuation and common words
+        mentionedProduct = mentionedProduct.replace(/[,;:.]$/, '').trim()
+        break
+      }
+    }
+
+    // Validate against expected product
+    if (mentionedProduct) {
+      const expectedProduct = productContext.title.toLowerCase()
+      const actualProduct = mentionedProduct.toLowerCase()
+
+      if (actualProduct !== expectedProduct) {
+        issues.push({
+          type: 'product_mismatch',
+          slideIndices: [index],
+          description: `CTA mentions "${mentionedProduct}" but project uses "${productContext.title}"`,
+          severity: 'high',
+          currentValue: mentionedProduct,
+          suggestedValue: productContext.title
+        })
+      }
+    } else {
+      // CTA should mention the product if product context exists
+      issues.push({
+        type: 'product_mismatch',
+        slideIndices: [index],
+        description: `CTA slide should mention product "${productContext.title}"`,
+        severity: 'medium',
+        suggestedValue: productContext.title
+      })
+    }
+  }
+
+  return issues
 }

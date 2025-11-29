@@ -69,6 +69,7 @@ interface GenerateContentDrawerProps {
   defaultMinSlides?: number // Optional: default min slides
   defaultMaxSlides?: number // Optional: default max slides
   referencePostStructure?: ReferencePostStructure | null // Optional: when provided, generation follows this structure exactly
+  defaultProductContext?: ProductContext | null // Optional: project-level product context
 }
 
 export function GenerateContentDrawer({
@@ -81,7 +82,8 @@ export function GenerateContentDrawer({
   defaultVariationCount,
   defaultMinSlides,
   defaultMaxSlides,
-  referencePostStructure
+  referencePostStructure,
+  defaultProductContext
 }: GenerateContentDrawerProps) {
   // Whether to follow exact reference structure (when in project context with structure info)
   const followReferenceStructure = !!referencePostStructure && referencePostStructure.slideCount > 0
@@ -150,12 +152,18 @@ export function GenerateContentDrawer({
     }
   }, [isOpen, defaultVariationCount, defaultMinSlides, defaultMaxSlides])
 
-  // Auto-select first product context when loaded
+  // Auto-select product context: project-level context, single context in DB, or first available
   useEffect(() => {
     if (productContexts.length > 0 && selectedProductId === '') {
-      setSelectedProductId(productContexts[0].id)
+      if (defaultProductContext) {
+        // Use project-level product context if set
+        setSelectedProductId(defaultProductContext.id)
+      } else if (productContexts.length === 1) {
+        // Auto-select if only one product context exists
+        setSelectedProductId(productContexts[0].id)
+      }
     }
-  }, [productContexts, selectedProductId])
+  }, [productContexts, selectedProductId, defaultProductContext])
 
   const fetchPostPreviews = async () => {
     setIsLoadingPosts(true)

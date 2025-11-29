@@ -36,16 +36,18 @@ const SlideFixSchema = z.object({
 })
 
 /**
- * Fix coherence issues in CONTENT slides
+ * Fix coherence issues in CONTENT slides and product mentions in CTA slides
  * Uses HOOK and CTA as reference points for desired POV/voice
  *
  * @param slides - All slides in the carousel
  * @param classifications - Slide type classifications
+ * @param productContext - Optional product context for CTA product replacement
  * @returns Fixed slides with changes summary
  */
 export async function fixCoherence(
   slides: Array<{ paraphrasedText: string }>,
-  classifications: SlideClassification[]
+  classifications: SlideClassification[],
+  productContext?: { title: string; description: string } | null
 ): Promise<CoherenceFixResult> {
   try {
     console.log(`🔧 [CoherenceFix] Fixing coherence for ${slides.length} slides`)
@@ -149,6 +151,15 @@ export async function fixCoherence(
       summary: parsed.summary || 'Coherence fixes applied.'
     }
 
+    // Fix CTA slides for product mentions if product context provided
+    if (productContext) {
+      const ctaFixes = await fixCTAProductMentions(slides, classifications, productContext)
+      result.slides.push(...ctaFixes)
+      if (ctaFixes.length > 0) {
+        result.summary += ` Product mentions updated in CTA slides.`
+      }
+    }
+
     console.log(`✅ [CoherenceFix] Fixed ${result.slides.length} slides`)
 
     return result
@@ -198,4 +209,141 @@ Respond with JSON:
 ${contentSlides.map(({ index }) => `  "slide_${index}": { "fixedText": "minimally edited version", "changes": "specific changes made" }`).join(',\n')},
   "summary": "brief summary"
 }`.trim()
+}
+
+/**
+ * Fix product mentions in CTA slides
+ *
+ * @param slides - All slides in the carousel
+ * @param classifications - Slide type classifications
+ * @param productContext - Product context to use for replacement
+ * @returns Fixed CTA slides
+ */
+async function fixCTAProductMentions(
+  slides: Array<{ paraphrasedText: string }>,
+  classifications: SlideClassification[],
+  productContext: { title: string; description: string }
+): Promise<FixedSlide[]> {
+  const fixedSlides: FixedSlide[] = []
+
+  // Find CTA slides
+  const ctaSlides = classifications
+    .filter(c => c.type === 'CTA')
+    .map(c => ({ index: c.slideIndex, slide: slides[c.slideIndex] }))
+
+  for (const { index, slide } of ctaSlides) {
+    if (!slide) continue
+
+    const text = slide.paraphrasedText
+    let fixedText = text
+    let hasChanges = false
+    const changes: string[] = []
+
+    // Replace product mentions with correct product name
+    const productMentionPatterns = [
+      {
+        regex: /(there'?s?\s+this\s+(?:app|tool|website|platform)\s+called\s+)([^.!?\n,]+)/gi,
+        replacement: `$1${productContext.title}`
+      },
+      {
+        regex: /((?:app|tool|website|platform)\s+called\s+)([^.!?\n,]+)/gi,
+        replacement: `$1${productContext.title}`
+      },
+      {
+        regex: /(check\s+out\s+)([^.!?\n,]+)/gi,
+        replacement: `$1${productContext.title}`
+      },
+      {
+        regex: /(try\s+(?:using\s+)?)([^.!?\n,]+)/gi,
+        replacement: `$1${productContext.title}`
+      },
+      {
+        regex: /(i\s+use\s+)([^.!?\n,]+)/gi,
+        replacement: `$1${productContext.title}`
+      }
+    ]
+
+    for (const { regex, replacement } of productMentionPatterns) {
+      const newText = fixedText.replace(regex, replacement)
+      if (newText !== fixedText) {
+        hasChanges = true
+        changes.push(`Replaced product mention with "${productContext.title}"`)
+        fixedText = newText
+      }
+    }
+
+    // If no product mention found but should have one, add it naturally
+    if (!hasChanges && !text.toLowerCase().includes(productContext.title.toLowerCase())) {
+      // Use AI to insert product mention naturally
+      fixedText = await insertProductMentionWithAI(text, productContext)
+      if (fixedText !== text) {
+        hasChanges = true
+        changes.push(`Added product mention "${productContext.title}"`)
+      }
+    }
+
+    if (hasChanges) {
+      fixedSlides.push({
+        slideIndex: index,
+        fixedText,
+        changes: changes.join('; ')
+      })
+    }
+  }
+
+  return fixedSlides
+}
+
+/**
+ * Use AI to naturally insert product mention into CTA slide
+ */
+async function insertProductMentionWithAI(
+  text: string,
+  productContext: { title: string; description: string }
+): Promise<string> {
+  try {
+    const ai = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY!,
+    })
+
+    const prompt = `You are fixing a CTA (call-to-action) slide that is missing a product mention.
+
+Current slide text:
+"""
+${text}
+"""
+
+Product to mention:
+Name: ${productContext.title}
+Description: ${productContext.description}
+
+Instructions:
+1. Add a natural mention of "${productContext.title}" to this CTA slide
+2. Use conversational language: "there's this app called ${productContext.title}..." or similar
+3. Keep the original style and tone
+4. Make MINIMAL changes - only add the product mention
+5. Follow the 4-part CTA rhythm: hook → discovery → benefits → authentic marker
+
+Return ONLY the fixed text, no explanations or additional text.`
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-lite',
+      contents: [{
+        role: 'user',
+        parts: [{ text: prompt }]
+      }],
+      config: {
+        temperature: 0.8
+      }
+    })
+
+    if (response.text) {
+      return response.text.trim()
+    }
+
+    return text
+  } catch (error) {
+    console.error('[CoherenceFix] Failed to insert product mention with AI:', error)
+    return text
+  }
 }

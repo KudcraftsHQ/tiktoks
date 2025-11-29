@@ -204,13 +204,16 @@ model Project {
   description String?
   color       String?  // Hex color for UI theming
   isDefault   Boolean  @default(false)
+  productContextId String?  // Reference to ProductContext (optional)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   posts       ProjectPost[]
   remixes     RemixPost[]
+  productContext ProductContext? @relation(fields: [productContextId], references: [id], onDelete: SetNull)
 
   @@map("projects")
+  @@index([productContextId])
 }
 
 model ProjectPost {
@@ -405,6 +408,7 @@ model ProductContext {
 
   remixes     RemixPost[]
   draftSessions DraftSession[]
+  projects    Project[]
 
   @@map("product_contexts")
   @@index([title])
