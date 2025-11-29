@@ -89,11 +89,28 @@ export async function GET(request: Request) {
     }))
 
     // Sort concepts by type: HOOK -> CONTENT -> CTA
+    // Within each type, sort manually created concepts by creation date (oldest first)
     const typeOrder: Record<string, number> = { HOOK: 0, CONTENT: 1, CTA: 2 }
     conceptsWithSortedExamples.sort((a, b) => {
       const typeA = typeOrder[a.type] ?? 99
       const typeB = typeOrder[b.type] ?? 99
-      return typeA - typeB
+
+      // First sort by type
+      if (typeA !== typeB) {
+        return typeA - typeB
+      }
+
+      // Within same type, check if both are manually created (all examples are MANUAL sourceType)
+      const aIsManual = a.examples.length > 0 && a.examples.every(ex => ex.sourceType === 'MANUAL')
+      const bIsManual = b.examples.length > 0 && b.examples.every(ex => ex.sourceType === 'MANUAL')
+
+      // If both are manual or both are not manual, sort by creation date (oldest first)
+      if ((aIsManual && bIsManual) || (!aIsManual && !bIsManual)) {
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      }
+
+      // Manual concepts come before non-manual ones
+      return aIsManual ? -1 : 1
     })
 
     // Get counts by type
