@@ -29,7 +29,7 @@ interface PostPreview {
 interface ProductContext {
   id: string
   title: string
-  description: string
+  description?: string
 }
 
 interface Concept {
