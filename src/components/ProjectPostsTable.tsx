@@ -151,7 +151,7 @@ interface SortableSlideProps {
   onApplyExample: (draftId: string, slideIndex: number, text: string, conceptId: string, exampleId: string, mode: 'copy' | 'paraphrase', intensity?: 'minimal' | 'medium' | 'high') => Promise<void>
   onApplyConceptWithState: (draftId: string, slideIndex: number, text: string, conceptId: string, conceptTitle: string, exampleId: string, exampleIds: string[], isHookSlide?: boolean) => Promise<void>
   onCycleExample: (draftId: string, slideIndex: number) => Promise<void>
-  onAutoFill: (draftId: string) => Promise<void>
+  onAutoFill: (draftId: string, hookText?: string) => Promise<void>
   onRefetchData?: () => void
   totalSlides: number
   isApplyingConcept?: boolean
@@ -276,7 +276,7 @@ function SortableSlide({
                     const isHookSlide = classification?.type?.toUpperCase() === 'HOOK' && slideIndex === 0
                     await onApplyConceptWithState(draftId, slideIndex, text, conceptId, conceptTitle, exampleId, exampleIds, isHookSlide)
                   }}
-                  onAutoFill={() => onAutoFill(draftId)}
+                  onAutoFill={(hookText) => onAutoFill(draftId, hookText)}
                   currentConceptId={conceptState?.conceptId}
                   currentExampleIndex={conceptState?.exampleIndex}
                   currentExampleIds={conceptState?.exampleIds}
@@ -1375,9 +1375,11 @@ export function ProjectPostsTable({
     }
   }, [optimisticRows, getSlidesArray, slideConceptStates])
 
-  // Handler to auto-fill empty slides with random concept examples
-  const handleAutoFillSlides = useCallback(async (draftId: string) => {
+  // Handler to auto-fill empty slides with concept examples
+  // If hookText is provided, uses smart AI matching; otherwise uses random selection
+  const handleAutoFillSlides = useCallback(async (draftId: string, hookText?: string) => {
     console.log('[ProjectPostsTable] handleAutoFillSlides called for draft:', draftId)
+    console.log('[ProjectPostsTable] hookText:', hookText ? hookText.slice(0, 50) + '...' : 'not provided (using random)')
 
     // Clear the "waiting for auto-fill" loading state since auto-fill is now starting
     setDraftsWaitingForAutoFill(prev => {
@@ -1411,14 +1413,21 @@ export function ProjectPostsTable({
       return
     }
 
+    // Choose endpoint based on whether hookText is provided
+    const useSmartFill = !!hookText
+    const endpoint = useSmartFill
+      ? `/api/remixes/${draftId}/smart-auto-fill`
+      : `/api/remixes/${draftId}/auto-fill-concepts`
+
     // Show confirmation toast
     toast.promise(
       (async () => {
-        const response = await fetch(`/api/remixes/${draftId}/auto-fill-concepts`, {
+        const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
-          }
+          },
+          body: useSmartFill ? JSON.stringify({ hookText }) : undefined
         })
 
         if (!response.ok) {
@@ -1473,11 +1482,17 @@ export function ProjectPostsTable({
           })
         }
 
-        return result.filledCount
+        // Return info for toast
+        return { count: result.filledCount, generated: result.generatedCount || 0, smart: useSmartFill }
       })(),
       {
-        loading: 'Auto-filling slides...',
-        success: (count) => `Filled ${count} slides with concept examples`,
+        loading: useSmartFill ? 'Smart-filling slides based on hook...' : 'Auto-filling slides...',
+        success: (data) => {
+          if (data.smart && data.generated > 0) {
+            return `Filled ${data.count} slides (${data.generated} AI-generated)`
+          }
+          return `Filled ${data.count} slides with ${data.smart ? 'matched' : 'random'} examples`
+        },
         error: 'Failed to auto-fill slides'
       }
     )

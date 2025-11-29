@@ -47,8 +47,8 @@ interface ConceptQuickSelectorProps {
     exampleId: string,
     exampleIds: string[]
   ) => Promise<void>
-  // For auto-fill on HOOK selection
-  onAutoFill?: () => Promise<void>
+  // For auto-fill on HOOK selection - now accepts hook text for smart matching
+  onAutoFill?: (hookText: string) => Promise<void>
   // For cycling - current state from parent
   currentConceptId?: string | null
   currentExampleIndex?: number
@@ -137,20 +137,22 @@ export function ConceptQuickSelector({
       setOpen(false)
 
       // If this is a HOOK slide (slideIndex 0) and we have an auto-fill handler, trigger it
+      // Pass the hook text so smart auto-fill can match content to the hook's promise
       console.log('[ConceptQuickSelector] Auto-fill check:', {
         slideType,
         slideIndex,
         hasAutoFill: !!onAutoFill,
+        hookText: example.text.slice(0, 50),
         shouldTrigger: slideType?.toUpperCase() === 'HOOK' && slideIndex === 0 && onAutoFill
       })
 
       if (slideType?.toUpperCase() === 'HOOK' && slideIndex === 0 && onAutoFill) {
-        console.log('[ConceptQuickSelector] Apply completed, triggering auto-fill in 1000ms...')
+        console.log('[ConceptQuickSelector] Apply completed, triggering smart auto-fill in 1000ms...')
         // Delay to ensure the database transaction has completed
         // This prevents a race condition where auto-fill reads stale data
         setTimeout(() => {
-          console.log('[ConceptQuickSelector] Calling onAutoFill()')
-          onAutoFill()
+          console.log('[ConceptQuickSelector] Calling onAutoFill() with hook text')
+          onAutoFill(example.text)
         }, 1000)
       }
     } catch (error) {
