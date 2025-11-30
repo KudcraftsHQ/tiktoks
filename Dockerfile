@@ -35,8 +35,8 @@ RUN bunx prisma generate
 
 # Restore Next.js cache from previous build (if exists)
 # This directory is populated by GitHub Actions cache
-RUN mkdir -p .next/cache
-COPY .next-cache/ .next/cache/ 2>/dev/null || true
+RUN mkdir -p .next/cache && \
+    if [ -d .next-cache ]; then cp -r .next-cache/. .next/cache/; fi
 
 # Build with Next.js cache mount (unique id per project to avoid conflicts)
 # Note: Sentry source maps are disabled during Docker build
