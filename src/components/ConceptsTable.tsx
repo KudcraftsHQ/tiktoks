@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { InlineEditableTitle } from '@/components/InlineEditableTitle'
@@ -75,6 +75,9 @@ interface ConceptsTableProps {
   onRefresh: () => void
   onExamplesAdded?: (conceptId: string, examples: ConceptExample[]) => void
   onExampleDeleted?: (conceptId: string, exampleId: string) => void
+  onConceptUpdated?: (conceptId: string, updates: Partial<Concept>) => void
+  onConceptDeleted?: (conceptId: string) => void
+  onConceptsAdded?: (concepts: Concept[]) => void
   isLoading?: boolean
   selectedConceptIds?: Set<string>
   onSelectionChange?: (selectedIds: Set<string>) => void
@@ -499,6 +502,9 @@ function ConceptsTableInner({
   onRefresh,
   onExamplesAdded,
   onExampleDeleted,
+  onConceptUpdated,
+  onConceptDeleted,
+  onConceptsAdded,
   isLoading,
   selectedConceptIds = new Set(),
   onSelectionChange
@@ -508,6 +514,14 @@ function ConceptsTableInner({
   const [showMoveDialog, setShowMoveDialog] = useState(false)
   const [showNewConceptDialog, setShowNewConceptDialog] = useState(false)
   const [splitConceptId, setSplitConceptId] = useState<string | null>(null)
+
+  // Optimistic state management
+  const [optimisticConcepts, setOptimisticConcepts] = useState<Concept[]>(concepts)
+
+  // Update optimistic state when props change
+  useEffect(() => {
+    setOptimisticConcepts(concepts)
+  }, [concepts])
 
   const { selectedExamples, clearSelection } = useExampleSelection()
 
@@ -527,14 +541,14 @@ function ConceptsTableInner({
   const handleToggleAllConcepts = useCallback(() => {
     if (!onSelectionChange) return
 
-    if (selectedConceptIds.size === concepts.length) {
+    if (selectedConceptIds.size === optimisticConcepts.length) {
       // Deselect all
       onSelectionChange(new Set())
     } else {
       // Select all
-      onSelectionChange(new Set(concepts.map(c => c.id)))
+      onSelectionChange(new Set(optimisticConcepts.map(c => c.id)))
     }
-  }, [selectedConceptIds, concepts, onSelectionChange])
+  }, [selectedConceptIds, optimisticConcepts, onSelectionChange])
 
   // Image gallery state
   const [galleryImages, setGalleryImages] = useState<Array<{ url: string; width: number; height: number }>>([])
@@ -615,24 +629,52 @@ function ConceptsTableInner({
   }, [onExampleDeleted, onRefresh])
 
   const handleToggleActive = useCallback(async (concept: Concept) => {
+    const newActiveState = !concept.isActive
+
+    // Optimistically update UI
+    setOptimisticConcepts(prev =>
+      prev.map(c => c.id === concept.id ? { ...c, isActive: newActiveState } : c)
+    )
+
+    if (onConceptUpdated) {
+      onConceptUpdated(concept.id, { isActive: newActiveState })
+    }
+
     try {
       const response = await fetch(`/api/concepts/${concept.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: !concept.isActive })
+        body: JSON.stringify({ isActive: newActiveState })
       })
 
       if (!response.ok) throw new Error('Failed to update')
 
       toast.success(`Concept ${concept.isActive ? 'disabled' : 'enabled'}`)
-      onRefresh()
     } catch (err) {
       toast.error('Failed to update concept')
+      // Revert optimistic update
+      setOptimisticConcepts(prev =>
+        prev.map(c => c.id === concept.id ? { ...c, isActive: concept.isActive } : c)
+      )
+      if (onConceptUpdated) {
+        onConceptUpdated(concept.id, { isActive: concept.isActive })
+      }
     }
-  }, [onRefresh])
+  }, [onConceptUpdated])
 
   const handleDelete = useCallback(async (id: string) => {
     setIsDeleting(id)
+
+    // Store the concept for potential rollback
+    const conceptToDelete = optimisticConcepts.find(c => c.id === id)
+
+    // Optimistically remove from UI
+    setOptimisticConcepts(prev => prev.filter(c => c.id !== id))
+
+    if (onConceptDeleted) {
+      onConceptDeleted(id)
+    }
+
     try {
       const response = await fetch(`/api/concepts/${id}`, {
         method: 'DELETE'
@@ -641,13 +683,22 @@ function ConceptsTableInner({
       if (!response.ok) throw new Error('Failed to delete')
 
       toast.success('Concept deleted')
-      onRefresh()
     } catch (err) {
       toast.error('Failed to delete concept')
+      // Revert optimistic update
+      if (conceptToDelete) {
+        setOptimisticConcepts(prev => [...prev, conceptToDelete].sort((a, b) => {
+          const typeOrder = { HOOK: 0, CONTENT: 1, CTA: 2 }
+          return typeOrder[a.type] - typeOrder[b.type]
+        }))
+        if (onConceptsAdded) {
+          onConceptsAdded([conceptToDelete])
+        }
+      }
     } finally {
       setIsDeleting(null)
     }
-  }, [onRefresh])
+  }, [optimisticConcepts, onConceptDeleted, onConceptsAdded])
 
   const handleReclassify = useCallback(async (conceptId: string) => {
     setIsReclassifying(conceptId)
@@ -663,6 +714,27 @@ function ConceptsTableInner({
       }
 
       const result = await response.json()
+
+      // Apply optimistic updates based on API result
+      if (result.updatedConcepts && Array.isArray(result.updatedConcepts)) {
+        setOptimisticConcepts(prev => {
+          const updated = [...prev]
+          result.updatedConcepts.forEach((updatedConcept: Concept) => {
+            const index = updated.findIndex(c => c.id === updatedConcept.id)
+            if (index !== -1) {
+              updated[index] = updatedConcept
+            }
+          })
+          return updated
+        })
+
+        // Notify parent of updates
+        if (onConceptUpdated && result.updatedConcepts.length > 0) {
+          result.updatedConcepts.forEach((concept: Concept) => {
+            onConceptUpdated(concept.id, concept)
+          })
+        }
+      }
 
       // Show toast based on results
       if (result.summary.examplesMoved > 0) {
@@ -681,21 +753,63 @@ function ConceptsTableInner({
           description: 'All examples were moved. Consider deleting or adding new examples.'
         })
       }
-
-      // Refresh table
-      onRefresh()
     } catch (err) {
       toast.error('Failed to reclassify', {
         description: err instanceof Error ? err.message : 'Please try again'
       })
+      // Refresh on error to restore correct state
+      onRefresh()
     } finally {
       setIsReclassifying(null)
     }
-  }, [onRefresh])
+  }, [onConceptUpdated, onRefresh])
 
   // Move examples to existing concept
   const handleMoveToExisting = useCallback(async (targetConceptId: string) => {
     const exampleIds = Array.from(selectedExamples.keys())
+    const exampleData = Array.from(selectedExamples.values())
+
+    // Store original state for rollback
+    const originalConcepts = [...optimisticConcepts]
+
+    // Optimistically move examples
+    setOptimisticConcepts(prev => {
+      return prev.map(concept => {
+        // Remove examples from source concepts
+        const sourceExampleIds = exampleData
+          .filter(ex => ex.conceptId === concept.id)
+          .map(ex => ex.id)
+
+        if (sourceExampleIds.length > 0) {
+          return {
+            ...concept,
+            examples: concept.examples.filter(ex => !sourceExampleIds.includes(ex.id)),
+            _count: { ...concept._count, examples: concept.examples.length - sourceExampleIds.length }
+          }
+        }
+
+        // Add examples to target concept
+        if (concept.id === targetConceptId) {
+          const examplesToAdd = exampleData.map(ex => ({
+            id: ex.id,
+            text: ex.text,
+            sourceType: 'MANUAL' as const,
+            sourcePostId: null,
+            sourceSlideIndex: null,
+            createdAt: new Date().toISOString(),
+            sourcePost: null
+          }))
+
+          return {
+            ...concept,
+            examples: [...concept.examples, ...examplesToAdd],
+            _count: { ...concept._count, examples: concept.examples.length + examplesToAdd.length }
+          }
+        }
+
+        return concept
+      })
+    })
 
     try {
       const response = await fetch('/api/concepts/examples/move', {
@@ -708,11 +822,12 @@ function ConceptsTableInner({
 
       toast.success(`Moved ${exampleIds.length} example${exampleIds.length > 1 ? 's' : ''}`)
       clearSelection()
-      onRefresh()
     } catch (err) {
       toast.error('Failed to move examples')
+      // Rollback on error
+      setOptimisticConcepts(originalConcepts)
     }
-  }, [selectedExamples, clearSelection, onRefresh])
+  }, [selectedExamples, clearSelection, optimisticConcepts])
 
   // Create new concept with selected examples
   const handleCreateNewConcept = useCallback(async (data: {
@@ -722,6 +837,61 @@ function ConceptsTableInner({
     autoGenerate: boolean
   }) => {
     const exampleIds = Array.from(selectedExamples.keys())
+    const exampleData = Array.from(selectedExamples.values())
+
+    // Store original state for rollback
+    const originalConcepts = [...optimisticConcepts]
+
+    // Create temporary ID for optimistic concept
+    const tempId = `temp-${Date.now()}`
+
+    // Optimistically create new concept
+    const optimisticNewConcept: Concept = {
+      id: tempId,
+      title: data.title || 'New Concept',
+      coreMessage: data.coreMessage || '',
+      type: data.type,
+      timesUsed: 0,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      examples: exampleData.map(ex => ({
+        id: ex.id,
+        text: ex.text,
+        sourceType: 'MANUAL' as const,
+        sourcePostId: null,
+        sourceSlideIndex: null,
+        createdAt: new Date().toISOString(),
+        sourcePost: null
+      })),
+      _count: { examples: exampleData.length }
+    }
+
+    // Add to optimistic state and remove examples from source concepts
+    setOptimisticConcepts(prev => {
+      const withoutExamples = prev.map(concept => {
+        const sourceExampleIds = exampleData
+          .filter(ex => ex.conceptId === concept.id)
+          .map(ex => ex.id)
+
+        if (sourceExampleIds.length > 0) {
+          return {
+            ...concept,
+            examples: concept.examples.filter(ex => !sourceExampleIds.includes(ex.id)),
+            _count: { ...concept._count, examples: concept.examples.length - sourceExampleIds.length }
+          }
+        }
+        return concept
+      })
+
+      // Insert new concept in correct type order
+      const result = [...withoutExamples, optimisticNewConcept].sort((a, b) => {
+        const typeOrder = { HOOK: 0, CONTENT: 1, CTA: 2 }
+        return typeOrder[a.type] - typeOrder[b.type]
+      })
+
+      return result
+    })
 
     try {
       const response = await fetch('/api/concepts', {
@@ -738,13 +908,25 @@ function ConceptsTableInner({
 
       if (!response.ok) throw new Error('Failed to create concept')
 
+      const newConcept = await response.json()
+
+      // Replace temp concept with real one
+      setOptimisticConcepts(prev =>
+        prev.map(c => c.id === tempId ? newConcept : c)
+      )
+
+      if (onConceptsAdded) {
+        onConceptsAdded([newConcept])
+      }
+
       toast.success('New concept created')
       clearSelection()
-      onRefresh()
     } catch (err) {
       toast.error('Failed to create concept')
+      // Rollback on error
+      setOptimisticConcepts(originalConcepts)
     }
-  }, [selectedExamples, clearSelection, onRefresh])
+  }, [selectedExamples, clearSelection, optimisticConcepts, onConceptsAdded])
 
   // Get exclude concept IDs (concepts that already contain selected examples)
   const excludeConceptIds = Array.from(new Set(
@@ -772,7 +954,7 @@ function ConceptsTableInner({
           {onSelectionChange && (
             <div className="w-[50px] flex-shrink-0 px-4 py-3 flex items-center justify-center sticky left-0 z-[10] bg-muted/50">
               <Checkbox
-                checked={concepts.length > 0 && selectedConceptIds.size === concepts.length}
+                checked={optimisticConcepts.length > 0 && selectedConceptIds.size === optimisticConcepts.length}
                 onCheckedChange={handleToggleAllConcepts}
                 aria-label="Select all concepts"
               />
@@ -796,7 +978,7 @@ function ConceptsTableInner({
 
         {/* Table Body - Scrollable */}
         <div className="flex-1 min-h-0 overflow-auto">
-          {concepts.map((concept) => (
+          {optimisticConcepts.map((concept) => (
             <div
               key={concept.id}
               className={cn(
@@ -861,7 +1043,7 @@ function ConceptsTableInner({
           ))}
 
           {/* Empty state */}
-          {concepts.length === 0 && (
+          {optimisticConcepts.length === 0 && (
             <div className="flex items-center justify-center py-12 text-muted-foreground">
               No concepts found
             </div>
@@ -889,7 +1071,7 @@ function ConceptsTableInner({
       <MoveToConceptDialog
         open={showMoveDialog}
         onOpenChange={setShowMoveDialog}
-        concepts={concepts.map(c => ({
+        concepts={optimisticConcepts.map(c => ({
           id: c.id,
           title: c.title,
           coreMessage: c.coreMessage,
@@ -913,10 +1095,32 @@ function ConceptsTableInner({
       <SplitConceptDialog
         open={!!splitConceptId}
         onOpenChange={(open) => !open && setSplitConceptId(null)}
-        concept={splitConceptId ? concepts.find(c => c.id === splitConceptId) || null : null}
-        onSplitComplete={() => {
+        concept={splitConceptId ? optimisticConcepts.find(c => c.id === splitConceptId) || null : null}
+        onSplitComplete={(newConcepts) => {
+          // Optimistically add new concepts and update original
+          if (newConcepts && newConcepts.length > 0) {
+            setOptimisticConcepts(prev => {
+              // Remove or update the original concept
+              const withoutOriginal = prev.filter(c => c.id !== splitConceptId)
+
+              // Add new concepts in correct type order
+              const result = [...withoutOriginal, ...newConcepts].sort((a, b) => {
+                const typeOrder = { HOOK: 0, CONTENT: 1, CTA: 2 }
+                return typeOrder[a.type] - typeOrder[b.type]
+              })
+
+              return result
+            })
+
+            if (onConceptsAdded) {
+              onConceptsAdded(newConcepts)
+            }
+
+            if (onConceptDeleted && splitConceptId) {
+              onConceptDeleted(splitConceptId)
+            }
+          }
           setSplitConceptId(null)
-          onRefresh()
         }}
       />
     </>
@@ -928,6 +1132,9 @@ export function ConceptsTable({
   onRefresh,
   onExamplesAdded,
   onExampleDeleted,
+  onConceptUpdated,
+  onConceptDeleted,
+  onConceptsAdded,
   isLoading,
   selectedConceptIds,
   onSelectionChange
@@ -939,6 +1146,9 @@ export function ConceptsTable({
         onRefresh={onRefresh}
         onExamplesAdded={onExamplesAdded}
         onExampleDeleted={onExampleDeleted}
+        onConceptUpdated={onConceptUpdated}
+        onConceptDeleted={onConceptDeleted}
+        onConceptsAdded={onConceptsAdded}
         isLoading={isLoading}
         selectedConceptIds={selectedConceptIds}
         onSelectionChange={onSelectionChange}

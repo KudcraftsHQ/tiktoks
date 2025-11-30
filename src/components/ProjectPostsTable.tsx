@@ -23,7 +23,7 @@ import { ConceptQuickSelector } from '@/components/ConceptQuickSelector'
 import { FixCoherenceDialog } from '@/components/FixCoherenceDialog'
 import type { RemixSlideType } from '@/lib/validations/remix-schema'
 import { SortingState, RowSelectionState } from '@tanstack/react-table'
-import { FileText, Loader2, Sparkles, Edit, ExternalLink, Trash2, Copy, Plus, GripVertical, Settings, Download, Pencil, Send, Lightbulb, RefreshCw } from 'lucide-react'
+import { FileText, Loader2, Sparkles, Edit, ExternalLink, Trash2, Copy, Plus, GripVertical, Settings, Download, Pencil, Send, Lightbulb, RefreshCw, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { DateRange } from '@/components/DateRangeFilter'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
@@ -151,7 +151,7 @@ interface SortableSlideProps {
   onApplyExample: (draftId: string, slideIndex: number, text: string, conceptId: string, exampleId: string, mode: 'copy' | 'paraphrase', intensity?: 'minimal' | 'medium' | 'high') => Promise<void>
   onApplyConceptWithState: (draftId: string, slideIndex: number, text: string, conceptId: string, conceptTitle: string, exampleId: string, exampleIds: string[], isHookSlide?: boolean) => Promise<void>
   onCycleExample: (draftId: string, slideIndex: number) => Promise<void>
-  onAutoFill: (draftId: string, hookText?: string) => Promise<void>
+  onAutoFill: (draftId: string, hookText?: string, forceRefill?: boolean) => Promise<void>
   onRefetchData?: () => void
   totalSlides: number
   isApplyingConcept?: boolean
@@ -268,6 +268,8 @@ function SortableSlide({
               className="text-[12px]"
               rows={8}
               searchTerms={searchTerms}
+              slideType={classification?.type?.toUpperCase() as 'HOOK' | 'CONTENT' | 'CTA' | undefined}
+              draftId={draftId}
               emptyStateButton={
                 <ConceptQuickSelector
                   slideType={classification?.type as 'HOOK' | 'CONTENT' | 'CTA' | null}
@@ -368,6 +370,7 @@ interface ProjectPostsTableProps {
   onRowSelectionChange?: (selection: RowSelectionState) => void
   viewMode?: 'metrics' | 'content'
   searchQuery?: string
+  searchTerms?: string[]
   rowClassName?: (row: ProjectTableRow) => string
   onPostRemoved?: (postId: string) => void
   onDraftRemoved?: (draftId: string) => void
@@ -390,6 +393,7 @@ export function ProjectPostsTable({
   onRowSelectionChange,
   viewMode = 'metrics',
   searchQuery = '',
+  searchTerms: propSearchTerms,
   rowClassName,
   onPostRemoved,
   onDraftRemoved
@@ -453,14 +457,11 @@ export function ProjectPostsTable({
     setSlideConceptStates(newConceptStates)
   }, [rows])
 
-  // Parse search terms from search query
-  const searchTerms = useMemo(() => {
-    if (!searchQuery || searchQuery.trim().length === 0) return []
-    return searchQuery
-      .split(/\s+/)
-      .map(term => term.trim())
-      .filter(term => term.length >= 2)
-  }, [searchQuery])
+  // Use searchTerms prop directly (passed from parent page)
+  // No need to recalculate since parent already splits and processes the terms
+  const finalSearchTerms = propSearchTerms || []
+
+  console.log('[ProjectPostsTable] Received searchTerms prop:', propSearchTerms, 'Using:', finalSearchTerms)
 
   // Column visibility state
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({})
@@ -1377,9 +1378,11 @@ export function ProjectPostsTable({
 
   // Handler to auto-fill empty slides with concept examples
   // If hookText is provided, uses smart AI matching; otherwise uses random selection
-  const handleAutoFillSlides = useCallback(async (draftId: string, hookText?: string) => {
+  // If forceRefill is true, will refill ALL slides (except HOOK) even if they have content
+  const handleAutoFillSlides = useCallback(async (draftId: string, hookText?: string, forceRefill: boolean = false) => {
     console.log('[ProjectPostsTable] handleAutoFillSlides called for draft:', draftId)
     console.log('[ProjectPostsTable] hookText:', hookText ? hookText.slice(0, 50) + '...' : 'not provided (using random)')
+    console.log('[ProjectPostsTable] forceRefill:', forceRefill)
 
     // Clear the "waiting for auto-fill" loading state since auto-fill is now starting
     setDraftsWaitingForAutoFill(prev => {
@@ -1401,16 +1404,19 @@ export function ProjectPostsTable({
     console.log('[ProjectPostsTable] Checking for empty slides, total slides:', slides.length)
 
     // Check if there are empty slides to fill (skip index 0 which is HOOK)
-    const hasEmptySlides = slides.slice(1).some(slide => {
-      const text = slide.paraphrasedText || ''
-      return text.trim().length < 10
-    })
+    // Skip this check if forceRefill is true
+    if (!forceRefill) {
+      const hasEmptySlides = slides.slice(1).some(slide => {
+        const text = slide.paraphrasedText || ''
+        return text.trim().length < 10
+      })
 
-    console.log('[ProjectPostsTable] Has empty slides:', hasEmptySlides)
+      console.log('[ProjectPostsTable] Has empty slides:', hasEmptySlides)
 
-    if (!hasEmptySlides) {
-      toast.info('No empty slides to fill')
-      return
+      if (!hasEmptySlides) {
+        toast.info('No empty slides to fill')
+        return
+      }
     }
 
     // Choose endpoint based on whether hookText is provided
@@ -1427,7 +1433,7 @@ export function ProjectPostsTable({
           headers: {
             'Content-Type': 'application/json'
           },
-          body: useSmartFill ? JSON.stringify({ hookText }) : undefined
+          body: useSmartFill ? JSON.stringify({ hookText, forceRefill }) : JSON.stringify({ forceRefill })
         })
 
         if (!response.ok) {
@@ -1952,10 +1958,30 @@ export function ProjectPostsTable({
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return
 
+    // Store for rollback
+    const itemToDeleteCopy = { ...itemToDelete }
+    const originalRows = [...displayRows]
+
+    // Optimistically remove from UI immediately
+    setOptimisticRows(prev => prev.filter(r => r.id !== itemToDelete.id))
+
+    // Clear from selection if it was selected
+    if (rowSelection && onRowSelectionChange) {
+      const rowIndex = displayRows.findIndex(r => r.id === itemToDelete.id)
+      if (rowIndex !== -1 && rowSelection[rowIndex]) {
+        const newSelection = { ...rowSelection }
+        delete newSelection[rowIndex]
+        onRowSelectionChange(newSelection)
+      }
+    }
+
+    // Close dialog immediately for better UX
+    setDeleteDialogOpen(false)
+    setItemToDelete(null)
+
     try {
-      if (itemToDelete.type === 'draft') {
-        // Delete draft
-        const response = await fetch(`/api/remixes/${itemToDelete.id}`, {
+      if (itemToDeleteCopy.type === 'draft') {
+        const response = await fetch(`/api/remixes/${itemToDeleteCopy.id}`, {
           method: 'DELETE'
         })
 
@@ -1965,26 +1991,12 @@ export function ProjectPostsTable({
 
         toast.success('Draft deleted successfully')
 
-        // Clear from selection if it was selected (using TanStack RowSelectionState)
-        if (rowSelection && onRowSelectionChange) {
-          const rowIndex = displayRows.findIndex(r => r.id === itemToDelete.id)
-          if (rowIndex !== -1 && rowSelection[rowIndex]) {
-            const newSelection = { ...rowSelection }
-            delete newSelection[rowIndex]
-            onRowSelectionChange(newSelection)
-          }
-        }
-
         if (onDraftRemoved) {
-          onDraftRemoved(itemToDelete.id)
+          onDraftRemoved(itemToDeleteCopy.id)
         }
       } else {
-        // Remove post from project
         if (!projectId) {
-          toast.error('Project ID not provided')
-          setDeleteDialogOpen(false)
-          setItemToDelete(null)
-          return
+          throw new Error('Project ID not provided')
         }
 
         const response = await fetch(`/api/projects/${projectId}/posts`, {
@@ -1993,7 +2005,7 @@ export function ProjectPostsTable({
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            postIds: [itemToDelete.id]
+            postIds: [itemToDeleteCopy.id]
           })
         })
 
@@ -2004,27 +2016,16 @@ export function ProjectPostsTable({
 
         toast.success('Post removed from project')
 
-        // Clear from selection if it was selected (using TanStack RowSelectionState)
-        if (rowSelection && onRowSelectionChange) {
-          const rowIndex = displayRows.findIndex(r => r.id === itemToDelete.id)
-          if (rowIndex !== -1 && rowSelection[rowIndex]) {
-            const newSelection = { ...rowSelection }
-            delete newSelection[rowIndex]
-            onRowSelectionChange(newSelection)
-          }
-        }
-
         if (onPostRemoved) {
-          onPostRemoved(itemToDelete.id)
+          onPostRemoved(itemToDeleteCopy.id)
         }
       }
-
     } catch (error) {
       console.error('Failed to delete:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to delete item')
-    } finally {
-      setDeleteDialogOpen(false)
-      setItemToDelete(null)
+
+      // Rollback optimistic update
+      setOptimisticRows(originalRows)
     }
   }
 
@@ -2121,12 +2122,12 @@ export function ProjectPostsTable({
               disabled={false}
               className="text-[12px]"
               rows={4}
-              searchTerms={searchTerms}
+              searchTerms={finalSearchTerms}
             />
           </div>
 
           {/* Row 4: Created and Updated date */}
-          <div className="text-xs flex flex-col gap-0.5">
+          <div className="text-xs flex items-center justify-between w-full">
             <div>
               <span>{date}</span>
               <span className="ml-1 text-muted-foreground">{time}</span>
@@ -2149,7 +2150,7 @@ export function ProjectPostsTable({
         />
       </div>
     )
-  }, [viewMode, getSlidesArray, handleSaveDraftName, handleSetMultipleSlideBackgrounds, formatDateTime, formatRelativeTime, handleSaveDraftDescription, searchTerms])
+  }, [viewMode, getSlidesArray, handleSaveDraftName, handleSetMultipleSlideBackgrounds, formatDateTime, formatRelativeTime, handleSaveDraftDescription,finalSearchTerms])
 
   const renderDraftContentColumn = useCallback((draft: RemixPost) => {
     const slides = getSlidesArray(draft.slides)
@@ -2215,7 +2216,7 @@ export function ProjectPostsTable({
                         slideIndex={index}
                         draftId={draft.id}
                         classification={classification}
-                        searchTerms={searchTerms}
+                        searchTerms={finalSearchTerms}
                         onSaveText={handleSaveDraftSlideText}
                         onRemoveSlide={handleRemoveSlide}
                         onApplyExample={handleApplyConceptExample}
@@ -2265,8 +2266,28 @@ export function ProjectPostsTable({
         {slides.length} slides
       </div>
     )
-  }, [viewMode, getSlidesArray, searchTerms, handleSaveDraftSlideText, handleRemoveSlide, handleAddSlide, handleReorderSlides, handleApplyConceptExample, handleApplyConceptWithState, handleCycleExample, handleAutoFillSlides, onRefetchData, applyingConceptSlides, draftsWaitingForAutoFill, slideConceptStates])
+  }, [viewMode, getSlidesArray, finalSearchTerms, handleSaveDraftSlideText, handleRemoveSlide, handleAddSlide, handleReorderSlides, handleApplyConceptExample, handleApplyConceptWithState, handleCycleExample, handleAutoFillSlides, onRefetchData, applyingConceptSlides, draftsWaitingForAutoFill, slideConceptStates])
 
+  // Helper to check if draft has a hook slide with concept selected
+  const hasHookSlideWithConcept = useCallback((draft: RemixPost): { hasHook: boolean; hookText?: string } => {
+    const classifications = Array.isArray(draft.slideClassifications)
+      ? draft.slideClassifications
+      : []
+
+    const hookClassification = classifications.find((c: any) =>
+      c.type?.toUpperCase() === 'HOOK' && c.slideIndex === 0
+    )
+
+    if (!hookClassification || !hookClassification.conceptId) {
+      return { hasHook: false }
+    }
+
+    // Get the hook text from slides
+    const slides = getSlidesArray(draft.slides)
+    const hookText = slides[0]?.paraphrasedText || ''
+
+    return { hasHook: true, hookText }
+  }, [getSlidesArray])
 
   const renderDraftActionsColumn = useCallback((draft: RemixPost) => {
     if (viewMode !== 'content') return null
@@ -2359,6 +2380,36 @@ export function ProjectPostsTable({
             </TooltipContent>
           </Tooltip>
 
+          {/* Smart Auto-fill */}
+          {(() => {
+            const { hasHook, hookText } = hasHookSlideWithConcept(draft)
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (hasHook && hookText) {
+                          handleAutoFillSlides(draft.id, hookText, true)
+                        }
+                      }}
+                      disabled={!hasHook}
+                      className="h-8 w-8 p-0"
+                    >
+                      <Wand2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  <p>{hasHook ? 'Smart Auto-fill (Re-run)' : 'Select a hook concept first'}</p>
+                </TooltipContent>
+              </Tooltip>
+            )
+          })()}
+
           {/* Download ZIP */}
           <Tooltip>
             <TooltipTrigger asChild>
@@ -2401,7 +2452,7 @@ export function ProjectPostsTable({
         </div>
       </TooltipProvider>
     )
-  }, [viewMode, handleToggleBookmark, handleCopyDraftToClipboard, handleSendToTelegram, handleSettingsClick, handleFixCoherenceClick, handleDownloadDraft, handleDeleteClick])
+  }, [viewMode, handleToggleBookmark, handleCopyDraftToClipboard, handleSendToTelegram, handleSettingsClick, handleFixCoherenceClick, handleDownloadDraft, handleDeleteClick, hasHookSlideWithConcept, handleAutoFillSlides])
 
   // Create columns - memoized with all necessary dependencies
   const columns = useMemo(() => {
@@ -2412,7 +2463,7 @@ export function ProjectPostsTable({
       onTriggerOCR: handleTriggerOCR,
       onExtractConcepts: handleExtractConcepts,
       onRefetchPosts: onRefetchData,
-      searchTerms
+      searchTerms: finalSearchTerms
     })
 
     // Wrap columns to handle both posts and drafts
@@ -2446,7 +2497,7 @@ export function ProjectPostsTable({
     }))
   }, [
     handlePreviewPost, handleOpenImageGallery, handleRemixPost, handleRowClick,
-    handleTriggerOCR, handleExtractConcepts, onRefetchData, viewMode, searchTerms, formatDate,
+    handleTriggerOCR, handleExtractConcepts, onRefetchData, viewMode, finalSearchTerms, formatDate,
     getSlidesArray, renderDraftAuthorColumn, renderDraftContentColumn,
     renderDraftActionsColumn, formatDateTime
   ])
@@ -2667,9 +2718,24 @@ export function ProjectPostsTable({
           }}
           draftId={selectedDraftForSettings.id}
           currentCanvasSize={selectedDraftForSettings.canvasSize}
-          onSave={() => {
-            // Refresh the page to reload draft data
-            window.location.reload()
+          onSave={(updatedCanvasSize) => {
+            // Optimistically update draft canvas size
+            if (selectedDraftForSettings) {
+              const draftIndex = displayRows.findIndex(r => r.id === selectedDraftForSettings.id && r._rowType === 'draft')
+              if (draftIndex !== -1) {
+                const draft = displayRows[draftIndex] as RemixPost & { _rowType: 'draft' }
+                const updatedDraft = {
+                  ...draft,
+                  canvasSize: updatedCanvasSize
+                }
+                const updatedRows = [...displayRows]
+                updatedRows[draftIndex] = updatedDraft
+                setOptimisticRows(updatedRows)
+              }
+            }
+            setSettingsDialogOpen(false)
+            setSelectedDraftForSettings(null)
+            toast.success('Canvas size updated')
           }}
         />
       )}

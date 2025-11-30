@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { RemixPost } from '@/types/remix'
 import { RowSelectionState } from '@tanstack/react-table'
 import { ProductContextSelector } from '@/components/ProductContextSelector'
+import { SearchInput } from '@/components/SearchInput'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -60,6 +61,22 @@ export default function ProjectDetailPage() {
   const [showRemoveDialog, setShowRemoveDialog] = useState(false)
   const [isRemoving, setIsRemoving] = useState(false)
   const [isCreatingDraft, setIsCreatingDraft] = useState(false)
+  const [searchQuery, setSearchQuery] = useState<string>('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Convert search query to array of terms for highlighting
+  const searchTerms = useMemo(() => {
+    if (!searchQuery.trim()) return []
+    const terms = searchQuery.trim().toLowerCase().split(/\s+/)
+    console.log('[ProjectPage] searchQuery:', searchQuery, 'searchTerms:', terms)
+    return terms
+  }, [searchQuery])
+
+  // Search change handler
+  const handleSearchChange = useCallback((value: string) => {
+    console.log('[ProjectPage] handleSearchChange called with:', value)
+    setSearchQuery(value)
+  }, [])
 
   // Convert RowSelectionState to Set of IDs for easier processing
   const getSelectedIds = useCallback((rows: ProjectTableRow[], selection: RowSelectionState): Set<string> => {
@@ -222,6 +239,34 @@ export default function ProjectDetailPage() {
       titleInputRef.current.select()
     }
   }, [isEditingTitle])
+
+  // Override Cmd+F / Ctrl+F to focus search input, Escape to clear and blur
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+F / Ctrl+F: Focus search input
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault()
+        const searchInput = document.querySelector('input[placeholder="Search posts and drafts..."]') as HTMLInputElement
+        if (searchInput) {
+          searchInput.focus()
+          searchInput.select()
+        }
+      }
+
+      // Escape: Clear search and blur if search input is focused
+      if (e.key === 'Escape') {
+        const searchInput = document.querySelector('input[placeholder="Search posts and drafts..."]') as HTMLInputElement
+        if (searchInput && document.activeElement === searchInput) {
+          e.preventDefault()
+          setSearchQuery('')
+          searchInput.blur()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   const handleSaveTitle = async () => {
     if (!project || editedTitle.trim() === project.name || isSavingTitle) {
@@ -820,6 +865,12 @@ export default function ProjectDetailPage() {
                   <Pencil className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
               )}
+              <SearchInput
+                value={searchQuery}
+                onChange={handleSearchChange}
+                placeholder="Search posts and drafts..."
+                isLoading={false}
+              />
               <ProductContextSelector
                 value={project.productContextId}
                 onChange={handleProductContextChange}
@@ -903,6 +954,7 @@ export default function ProjectDetailPage() {
               viewMode="content"
               rowSelection={rowSelection}
               onRowSelectionChange={setRowSelection}
+              searchTerms={searchTerms}
               rowClassName={(row) => {
                 if (row._rowType === 'post') {
                   return 'bg-slate-50 dark:bg-slate-900'

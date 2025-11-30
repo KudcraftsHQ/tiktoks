@@ -61,6 +61,8 @@ export interface SlideClassification {
   slideIndex: number
   type: string
   categoryName: string
+  conceptId?: string
+  conceptTitle?: string
 }
 
 export interface ProductContext {

@@ -20,7 +20,7 @@ interface DraftSettingsDialogProps {
   onClose: () => void
   draftId: string
   currentCanvasSize?: { width: number; height: number }
-  onSave?: () => void
+  onSave?: (updatedCanvasSize?: { width: number; height: number }) => void
 }
 
 type CanvasSizeKey = keyof typeof CANVAS_SIZES
@@ -68,7 +68,7 @@ export function DraftSettingsDialog({
       }
 
       toast.success('Canvas size updated successfully')
-      onSave?.()
+      onSave?.(canvasSize)
       onClose()
     } catch (error) {
       console.error('Failed to update canvas size:', error)
