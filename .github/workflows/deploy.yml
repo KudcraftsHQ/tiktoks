@@ -57,14 +57,25 @@ jobs:
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build web image (extract artifacts)
+      - name: Build and push web image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta-web.outputs.tags }}
+          labels: ${{ steps.meta-web.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=image,push=true
+
+      - name: Extract build artifacts from builder stage
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           target: builder
           cache-from: type=gha
-          cache-to: type=gha,mode=max
           outputs: type=local,dest=./build-output
 
       - name: Upload build artifacts for Sentry
@@ -75,16 +86,6 @@ jobs:
             ./build-output/app/.next
             ./build-output/app/public
           retention-days: 1
-
-      - name: Build and push web image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ${{ steps.meta-web.outputs.tags }}
-          labels: ${{ steps.meta-web.outputs.labels }}
-          cache-from: type=gha
 
       - name: Build and push worker image
         uses: docker/build-push-action@v5
@@ -124,7 +125,8 @@ jobs:
   upload-sourcemaps:
     name: Upload Source Maps to Sentry
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: [deploy-web, deploy-worker]
+    if: always()
 
     steps:
       - name: Checkout code
