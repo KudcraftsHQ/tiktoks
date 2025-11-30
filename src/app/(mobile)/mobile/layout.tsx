@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Geist, Geist_Mono, Poppins } from 'next/font/google';
 import '../../globals.css';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -11,6 +11,13 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: '--font-geist-mono',
   subsets: ['latin'],
+});
+
+const poppins = Poppins({
+  variable: '--font-poppins',
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
@@ -46,12 +53,29 @@ export default function MobileLayout({
             -webkit-user-select: none;
             user-select: none;
           }
+
+          /* Text overlay styles - outline only, pill is rendered differently */
+          .text-overlay-outline {
+            font-family: var(--font-poppins), Poppins, sans-serif;
+            font-weight: 700;
+            color: #ffffff;
+            line-height: 1.6;
+            text-shadow:
+              -2px -2px 0 #000,
+              2px -2px 0 #000,
+              -2px 2px 0 #000,
+              2px 2px 0 #000,
+              -2px 0 0 #000,
+              2px 0 0 #000,
+              0 -2px 0 #000,
+              0 2px 0 #000;
+          }
         `,
           }}
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased dark theme-mono touch-pan-x touch-pan-y min-h-screen bg-background`}
+        className={`${geistSans.variable} ${geistMono.variable} ${poppins.variable} antialiased dark theme-mono touch-pan-x touch-pan-y min-h-screen bg-background`}
       >
         <div className="flex min-h-screen flex-col">{children}</div>
         <Toaster />

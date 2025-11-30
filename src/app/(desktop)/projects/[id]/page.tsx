@@ -7,10 +7,13 @@ import { Button } from '@/components/ui/button'
 import { Sparkles, Pencil, Trash2, FilePlus, Clipboard, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import { GenerateContentDrawer } from '@/components/GenerateContentDrawer'
+import { SlideEditorDrawer } from '@/components/SlideEditorDrawer'
 import { ProjectPostsTable, ProjectTableRow } from '@/components/ProjectPostsTable'
 import { TikTokPost } from '@/components/posts-table-columns'
 import { Input } from '@/components/ui/input'
 import { RemixPost } from '@/types/remix'
+import type { RemixSlideType } from '@/lib/validations/remix-schema'
+import type { TextOverlay } from '@/lib/text-overlay-utils'
 import { RowSelectionState } from '@tanstack/react-table'
 import { ProductContextSelector } from '@/components/ProductContextSelector'
 import { SearchInput } from '@/components/SearchInput'
@@ -63,6 +66,126 @@ export default function ProjectDetailPage() {
   const [isCreatingDraft, setIsCreatingDraft] = useState(false)
   const [searchQuery, setSearchQuery] = useState<string>('')
   const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Slide editor state
+  const [isSlideEditorOpen, setIsSlideEditorOpen] = useState(false)
+  const [slideEditorDraft, setSlideEditorDraft] = useState<RemixPost | null>(null)
+  const [slideEditorInitialIndex, setSlideEditorInitialIndex] = useState(0)
+
+  // Helper to get slides array from draft
+  const getSlidesArray = useCallback((slides: any): RemixSlideType[] => {
+    if (!slides) return []
+    if (Array.isArray(slides)) return slides
+    if (typeof slides === 'string') {
+      try {
+        return JSON.parse(slides)
+      } catch {
+        return []
+      }
+    }
+    return []
+  }, [])
+
+  // Handle opening the slide editor
+  const handleOpenSlideEditor = useCallback((draft: RemixPost, slideIndex: number) => {
+    setSlideEditorDraft(draft)
+    setSlideEditorInitialIndex(slideIndex)
+    setIsSlideEditorOpen(true)
+  }, [])
+
+  // Handle saving slide overlays from the editor
+  const handleSaveSlideOverlays = useCallback(async (
+    slideId: string,
+    overlays: TextOverlay[],
+    imageOffsetY: number
+  ): Promise<boolean> => {
+    if (!slideEditorDraft) return false
+
+    try {
+      const response = await fetch(`/api/mobile/drafts/${slideEditorDraft.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slides: [{
+            slideId,
+            textOverlays: overlays,
+            imageOffsetY,
+          }],
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to save')
+      }
+
+      // Update local state with saved data
+      setProject(prev => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          remixes: prev.remixes.map(remix => {
+            if (remix.id !== slideEditorDraft.id) return remix
+            const slides = getSlidesArray(remix.slides)
+            return {
+              ...remix,
+              slides: slides.map(slide => {
+                if (slide.id !== slideId) return slide
+                return {
+                  ...slide,
+                  textBoxes: overlays.map(o => ({
+                    id: o.id,
+                    text: o.text,
+                    x: o.x,
+                    y: o.y,
+                    fontSize: o.fontSize,
+                    textAlign: o.alignment,
+                    backgroundOpacity: o.style === 'pill' ? 0.8 : 0,
+                    width: o.maxWidth,
+                    _mobileStyle: o.style,
+                    _mobileMaxWidth: o.maxWidth,
+                  })),
+                  _mobileImageOffsetY: imageOffsetY,
+                } as unknown as RemixSlideType
+              }),
+            } as RemixPost
+          }),
+        }
+      })
+
+      // Also update the slideEditorDraft so drawer stays in sync
+      setSlideEditorDraft(prev => {
+        if (!prev) return prev
+        const slides = getSlidesArray(prev.slides)
+        return {
+          ...prev,
+          slides: slides.map(slide => {
+            if (slide.id !== slideId) return slide
+            return {
+              ...slide,
+              textBoxes: overlays.map(o => ({
+                id: o.id,
+                text: o.text,
+                x: o.x,
+                y: o.y,
+                fontSize: o.fontSize,
+                textAlign: o.alignment,
+                backgroundOpacity: o.style === 'pill' ? 0.8 : 0,
+                width: o.maxWidth,
+                _mobileStyle: o.style,
+                _mobileMaxWidth: o.maxWidth,
+              })),
+              _mobileImageOffsetY: imageOffsetY,
+            } as unknown as RemixSlideType
+          }),
+        } as RemixPost
+      })
+
+      return true
+    } catch (error) {
+      console.error('Failed to save slide overlays:', error)
+      return false
+    }
+  }, [slideEditorDraft, getSlidesArray])
 
   // Convert search query to array of terms for highlighting
   const searchTerms = useMemo(() => {
@@ -955,6 +1078,7 @@ export default function ProjectDetailPage() {
               rowSelection={rowSelection}
               onRowSelectionChange={setRowSelection}
               searchTerms={searchTerms}
+              onOpenSlideEditor={handleOpenSlideEditor}
               rowClassName={(row) => {
                 if (row._rowType === 'post') {
                   return 'bg-slate-50 dark:bg-slate-900'
@@ -979,6 +1103,17 @@ export default function ProjectDetailPage() {
         defaultMaxSlides={defaultMaxSlides}
         referencePostStructure={referencePostStructure}
         defaultProductContext={project?.productContext}
+      />
+
+      {/* Slide Editor Drawer */}
+      <SlideEditorDrawer
+        isOpen={isSlideEditorOpen}
+        onClose={() => setIsSlideEditorOpen(false)}
+        slides={slideEditorDraft ? getSlidesArray(slideEditorDraft.slides) : []}
+        draftId={slideEditorDraft?.id || ''}
+        draftName={slideEditorDraft?.name || 'Draft'}
+        initialSlideIndex={slideEditorInitialIndex}
+        onSave={handleSaveSlideOverlays}
       />
 
       {/* Remove Confirmation Dialog */}

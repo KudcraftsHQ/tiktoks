@@ -47,6 +47,7 @@
     "jszip": "^3.10.1",
     "konva": "^10.0.9",
     "lucide-react": "^0.543.0",
+    "modern-screenshot": "^4.6.7",
     "next": "16.0.3",
     "nextjs-toploader": "^3.9.17",
     "node-fetch": "^3.3.2",

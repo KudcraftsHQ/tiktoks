@@ -6,9 +6,33 @@ import { MobileHeader } from '@/components/mobile/MobileHeader';
 import { SlideCard } from '@/components/mobile/SlideCard';
 import { ShareButton } from '@/components/mobile/ShareButton';
 import { ImagePositionEditor } from '@/components/mobile/ImagePositionEditor';
+import { TextOverlayEditor } from '@/components/mobile/TextOverlayEditor';
 import { toast } from 'sonner';
 import type { RemixSlide } from '@/types/remix';
-import { cropImageTo3x4 } from '@/lib/mobile-image-cropper';
+import type { TextOverlay, TextOverlayStyle, TextOverlayAlignment } from '@/lib/text-overlay-utils';
+import { parseTextToOverlays, generateOverlayId } from '@/lib/text-overlay-utils';
+import { renderSlideWithOverlays } from '@/lib/mobile-text-renderer';
+
+/**
+ * Convert saved textBoxes back to mobile TextOverlay format
+ */
+function textBoxesToOverlays(textBoxes: any[]): TextOverlay[] {
+  if (!Array.isArray(textBoxes) || textBoxes.length === 0) {
+    return [];
+  }
+
+  return textBoxes.map((box) => ({
+    id: box.id || generateOverlayId(),
+    text: box.text || '',
+    x: box.x ?? 0.5,
+    y: box.y ?? 0.5,
+    fontSize: box.fontSize ?? 48,
+    alignment: (box.textAlign || 'center') as TextOverlayAlignment,
+    // Recover mobile style from saved data
+    style: (box._mobileStyle || (box.backgroundOpacity > 0 ? 'pill' : 'outline')) as TextOverlayStyle,
+    maxWidth: box._mobileMaxWidth ?? box.width ?? 0.6,
+  }));
+}
 
 export default function MobileDraftDetailPage() {
   const params = useParams();
@@ -18,11 +42,52 @@ export default function MobileDraftDetailPage() {
   const [slideUrls, setSlideUrls] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Image position state
   const [imagePositions, setImagePositions] = useState<Map<string, number>>(new Map());
-  const [editingSlideId, setEditingSlideId] = useState<string | null>(null);
+  const [editingPositionSlideId, setEditingPositionSlideId] = useState<string | null>(null);
+
+  // Text overlay state - Map of slideId to TextOverlay[]
+  const [slideOverlays, setSlideOverlays] = useState<Map<string, TextOverlay[]>>(new Map());
+  const [editingTextSlideId, setEditingTextSlideId] = useState<string | null>(null);
+  // Track which slides have been manually edited (vs default parsed state)
+  const [editedSlideIds, setEditedSlideIds] = useState<Set<string>>(new Set());
+
+  // Share state
   const [preparedFiles, setPreparedFiles] = useState<File[] | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
   const preparationAbortRef = useRef<AbortController | null>(null);
+
+  // Initialize text overlays and image positions from saved data or paraphrasedText
+  useEffect(() => {
+    if (slides.length > 0 && slideOverlays.size === 0) {
+      const initialOverlays = new Map<string, TextOverlay[]>();
+      const initialPositions = new Map<string, number>();
+      const initialEditedIds = new Set<string>();
+
+      slides.forEach((slide: any) => {
+        // Check if slide has saved textBoxes (previously edited)
+        if (slide.textBoxes && slide.textBoxes.length > 0) {
+          initialOverlays.set(slide.id, textBoxesToOverlays(slide.textBoxes));
+          initialEditedIds.add(slide.id);
+        } else if (slide.paraphrasedText) {
+          // Fall back to parsing paraphrasedText
+          initialOverlays.set(slide.id, parseTextToOverlays(slide.paraphrasedText));
+        } else {
+          initialOverlays.set(slide.id, []);
+        }
+
+        // Load saved image position if available
+        if (slide._mobileImageOffsetY !== undefined) {
+          initialPositions.set(slide.id, slide._mobileImageOffsetY);
+        }
+      });
+
+      setSlideOverlays(initialOverlays);
+      setImagePositions(initialPositions);
+      setEditedSlideIds(initialEditedIds);
+    }
+  }, [slides, slideOverlays.size]);
 
   useEffect(() => {
     async function fetchDraft() {
@@ -84,7 +149,7 @@ export default function MobileDraftDetailPage() {
     fetchDraft();
   }, [id]);
 
-  // Prepare images for sharing (crop to 3:4 portrait)
+  // Prepare images for sharing (render with text overlays)
   const prepareImagesForShare = useCallback(async () => {
     if (slideUrls.length === 0 || slides.length === 0) return;
 
@@ -98,17 +163,28 @@ export default function MobileDraftDetailPage() {
     setPreparedFiles(null);
 
     try {
-      // Crop all images in parallel
-      const blobs = await Promise.all(
-        slides.map((slide, i) => {
-          const offsetY = imagePositions.get(slide.id) ?? 0.5;
-          const url = slideUrls[i];
-          if (!url) {
-            throw new Error(`Missing URL for slide ${i + 1}`);
-          }
-          return cropImageTo3x4(url, offsetY);
-        })
-      );
+      const blobs: Blob[] = [];
+
+      // Process slides one at a time
+      for (let i = 0; i < slides.length; i++) {
+        const slide = slides[i];
+        const url = slideUrls[i];
+        const offsetY = imagePositions.get(slide.id) ?? 0.5;
+        const overlays = slideOverlays.get(slide.id) ?? [];
+
+        if (!url) {
+          throw new Error(`Missing URL for slide ${i + 1}`);
+        }
+
+        // Check if aborted
+        if (preparationAbortRef.current?.signal.aborted) {
+          return;
+        }
+
+        // Render slide with overlays
+        const blob = await renderSlideWithOverlays(url, offsetY, overlays);
+        blobs.push(blob);
+      }
 
       // Check if preparation was aborted
       if (preparationAbortRef.current?.signal.aborted) {
@@ -139,32 +215,109 @@ export default function MobileDraftDetailPage() {
     } finally {
       setIsPreparing(false);
     }
-  }, [slideUrls, slides, imagePositions]);
+  }, [slideUrls, slides, imagePositions, slideOverlays]);
 
-  // Prepare images when URLs are available or positions change
+  // Prepare images when URLs are available or overlays/positions change
   useEffect(() => {
-    if (slideUrls.length > 0 && slides.length > 0) {
+    if (slideUrls.length > 0 && slides.length > 0 && slideOverlays.size > 0) {
       prepareImagesForShare();
     }
-  }, [prepareImagesForShare]);
+  }, [prepareImagesForShare, slideOverlays.size]);
 
+  // Save overlays and positions to database
+  const saveToDatabase = useCallback(async (
+    slideId: string,
+    overlays: TextOverlay[],
+    imageOffsetY?: number
+  ) => {
+    try {
+      const response = await fetch(`/api/mobile/drafts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slides: [{
+            slideId,
+            textOverlays: overlays,
+            imageOffsetY,
+          }],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save');
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Failed to save to database:', error);
+      return false;
+    }
+  }, [id]);
+
+  // Position editor handlers
   const handleEditPosition = (slideId: string) => {
-    setEditingSlideId(slideId);
+    setEditingPositionSlideId(slideId);
   };
 
-  const handleSavePosition = (slideId: string, offsetY: number) => {
+  const handleSavePosition = async (slideId: string, offsetY: number) => {
+    // Update local state
     setImagePositions(prev => new Map(prev).set(slideId, offsetY));
-    setEditingSlideId(null);
-    toast.success('Position saved');
+    setEditingPositionSlideId(null);
+
+    // Get current overlays for this slide
+    const overlays = slideOverlays.get(slideId) ?? [];
+
+    // Save to database
+    const saved = await saveToDatabase(slideId, overlays, offsetY);
+    if (saved) {
+      toast.success('Position saved');
+    } else {
+      toast.error('Failed to save position');
+    }
   };
 
-  const handleCancelEdit = () => {
-    setEditingSlideId(null);
+  const handleCancelPositionEdit = () => {
+    setEditingPositionSlideId(null);
   };
 
-  const editingSlide = slides.find(s => s.id === editingSlideId);
-  const editingSlideIndex = slides.findIndex(s => s.id === editingSlideId);
-  const editingImageUrl = editingSlideIndex >= 0 ? slideUrls[editingSlideIndex] : '';
+  // Text editor handlers
+  const handleEditText = (slideId: string) => {
+    setEditingTextSlideId(slideId);
+  };
+
+  const handleSaveTextOverlays = async (slideId: string, overlays: TextOverlay[]) => {
+    // Update local state
+    setSlideOverlays(prev => new Map(prev).set(slideId, overlays));
+    setEditedSlideIds(prev => new Set(prev).add(slideId));
+    setEditingTextSlideId(null);
+
+    // Get current image position for this slide
+    const imageOffsetY = imagePositions.get(slideId);
+
+    // Save to database
+    const saved = await saveToDatabase(slideId, overlays, imageOffsetY);
+    if (saved) {
+      toast.success('Text saved');
+    } else {
+      toast.error('Failed to save text');
+    }
+  };
+
+  const handleCancelTextEdit = () => {
+    setEditingTextSlideId(null);
+  };
+
+  // Get data for position editor
+  const editingPositionSlide = slides.find(s => s.id === editingPositionSlideId);
+  const editingPositionSlideIndex = slides.findIndex(s => s.id === editingPositionSlideId);
+  const editingPositionImageUrl = editingPositionSlideIndex >= 0 ? slideUrls[editingPositionSlideIndex] : '';
+
+  // Get data for text editor
+  const editingTextSlide = slides.find(s => s.id === editingTextSlideId);
+  const editingTextSlideIndex = slides.findIndex(s => s.id === editingTextSlideId);
+  const editingTextImageUrl = editingTextSlideIndex >= 0 ? slideUrls[editingTextSlideIndex] : '';
+  const editingTextOverlays = editingTextSlideId ? slideOverlays.get(editingTextSlideId) ?? [] : [];
+  const editingTextOffsetY = editingTextSlideId ? imagePositions.get(editingTextSlideId) ?? 0.5 : 0.5;
 
   if (isLoading) {
     return (
@@ -223,8 +376,12 @@ export default function MobileDraftDetailPage() {
               slide={slide}
               imageUrl={slideUrls[index] || ''}
               index={index}
+              imageOffsetY={imagePositions.get(slide.id) ?? 0.5}
               hasCustomPosition={imagePositions.has(slide.id)}
+              textOverlays={slideOverlays.get(slide.id) ?? []}
+              hasCustomOverlays={editedSlideIds.has(slide.id)}
               onEditPosition={() => handleEditPosition(slide.id)}
+              onEditText={() => handleEditText(slide.id)}
             />
           ))}
         </div>
@@ -235,12 +392,23 @@ export default function MobileDraftDetailPage() {
       />
 
       {/* Image Position Editor */}
-      {editingSlide && editingImageUrl && (
+      {editingPositionSlide && editingPositionImageUrl && (
         <ImagePositionEditor
-          imageUrl={editingImageUrl}
-          currentOffsetY={imagePositions.get(editingSlide.id) ?? 0.5}
-          onSave={(offsetY) => handleSavePosition(editingSlide.id, offsetY)}
-          onCancel={handleCancelEdit}
+          imageUrl={editingPositionImageUrl}
+          currentOffsetY={imagePositions.get(editingPositionSlide.id) ?? 0.5}
+          onSave={(offsetY) => handleSavePosition(editingPositionSlide.id, offsetY)}
+          onCancel={handleCancelPositionEdit}
+        />
+      )}
+
+      {/* Text Overlay Editor */}
+      {editingTextSlide && editingTextImageUrl && (
+        <TextOverlayEditor
+          imageUrl={editingTextImageUrl}
+          imageOffsetY={editingTextOffsetY}
+          textOverlays={editingTextOverlays}
+          onSave={(overlays) => handleSaveTextOverlays(editingTextSlide.id, overlays)}
+          onCancel={handleCancelTextEdit}
         />
       )}
     </div>

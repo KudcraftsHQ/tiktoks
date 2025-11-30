@@ -374,6 +374,8 @@ interface ProjectPostsTableProps {
   rowClassName?: (row: ProjectTableRow) => string
   onPostRemoved?: (postId: string) => void
   onDraftRemoved?: (draftId: string) => void
+  // Slide editor control (lifted to parent for flex layout)
+  onOpenSlideEditor?: (draft: RemixPost, slideIndex: number) => void
 }
 
 export function ProjectPostsTable({
@@ -396,7 +398,8 @@ export function ProjectPostsTable({
   searchTerms: propSearchTerms,
   rowClassName,
   onPostRemoved,
-  onDraftRemoved
+  onDraftRemoved,
+  onOpenSlideEditor
 }: ProjectPostsTableProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -2095,7 +2098,7 @@ export function ProjectPostsTable({
           <div className="flex items-center w-[350px] overflow-x-auto scrollbar-thin">
             <ThumbnailStrip
               slides={slides}
-              size="sm"
+              size="md"
               draftId={draft.id}
               onBulkBackgroundImageSelect={async (assignments) => {
                 await handleSetMultipleSlideBackgrounds(
@@ -2106,6 +2109,7 @@ export function ProjectPostsTable({
                   }))
                 )
               }}
+              onEditSlide={onOpenSlideEditor ? (slideIndex) => onOpenSlideEditor(draft, slideIndex) : undefined}
             />
           </div>
 
@@ -2755,6 +2759,7 @@ export function ProjectPostsTable({
           onApplyOptimistically={handleApplyCoherenceOptimistically}
         />
       )}
-    </>
+
+      </>
   )
 }
