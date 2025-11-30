@@ -67,7 +67,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=web-main
           outputs: type=image,push=true
 
-      - name: Extract Next.js cache from built image
+      - name: Extract build artifacts from image
         if: always()
         run: |
           # Pull the image we just built
@@ -76,12 +76,23 @@ jobs:
           # Create container from image
           CONTAINER_ID=$(docker create --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest)
 
-          # Extract .next/cache directory
+          # Extract .next/cache directory for next build
           mkdir -p .next-cache
           docker cp $CONTAINER_ID:/app/.next/cache/. .next-cache/ || true
 
+          # Extract complete .next directory for Sentry
+          docker cp $CONTAINER_ID:/app/.next .next || true
+
           # Cleanup
           docker rm $CONTAINER_ID
+
+      - name: Upload build artifacts for Sentry
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextjs-build
+          path: .next
+          retention-days: 1
 
   build-worker:
     name: Build Worker Image
@@ -141,52 +152,10 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}" \
             -H "Content-Type: application/json"
 
-  extract-artifacts:
-    name: Extract Build Artifacts
-    runs-on: ubuntu-latest
-    needs: build-web
-    permissions:
-      contents: read
-      packages: read
-
-    steps:
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: linux/arm64
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pull and extract artifacts from image
-        run: |
-          # Pull the ARM64 image (QEMU will handle emulation)
-          docker pull --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest
-
-          # Create a container from the image (don't run it)
-          CONTAINER_ID=$(docker create ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest)
-
-          # Copy .next directory from container
-          docker cp $CONTAINER_ID:/app/.next .next
-
-          # Clean up container
-          docker rm $CONTAINER_ID
-
-      - name: Upload build artifacts for Sentry
-        uses: actions/upload-artifact@v4
-        with:
-          name: nextjs-build
-          path: .next
-          retention-days: 1
-
   upload-sourcemaps:
     name: Upload Source Maps to Sentry
     runs-on: ubuntu-latest
-    needs: extract-artifacts
+    needs: build-web
     if: success()
 
     steps:
@@ -197,7 +166,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: nextjs-build
-          path: ./
+          path: .next
 
       - name: Install Sentry CLI
         run: |
