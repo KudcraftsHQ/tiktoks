@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { MobileHeader } from '@/components/mobile/MobileHeader';
 import { SlideCard } from '@/components/mobile/SlideCard';
@@ -8,6 +8,7 @@ import { ShareButton } from '@/components/mobile/ShareButton';
 import { ImagePositionEditor } from '@/components/mobile/ImagePositionEditor';
 import { toast } from 'sonner';
 import type { RemixSlide } from '@/types/remix';
+import { cropImageTo3x4 } from '@/lib/mobile-image-cropper';
 
 export default function MobileDraftDetailPage() {
   const params = useParams();
@@ -19,6 +20,9 @@ export default function MobileDraftDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [imagePositions, setImagePositions] = useState<Map<string, number>>(new Map());
   const [editingSlideId, setEditingSlideId] = useState<string | null>(null);
+  const [preparedFiles, setPreparedFiles] = useState<File[] | null>(null);
+  const [isPreparing, setIsPreparing] = useState(false);
+  const preparationAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     async function fetchDraft() {
@@ -79,6 +83,70 @@ export default function MobileDraftDetailPage() {
 
     fetchDraft();
   }, [id]);
+
+  // Prepare images for sharing (crop to 3:4 portrait)
+  const prepareImagesForShare = useCallback(async () => {
+    if (slideUrls.length === 0 || slides.length === 0) return;
+
+    // Cancel any ongoing preparation
+    if (preparationAbortRef.current) {
+      preparationAbortRef.current.abort();
+    }
+    preparationAbortRef.current = new AbortController();
+
+    setIsPreparing(true);
+    setPreparedFiles(null);
+
+    try {
+      // Crop all images in parallel
+      const blobs = await Promise.all(
+        slides.map((slide, i) => {
+          const offsetY = imagePositions.get(slide.id) ?? 0.5;
+          const url = slideUrls[i];
+          if (!url) {
+            throw new Error(`Missing URL for slide ${i + 1}`);
+          }
+          return cropImageTo3x4(url, offsetY);
+        })
+      );
+
+      // Check if preparation was aborted
+      if (preparationAbortRef.current?.signal.aborted) {
+        return;
+      }
+
+      // Convert to File objects
+      const files = blobs.map(
+        (blob, i) =>
+          new File([blob], `slide-${i + 1}.png`, { type: 'image/png' })
+      );
+
+      // Validate TikTok requirements
+      if (files.length > 35) {
+        toast.error('TikTok slideshows support maximum 35 images');
+        setPreparedFiles(null);
+        return;
+      }
+
+      setPreparedFiles(files);
+    } catch (error) {
+      if (preparationAbortRef.current?.signal.aborted) {
+        return;
+      }
+      console.error('Image preparation error:', error);
+      toast.error('Failed to prepare images for sharing');
+      setPreparedFiles(null);
+    } finally {
+      setIsPreparing(false);
+    }
+  }, [slideUrls, slides, imagePositions]);
+
+  // Prepare images when URLs are available or positions change
+  useEffect(() => {
+    if (slideUrls.length > 0 && slides.length > 0) {
+      prepareImagesForShare();
+    }
+  }, [prepareImagesForShare]);
 
   const handleEditPosition = (slideId: string) => {
     setEditingSlideId(slideId);
@@ -162,9 +230,8 @@ export default function MobileDraftDetailPage() {
         </div>
       </main>
       <ShareButton
-        slides={slides}
-        draftName={draft.name}
-        imagePositions={imagePositions}
+        preparedFiles={preparedFiles}
+        isPreparing={isPreparing}
       />
 
       {/* Image Position Editor */}
