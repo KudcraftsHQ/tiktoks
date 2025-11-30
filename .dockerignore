@@ -4,7 +4,11 @@
 
 # Next.js
 .next
+.next-dev
 out
+
+# Next.js cache (managed by CI)
+!.next-cache
 
 # Dependencies
 node_modules
