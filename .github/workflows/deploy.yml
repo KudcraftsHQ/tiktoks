@@ -37,24 +37,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata for web image
-        id: meta-web
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
       - name: Build and push web image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ steps.meta-web.outputs.tags }}
-          labels: ${{ steps.meta-web.outputs.labels }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest
           cache-from: |
             type=gha,scope=web-main
             type=gha,scope=web-${{ github.ref_name }}
@@ -81,24 +70,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata for worker image
-        id: meta-worker
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WORKER }}
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
       - name: Build and push worker image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./worker.Dockerfile
           push: true
-          tags: ${{ steps.meta-worker.outputs.tags }}
-          labels: ${{ steps.meta-worker.outputs.labels }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WORKER }}:latest
           cache-from: |
             type=gha,scope=worker-main
             type=gha,scope=worker-${{ github.ref_name }}
@@ -112,7 +90,7 @@ jobs:
     steps:
       - name: Trigger Coolify deployment for web app
         run: |
-          curl -X POST "https://server.kudcrafts.com/api/v1/deploy?uuid=zw884cgwc84occw0ok8s8888&force=false" \
+          curl -X POST "https://server.kudcrafts.com/api/v1/deploy?uuid=o4kk4kwoo0csk4c8gogsgoog&force=false" \
             -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}" \
             -H "Content-Type: application/json"
 
@@ -147,10 +125,10 @@ jobs:
       - name: Pull and extract artifacts from image
         run: |
           # Pull the image we just built
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:main
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest
 
           # Create a container from the image (don't run it)
-          CONTAINER_ID=$(docker create ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:main)
+          CONTAINER_ID=$(docker create ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest)
 
           # Copy .next directory from container
           docker cp $CONTAINER_ID:/app/.next .next
