@@ -5,19 +5,29 @@
  */
 
 import { Queue } from 'bullmq'
-import { QUEUE_NAMES, defaultQueueOptions, HashBackfillJobData } from './config'
+import { QUEUE_NAMES, getDefaultQueueOptions, HashBackfillJobData, isBuildTime } from './config'
 
 class HashBackfillQueue {
-  private queue: Queue<HashBackfillJobData>
+  private queue: Queue<HashBackfillJobData> | null = null
 
   constructor() {
-    this.queue = new Queue(QUEUE_NAMES.HASH_BACKFILL, defaultQueueOptions)
+    // Skip queue creation during build
+    if (isBuildTime) {
+      console.log('⏭️ [HashBackfillQueue] Skipping queue creation during build')
+      return
+    }
+    this.queue = new Queue(QUEUE_NAMES.HASH_BACKFILL, getDefaultQueueOptions())
   }
 
   /**
    * Add a hash backfill job to the queue
    */
   async addHashBackfillJob(data: HashBackfillJobData, priority = 0): Promise<void> {
+    if (!this.queue) {
+      console.warn('⚠️ [HashBackfillQueue] Queue not initialized, skipping job')
+      return
+    }
+
     console.log(`📋 [HashBackfillQueue] Adding hash backfill job for asset: ${data.assetId}`)
 
     await this.queue.add(
@@ -41,6 +51,11 @@ class HashBackfillQueue {
    * Add multiple hash backfill jobs to the queue
    */
   async addBulkHashBackfillJobs(jobs: HashBackfillJobData[], priority = 0): Promise<void> {
+    if (!this.queue) {
+      console.warn('⚠️ [HashBackfillQueue] Queue not initialized, skipping bulk jobs')
+      return
+    }
+
     console.log(`📋 [HashBackfillQueue] Adding ${jobs.length} bulk hash backfill jobs`)
 
     const bulkJobs = jobs.map((data) => ({
@@ -65,6 +80,10 @@ class HashBackfillQueue {
    * Get queue statistics
    */
   async getStats() {
+    if (!this.queue) {
+      return { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, total: 0 }
+    }
+
     const [waiting, active, completed, failed, delayed] = await Promise.all([
       this.queue.getWaiting(),
       this.queue.getActive(),
@@ -87,6 +106,7 @@ class HashBackfillQueue {
    * Clear all jobs in the queue
    */
   async clearQueue(): Promise<void> {
+    if (!this.queue) return
     await this.queue.obliterate({ force: true })
     console.log(`🗑️ [HashBackfillQueue] Queue cleared`)
   }
@@ -94,7 +114,7 @@ class HashBackfillQueue {
   /**
    * Get the underlying BullMQ queue instance
    */
-  getQueue(): Queue<HashBackfillJobData> {
+  getQueue(): Queue<HashBackfillJobData> | null {
     return this.queue
   }
 
@@ -102,6 +122,7 @@ class HashBackfillQueue {
    * Close the queue connection
    */
   async close(): Promise<void> {
+    if (!this.queue) return
     await this.queue.close()
     console.log(`🔌 [HashBackfillQueue] Queue connection closed`)
   }

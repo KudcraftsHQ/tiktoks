@@ -7,6 +7,9 @@
 import { Redis } from 'ioredis'
 import { QueueOptions, WorkerOptions } from 'bullmq'
 
+// Build-time detection - skip Redis connections during Next.js build
+export const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build'
+
 // Redis connection configuration
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379'
 
@@ -47,9 +50,10 @@ export const getDefaultWorkerOptions = (): WorkerOptions => ({
   removeOnFail: { count: 50 },
 })
 
-// Backwards compatibility
-export const defaultQueueOptions = getDefaultQueueOptions()
-export const defaultWorkerOptions = getDefaultWorkerOptions()
+// Backwards compatibility - these create connections at import time
+// Only used by worker files which are not imported during Next.js build
+export const defaultQueueOptions = isBuildTime ? ({} as QueueOptions) : getDefaultQueueOptions()
+export const defaultWorkerOptions = isBuildTime ? ({} as WorkerOptions) : getDefaultWorkerOptions()
 
 // Job data interfaces
 export interface MediaCacheJobData {

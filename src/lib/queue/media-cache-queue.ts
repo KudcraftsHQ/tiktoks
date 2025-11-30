@@ -5,19 +5,29 @@
  */
 
 import { Queue } from 'bullmq'
-import { QUEUE_NAMES, defaultQueueOptions, MediaCacheJobData } from './config'
+import { QUEUE_NAMES, getDefaultQueueOptions, MediaCacheJobData, isBuildTime } from './config'
 
 class MediaCacheQueue {
-  private queue: Queue<MediaCacheJobData>
+  private queue: Queue<MediaCacheJobData> | null = null
 
   constructor() {
-    this.queue = new Queue(QUEUE_NAMES.MEDIA_CACHE, defaultQueueOptions)
+    // Skip queue creation during build
+    if (isBuildTime) {
+      console.log('⏭️ [MediaCacheQueue] Skipping queue creation during build')
+      return
+    }
+    this.queue = new Queue(QUEUE_NAMES.MEDIA_CACHE, getDefaultQueueOptions())
   }
 
   /**
    * Add a media caching job to the queue
    */
   async addCacheJob(data: MediaCacheJobData, priority = 0): Promise<void> {
+    if (!this.queue) {
+      console.warn('⚠️ [MediaCacheQueue] Queue not initialized, skipping job')
+      return
+    }
+
     console.log(`📋 [MediaCacheQueue] Adding cache job for URL: ${data.originalUrl}`)
     console.log(`🆔 [MediaCacheQueue] Cache Asset ID: ${data.cacheAssetId}`)
 
@@ -42,6 +52,11 @@ class MediaCacheQueue {
    * Add multiple media caching jobs to the queue
    */
   async addBulkCacheJobs(jobs: MediaCacheJobData[], priority = 0): Promise<void> {
+    if (!this.queue) {
+      console.warn('⚠️ [MediaCacheQueue] Queue not initialized, skipping bulk jobs')
+      return
+    }
+
     console.log(`📋 [MediaCacheQueue] Adding ${jobs.length} bulk cache jobs`)
 
     const bulkJobs = jobs.map((data) => ({
@@ -66,6 +81,10 @@ class MediaCacheQueue {
    * Get queue statistics
    */
   async getStats() {
+    if (!this.queue) {
+      return { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, total: 0 }
+    }
+
     const [waiting, active, completed, failed, delayed] = await Promise.all([
       this.queue.getWaiting(),
       this.queue.getActive(),
@@ -88,6 +107,7 @@ class MediaCacheQueue {
    * Clear all jobs in the queue
    */
   async clearQueue(): Promise<void> {
+    if (!this.queue) return
     await this.queue.obliterate({ force: true })
     console.log(`🗑️ [MediaCacheQueue] Queue cleared`)
   }
@@ -95,7 +115,7 @@ class MediaCacheQueue {
   /**
    * Get the underlying BullMQ queue instance
    */
-  getQueue(): Queue<MediaCacheJobData> {
+  getQueue(): Queue<MediaCacheJobData> | null {
     return this.queue
   }
 
@@ -103,6 +123,7 @@ class MediaCacheQueue {
    * Close the queue connection
    */
   async close(): Promise<void> {
+    if (!this.queue) return
     await this.queue.close()
     console.log(`🔌 [MediaCacheQueue] Queue connection closed`)
   }

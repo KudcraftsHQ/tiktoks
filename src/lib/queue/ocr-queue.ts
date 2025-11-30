@@ -5,12 +5,17 @@
  */
 
 import { Queue } from 'bullmq'
-import { QUEUE_NAMES, getDefaultQueueOptions, OCRJobData } from './config'
+import { QUEUE_NAMES, getDefaultQueueOptions, OCRJobData, isBuildTime } from './config'
 
 class OCRQueue {
-  private queue: Queue<OCRJobData>
+  private queue: Queue<OCRJobData> | null = null
 
   constructor() {
+    // Skip queue creation during build
+    if (isBuildTime) {
+      console.log('⏭️ [OCRQueue] Skipping queue creation during build')
+      return
+    }
     this.queue = new Queue(QUEUE_NAMES.OCR, getDefaultQueueOptions())
   }
 
@@ -18,6 +23,11 @@ class OCRQueue {
    * Add an OCR job to the queue for a single post
    */
   async addOCRJob(postId: string, priority = 0): Promise<void> {
+    if (!this.queue) {
+      console.warn('⚠️ [OCRQueue] Queue not initialized, skipping job')
+      return
+    }
+
     console.log(`📋 [OCRQueue] Adding OCR job for post: ${postId}`)
 
     await this.queue.add(
@@ -41,6 +51,11 @@ class OCRQueue {
    * Add multiple OCR jobs to the queue
    */
   async addBulkOCRJobs(postIds: string[], priority = 0): Promise<void> {
+    if (!this.queue) {
+      console.warn('⚠️ [OCRQueue] Queue not initialized, skipping bulk jobs')
+      return
+    }
+
     console.log(`📋 [OCRQueue] Adding ${postIds.length} bulk OCR jobs`)
 
     const bulkJobs = postIds.map((postId) => ({
@@ -65,6 +80,10 @@ class OCRQueue {
    * Get queue statistics
    */
   async getStats() {
+    if (!this.queue) {
+      return { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, total: 0 }
+    }
+
     const [waiting, active, completed, failed, delayed] = await Promise.all([
       this.queue.getWaiting(),
       this.queue.getActive(),
@@ -87,6 +106,7 @@ class OCRQueue {
    * Clear all jobs in the queue
    */
   async clearQueue(): Promise<void> {
+    if (!this.queue) return
     await this.queue.obliterate({ force: true })
     console.log(`🗑️ [OCRQueue] Queue cleared`)
   }
@@ -94,7 +114,7 @@ class OCRQueue {
   /**
    * Get the underlying BullMQ queue instance
    */
-  getQueue(): Queue<OCRJobData> {
+  getQueue(): Queue<OCRJobData> | null {
     return this.queue
   }
 
@@ -102,6 +122,7 @@ class OCRQueue {
    * Close the queue connection
    */
   async close(): Promise<void> {
+    if (!this.queue) return
     await this.queue.close()
     console.log(`🔌 [OCRQueue] Queue connection closed`)
   }
