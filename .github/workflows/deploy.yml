@@ -12,8 +12,8 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME_WEB: ${{ github.repository }}-web
-  IMAGE_NAME_WORKER: ${{ github.repository }}-worker
+  IMAGE_NAME_WEB: kudcraftshq/tiktoks-web
+  IMAGE_NAME_WORKER: kudcraftshq/tiktoks-worker
 
 jobs:
   build-web:
