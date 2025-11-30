@@ -42,6 +42,7 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
+          platforms: linux/arm64
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest
           cache-from: |
@@ -75,6 +76,7 @@ jobs:
         with:
           context: .
           file: ./worker.Dockerfile
+          platforms: linux/arm64
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WORKER }}:latest
           cache-from: |
