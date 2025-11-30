@@ -46,10 +46,17 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .next-cache
-          key: nextjs-${{ hashFiles('bun.lock') }}-${{ hashFiles('src/**/*.{ts,tsx,js,jsx}') }}
+          key: nextjs-${{ hashFiles('bun.lock') }}-${{ hashFiles('src/**/*.[jt]s?(x)') }}
           restore-keys: |
             nextjs-${{ hashFiles('bun.lock') }}-
             nextjs-
+
+      - name: Prepare cache directory for Docker
+        run: |
+          # Ensure .next-cache exists (even if empty) so Docker COPY doesn't fail
+          mkdir -p .next-cache
+          echo "Cache directory prepared. Contents:"
+          ls -lah .next-cache || echo "Empty cache"
 
       - name: Build and push web image
         uses: docker/build-push-action@v5
