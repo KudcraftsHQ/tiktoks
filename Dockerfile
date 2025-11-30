@@ -1,13 +1,22 @@
 # syntax=docker/dockerfile:1
 
-FROM oven/bun:alpine AS base
+# Pin specific Bun version for stable builds and better caching
+FROM oven/bun:1.3.3-alpine AS base
 
 # Build arguments
 # Sentry args removed - source maps uploaded separately in CI
 
 # Disabling Telemetry
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN apk add --no-cache libc6-compat curl wget bash openssl
+
+# Pin Alpine package versions for cache stability
+# Note: These versions are compatible with Alpine 3.19 (base image's Alpine version)
+RUN apk add --no-cache \
+    libc6-compat~=1.2 \
+    curl~=8.9 \
+    wget~=1.24 \
+    bash~=5.2 \
+    openssl~=3.1
 
 FROM base AS deps
 WORKDIR /app

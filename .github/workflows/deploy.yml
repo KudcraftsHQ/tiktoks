@@ -55,8 +55,10 @@ jobs:
           push: true
           tags: ${{ steps.meta-web.outputs.tags }}
           labels: ${{ steps.meta-web.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha,scope=web-main
+            type=gha,scope=web-${{ github.ref_name }}
+          cache-to: type=gha,mode=max,scope=web-main
 
   build-worker:
     name: Build Worker Image
@@ -97,8 +99,10 @@ jobs:
           push: true
           tags: ${{ steps.meta-worker.outputs.tags }}
           labels: ${{ steps.meta-worker.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha,scope=worker-main
+            type=gha,scope=worker-${{ github.ref_name }}
+          cache-to: type=gha,mode=max,scope=worker-main
 
   deploy-web:
     name: Deploy Web App to Coolify

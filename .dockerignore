@@ -46,3 +46,14 @@ pnpm-debug.log*
 Dockerfile*
 docker-compose*
 .dockerignore
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.circleci
+.travis.yml
+
+# Build artifacts
+dist
+build
+*.tsbuildinfo
