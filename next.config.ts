@@ -95,10 +95,11 @@ export default withSentryConfig(nextConfig, {
   // side errors will fail.
   // tunnelRoute: "/monitoring",
 
-  // Upload source maps to Sentry for better error stack traces
-  // Note: Source maps are hidden from client bundles but uploaded to Sentry
+  // Control source map upload behavior
+  // When SENTRY_SUPPRESS_UPLOAD is set (Docker builds), generate maps but don't upload
+  // Upload will happen separately in CI using sentry-cli
   sourcemaps: {
-    disable: false,
+    disable: process.env.SENTRY_SUPPRESS_UPLOAD === 'true',
   },
 
   // Automatically tree-shake Sentry logger statements to reduce bundle size
