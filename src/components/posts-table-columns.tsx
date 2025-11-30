@@ -631,8 +631,40 @@ export const createPostsTableColumns = ({
               </a>
             )}
 
-            {/* Row 3: Published and Updated date */}
-            <div className="text-xs flex flex-col gap-0.5">
+            {/* Row 3: Description */}
+            <div className="w-full overflow-y-auto h-24" onClick={(e) => e.stopPropagation()}>
+              <InlineEditableText
+                value={post.description || ''}
+                onSave={async (newValue) => {
+                  try {
+                    const response = await fetch(`/api/posts/${post.id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ description: newValue })
+                    })
+                    if (!response.ok) throw new Error('Failed to update description')
+                    toast.success('Description updated')
+                    if (onRefetchPosts) {
+                      onRefetchPosts()
+                    }
+                  } catch (error) {
+                    console.error('Failed to update description:', error)
+                    toast.error('Failed to update description')
+                    throw error
+                  }
+                }}
+                placeholder="No description"
+                fixedHeight={true}
+                heightClass="h-full"
+                disabled={false}
+                className="text-[12px]"
+                rows={4}
+                searchTerms={searchTerms}
+              />
+            </div>
+
+            {/* Row 4: Published and Updated date */}
+            <div className="text-xs flex items-center justify-between w-full">
               <div>
                 <span>{date}</span>
                 <span className="ml-1 text-muted-foreground">{time}</span>

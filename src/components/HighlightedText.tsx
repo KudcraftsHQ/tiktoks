@@ -13,6 +13,13 @@ interface HighlightedTextProps {
  * Supports multiple space-separated search terms
  */
 export function HighlightedText({ text, searchTerms, className = '' }: HighlightedTextProps) {
+  // Debug logging
+  React.useEffect(() => {
+    if (searchTerms && searchTerms.length > 0) {
+      console.log('[HighlightedText] text:', text?.substring(0, 50), 'searchTerms:', searchTerms)
+    }
+  }, [text, searchTerms])
+
   // If no search terms, return plain text
   if (!searchTerms || searchTerms.length === 0 || !text) {
     return <span className={className}>{text}</span>

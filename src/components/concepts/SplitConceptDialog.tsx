@@ -40,7 +40,7 @@ interface SplitConceptDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   concept: Concept | null
-  onSplitComplete: () => void
+  onSplitComplete: (newConcepts?: any[]) => void
 }
 
 const typeColors: Record<string, string> = {
@@ -160,7 +160,7 @@ export function SplitConceptDialog({
       }
 
       toast.success(`Created ${data.conceptsCreated} new concepts`)
-      onSplitComplete()
+      onSplitComplete(data.newConcepts || [])
       onOpenChange(false)
     } catch (err) {
       console.error('Failed to execute split:', err)

@@ -222,7 +222,7 @@ export async function POST(
   try {
     const { id: draftId } = await params
     const body = await request.json()
-    const { hookText, saveGeneratedExamples = true } = body
+    const { hookText, saveGeneratedExamples = true, forceRefill = false } = body
 
     if (!hookText || typeof hookText !== 'string') {
       return NextResponse.json(
@@ -233,6 +233,7 @@ export async function POST(
 
     console.log(`🎯 [SmartAutoFill] Starting for draft: ${draftId}`)
     console.log(`📌 Hook: "${hookText.slice(0, 60)}..."`)
+    console.log(`🔄 Force refill: ${forceRefill}`)
 
     // Fetch draft
     const draft = await prisma.remixPost.findUnique({
@@ -272,22 +273,28 @@ export async function POST(
       return classification?.type?.toUpperCase()
     }
 
-    // Find empty slides to fill (skip index 0 - HOOK)
-    const emptySlideIndices = slides
+    // Find slides to fill (skip index 0 - HOOK)
+    // If forceRefill is true, process ALL slides regardless of content
+    // Otherwise, only process empty slides
+    const slideIndicesToFill = slides
       .map((slide, index) => ({ slide, index }))
-      .filter(({ slide, index }) => index > 0 && isSlideEmpty(slide))
+      .filter(({ slide, index }) => {
+        if (index === 0) return false // Never refill HOOK
+        if (forceRefill) return true // Refill all non-HOOK slides
+        return isSlideEmpty(slide) // Only refill empty slides
+      })
       .map(({ index }) => index)
 
-    if (emptySlideIndices.length === 0) {
+    if (slideIndicesToFill.length === 0) {
       return NextResponse.json({
         success: true,
-        message: 'No empty slides to fill',
+        message: 'No slides to fill',
         filledCount: 0,
         results: []
       })
     }
 
-    console.log(`[SmartAutoFill] Found ${emptySlideIndices.length} empty slides to fill`)
+    console.log(`[SmartAutoFill] Found ${slideIndicesToFill.length} slides to ${forceRefill ? 'refill' : 'fill'}`)
 
     // Fetch all CONTENT concepts with examples
     const contentConcepts = await prisma.conceptBank.findMany({
@@ -325,7 +332,7 @@ export async function POST(
 
     // STEP 1: Select relevant concepts for CONTENT slides
     // Only count slides that are explicitly classified as CONTENT (or have no classification)
-    const numContentSlides = emptySlideIndices.filter(i => {
+    const numContentSlides = slideIndicesToFill.filter(i => {
       const type = getSlideType(i)
       return type === 'CONTENT' || type === undefined
     }).length
@@ -340,13 +347,13 @@ export async function POST(
       console.log(`[SmartAutoFill] Selected ${selectedConcepts.length} concepts`)
     }
 
-    // Process each empty slide
+    // Process each slide
     const results: SmartAutoFillResult[] = []
     const updatedSlides = [...slides]
     const updatedClassifications = [...(Array.isArray(classifications) ? classifications : [])]
     let conceptIndex = 0
 
-    for (const slideIndex of emptySlideIndices) {
+    for (const slideIndex of slideIndicesToFill) {
       const slideType = getSlideType(slideIndex)
       // Only use CTA if explicitly classified as CTA, not based on position
       const isCTA = slideType === 'CTA'
