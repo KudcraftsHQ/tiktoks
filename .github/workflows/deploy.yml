@@ -102,7 +102,7 @@ jobs:
     steps:
       - name: Trigger Coolify deployment for worker
         run: |
-          curl -X POST "https://server.kudcrafts.com/api/v1/deploy?uuid=bokc4g488k40g8ss4g00sgk8&force=false" \
+          curl -X POST "https://server.kudcrafts.com/api/v1/deploy?uuid=p8808wgsc00w8s4k0440wowc&force=false" \
             -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}" \
             -H "Content-Type: application/json"
 
