@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# Pin specific Bun version for stable builds and better caching
-FROM oven/bun:1.3.3-alpine AS base
+FROM oven/bun:alpine AS base
 
 # Build arguments
 # Sentry args removed - source maps uploaded separately in CI

@@ -1,5 +1,4 @@
-# Pin specific Bun version for stable builds and better caching
-FROM oven/bun:1.3.3-alpine AS base
+FROM oven/bun:alpine AS base
 
 # Disabling Telemetry
 ENV NEXT_TELEMETRY_DISABLED=1
