@@ -38,12 +38,11 @@ RUN bunx prisma generate
 RUN mkdir -p .next/cache && \
     if [ -d .next-cache ]; then cp -r .next-cache/. .next/cache/; fi
 
-# Build with Next.js cache mount (unique id per project to avoid conflicts)
+# Build Next.js application
 # Note: Sentry source maps are disabled during Docker build
 # They will be uploaded separately in CI to avoid rebuilding
 ENV SENTRY_SUPPRESS_UPLOAD=true
-RUN --mount=type=cache,id=nextjs-tiktoks,target=/app/.next/cache \
-    bun run build
+RUN bun run build
 
 FROM base AS runner
 WORKDIR /app
