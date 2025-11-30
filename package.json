@@ -87,6 +87,10 @@
   },
   "packageManager": "bun@1.1.42",
   "private": true,
+  "resolutions": {
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
